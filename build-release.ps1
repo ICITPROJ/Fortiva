@@ -18,11 +18,25 @@ if (-not (Test-Path $msbuild)) {
             -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
     }
 }
-$makepri = (Get-Item "$env:USERPROFILE\.nuget\packages\microsoft.windows.sdk.buildtools\*\bin\*\x64\makepri.exe" |
-            Sort-Object FullName | Select-Object -Last 1).FullName
+function Find-MakePri {
+    $cached = Get-Item "$env:USERPROFILE\.nuget\packages\microsoft.windows.sdk.buildtools\*\bin\*\x64\makepri.exe" `
+        -ErrorAction SilentlyContinue |
+        Sort-Object FullName | Select-Object -Last 1
+    if ($cached) { return $cached.FullName }
+    return $null
+}
+
+$makepri = Find-MakePri
+if (-not $makepri) {
+    Write-Host "makepri.exe not in NuGet cache — restoring WinUI project packages..."
+    $bootstrapProj = Join-Path $root "src\Fortiva.Personal\Fortiva.Personal.csproj"
+    & dotnet restore $bootstrapProj -p:Platform=x64 -p:RuntimeIdentifier=win-x64 --nologo -q
+    if ($LASTEXITCODE -ne 0) { throw "dotnet restore failed (needed for makepri.exe)" }
+    $makepri = Find-MakePri
+}
 
 if (-not $msbuild -or -not (Test-Path $msbuild)) { throw "MSBuild not found (install VS Build Tools or run on a VS machine)" }
-if (-not $makepri)              { throw "makepri.exe not found in NuGet cache" }
+if (-not $makepri)              { throw "makepri.exe not found in NuGet cache after restore" }
 
 Write-Host "==> MSBuild : $msbuild" -ForegroundColor Cyan
 Write-Host "==> makepri : $makepri"  -ForegroundColor Cyan
