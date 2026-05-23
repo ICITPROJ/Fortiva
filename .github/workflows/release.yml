@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 1.0.1)'
+        required: true
+        type: string
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build, test, publish GitHub Release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $v = '${{ inputs.version }}'.Trim()
+          } else {
+            $v = '${{ github.ref_name }}' -replace '^v', ''
+          }
+          if ($v -notmatch '^\d+\.\d+\.\d+') { throw "Invalid version: $v" }
+          "value=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Release version: $v"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Run unit tests
+        run: |
+          dotnet test tests/Fortiva.Core.Tests/Fortiva.Core.Tests.csproj `
+            -c Release --verbosity minimal
+
+      - name: Build release (dist/)
+        shell: pwsh
+        run: ./build-release.ps1
+
+      - name: Build installers
+        shell: pwsh
+        run: ./build-installers.ps1 -Version ${{ steps.version.outputs.value }}
+
+      - name: Generate update manifest
+        shell: pwsh
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: ./scripts/publish-release-manifest.ps1 -Version ${{ steps.version.outputs.value }}
+
+      - name: Create git tag (manual runs only)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ steps.version.outputs.value }}" -m "Release ${{ steps.version.outputs.value }}" 2>$null || true
+          git push origin "v${{ steps.version.outputs.value }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.value }}
+          name: Fortiva ${{ steps.version.outputs.value }}
+          generate_release_notes: true
+          files: |
+            dist/installers/FortivaPersonal-${{ steps.version.outputs.value }}-Setup.exe
+            dist/installers/FortivaEnterprise-${{ steps.version.outputs.value }}-Setup.exe
+            dist/installers/FortivaAdmin-${{ steps.version.outputs.value }}-Setup.exe
+            packaging/releases/latest.personal.json
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fortiva-${{ steps.version.outputs.value }}
+          retention-days: 90
+          path: |
+            dist/installers/*.exe
+            packaging/releases/latest.personal.json
+

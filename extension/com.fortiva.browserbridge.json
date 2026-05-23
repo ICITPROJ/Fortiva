@@ -1,0 +1,9 @@
+{
+  "name": "com.fortiva.browserbridge",
+  "description": "Fortiva local credential bridge",
+  "path": "Fortiva.BrowserBridge.Host.exe",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://REPLACE_WITH_EXTENSION_ID/"
+  ]
+}

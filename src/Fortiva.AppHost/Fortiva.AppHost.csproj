@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
+    <UseWinUI>true</UseWinUI>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x64;ARM64</Platforms>
+    <RootNamespace>Fortiva.AppHost</RootNamespace>
+    <AssemblyName>Fortiva.AppHost</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Fortiva.Core\Fortiva.Core.csproj" />
+  </ItemGroup>
+</Project>

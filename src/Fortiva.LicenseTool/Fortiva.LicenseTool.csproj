@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Fortiva.LicenseTool</AssemblyName>
+    <Description>CLI tool for generating and signing Fortiva enterprise licenses.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Fortiva.Core\Fortiva.Core.csproj" />
+  </ItemGroup>
+</Project>

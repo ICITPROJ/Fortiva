@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+    xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+    xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+    xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+    IgnorableNamespaces="uap rescap">
+
+  <Identity
+      Name="Fortiva.Personal"
+      Publisher="CN=icmclab studio, O=icmclab studio, C=GB"
+      Version="1.0.0.0"/>
+
+  <Properties>
+    <DisplayName>Fortiva</DisplayName>
+    <PublisherDisplayName>icmclab studio</PublisherDisplayName>
+    <Logo>assets\StoreLogo.png</Logo>
+    <Description>Zero-knowledge, local-first Windows password manager.</Description>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0"/>
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us"/>
+  </Resources>
+
+  <Applications>
+    <Application Id="Fortiva"
+        Executable="Fortiva.Personal.exe"
+        EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+          DisplayName="Fortiva"
+          Square150x150Logo="assets\Logo150.png"
+          Square44x44Logo="assets\Logo44.png"
+          BackgroundColor="#1C1C1C"
+          Description="Fortiva Password Manager">
+        <uap:DefaultTile Wide310x150Logo="assets\LogoWide.png"/>
+        <uap:SplashScreen Image="assets\SplashScreen.png"/>
+      </uap:VisualElements>
+      <Extensions>
+        <!-- Register as a startup task for auto-lock monitoring -->
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust"/>
+    <!-- No network, no microphone, no camera requested — pure LOTL -->
+  </Capabilities>
+</Package>

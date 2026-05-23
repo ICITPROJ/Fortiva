@@ -1,0 +1,80 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <UseWinUI>true</UseWinUI>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x64;ARM64</Platforms>
+    <RootNamespace>Fortiva.AppHost</RootNamespace>
+    <AssemblyName>Fortiva.Enterprise</AssemblyName>
+    <ApplicationTitle>Fortiva Enterprise</ApplicationTitle>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <EnableMsixTooling>false</EnableMsixTooling>
+    <GenerateAppxPackageOnBuild>false</GenerateAppxPackageOnBuild>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultPageItems>false</EnableDefaultPageItems>
+    <ApplicationIcon>..\Fortiva.AppHost\Assets\fortiva.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Fortiva.AppHost\**\*.cs"
+             Exclude="..\Fortiva.AppHost\obj\**;..\Fortiva.AppHost\bin\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ApplicationDefinition Include="..\Fortiva.AppHost\App.xaml" Link="App.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Include="..\Fortiva.AppHost\MainWindow.xaml"             Link="MainWindow.xaml" />
+    <Page Include="..\Fortiva.AppHost\Pages\UnlockPage.xaml"       Link="Pages\UnlockPage.xaml" />
+    <Page Include="..\Fortiva.AppHost\Pages\OnboardingPage.xaml"   Link="Pages\OnboardingPage.xaml" />
+    <Page Include="..\Fortiva.AppHost\Pages\VaultPage.xaml"        Link="Pages\VaultPage.xaml" />
+    <Page Include="..\Fortiva.AppHost\Pages\EntryPage.xaml"        Link="Pages\EntryPage.xaml" />
+    <Page Include="..\Fortiva.AppHost\Pages\PasswordGeneratorPage.xaml" Link="Pages\PasswordGeneratorPage.xaml" />
+    <Page Include="..\Fortiva.AppHost\Pages\HealthPage.xaml"       Link="Pages\HealthPage.xaml" />
+    <Page Include="..\Fortiva.AppHost\Pages\SettingsPage.xaml"     Link="Pages\SettingsPage.xaml" />
+    <Page Include="..\Fortiva.AppHost\Pages\ImportExportPage.xaml" Link="Pages\ImportExportPage.xaml" />
+    <Page Include="..\Fortiva.AppHost\Pages\AuditPage.xaml"        Link="Pages\AuditPage.xaml" />
+    <Page Include="..\Fortiva.AppHost\Pages\LicenseRequiredPage.xaml" Link="Pages\LicenseRequiredPage.xaml" />
+    <Page Include="..\Fortiva.AppHost\Admin\AdminMainWindow.xaml"  Link="Admin\AdminMainWindow.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fortiva.Core\Fortiva.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="app.manifest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\Fortiva.AppHost\Assets\fortiva-logo.png"
+             Link="Assets\fortiva-logo.png"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Fortiva.AppHost\Assets\fortiva-logo-paranoia.png"
+             Link="Assets\fortiva-logo-paranoia.png"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Fortiva.AppHost\Assets\fortiva-paranoia.ico"
+             Link="Assets\fortiva-paranoia.ico"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Fortiva.AppHost\Assets\icmclab-logo.png"
+             Link="Assets\icmclab-logo.png"
+             CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\Fortiva.AppHost\Assets\fortiva.ico"
+             Link="Assets\fortiva.ico"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,89 @@
+<Page
+    x:Class="Fortiva.AppHost.Pages.HealthPage"
+    NavigationCacheMode="Enabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <ScrollViewer>
+        <StackPanel Margin="24" Spacing="20" MaxWidth="680">
+            <TextBlock Text="Password Health" FontSize="24" FontWeight="SemiBold"/>
+
+            <!-- Summary cards -->
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border CornerRadius="12" Padding="16"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <StackPanel Spacing="4">
+                        <FontIcon Glyph="&#xE8C1;" FontSize="28"
+                                  Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                        <TextBlock x:Name="TotalCount" FontSize="28" FontWeight="Bold"/>
+                        <TextBlock Text="Total" FontSize="12" Opacity="0.6"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="1" x:Name="WeakCard" CornerRadius="12" Padding="16"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <StackPanel Spacing="4">
+                        <FontIcon Glyph="&#xEA3A;" FontSize="28"
+                                  Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                        <TextBlock x:Name="WeakCount" FontSize="28" FontWeight="Bold"/>
+                        <TextBlock Text="Weak" FontSize="12" Opacity="0.6"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="2" x:Name="ReusedCard" CornerRadius="12" Padding="16"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <StackPanel Spacing="4">
+                        <FontIcon Glyph="&#xE8AB;" FontSize="28"
+                                  Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
+                        <TextBlock x:Name="ReusedCount" FontSize="28" FontWeight="Bold"/>
+                        <TextBlock Text="Reused" FontSize="12" Opacity="0.6"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="3" x:Name="OldCard" CornerRadius="12" Padding="16"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <StackPanel Spacing="4">
+                        <FontIcon Glyph="&#xE787;" FontSize="28"
+                                  Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
+                        <TextBlock x:Name="OldCount" FontSize="28" FontWeight="Bold"/>
+                        <TextBlock Text="Old (1y+)" FontSize="12" Opacity="0.6"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Score banner -->
+            <Border x:Name="ScoreBanner" CornerRadius="12" Padding="20">
+                <StackPanel Spacing="8">
+                    <TextBlock x:Name="ScoreHeading" FontSize="18" FontWeight="SemiBold"/>
+                    <ProgressBar x:Name="ScoreBar" Maximum="100" Value="0" Height="10"/>
+                    <TextBlock x:Name="ScoreDetail" FontSize="12" Opacity="0.7" TextWrapping="WrapWholeWords"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Weak passwords list -->
+            <Expander x:Name="WeakExpander" Header="Weak passwords" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <ListView x:Name="WeakList" SelectionMode="Single" MaxHeight="240" SelectionChanged="HealthList_SelectionChanged"/>
+            </Expander>
+
+            <!-- Reused passwords list -->
+            <Expander x:Name="ReusedExpander" Header="Reused passwords" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <ListView x:Name="ReusedList" SelectionMode="Single" MaxHeight="240" SelectionChanged="HealthList_SelectionChanged"/>
+            </Expander>
+
+            <!-- Old passwords list -->
+            <Expander x:Name="OldExpander" Header="Old passwords (not changed in 1+ year)" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <ListView x:Name="OldList" SelectionMode="Single" MaxHeight="240" SelectionChanged="HealthList_SelectionChanged"/>
+            </Expander>
+
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <Button x:Name="RefreshBtn" Content="Refresh report" Click="Refresh_Click"/>
+                <ProgressRing x:Name="LoadingRing" IsActive="False" Width="24" Height="24"/>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

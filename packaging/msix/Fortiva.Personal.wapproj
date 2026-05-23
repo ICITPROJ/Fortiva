@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Windows Application Packaging Project for Fortiva Personal.
+  Build with: msbuild Fortiva.Personal.wapproj /p:Configuration=Release /p:Platform=x64
+  Requires Visual Studio with "MSIX Packaging Tools" component installed.
+-->
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <Platform Condition="'$(Platform)' == ''">x64</Platform>
+    <ProjectGuid>{AAAAAAAA-0001-0001-0001-AAAAAAAAAAAA}</ProjectGuid>
+    <ProjectTypeGuids>{C7167F0D-BC9F-4E6E-AFE1-012C56B48DB5};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
+    <AppxBundle>Never</AppxBundle>
+    <AppxBundlePlatforms>x64</AppxBundlePlatforms>
+    <PackageCertificateKeyFile>PackageSigning.pfx</PackageCertificateKeyFile>
+    <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
+    <AppInstallerUri></AppInstallerUri>
+    <BuildAppxUploadPackageForStore>False</BuildAppxUploadPackageForStore>
+    <TargetPlatformVersion>10.0.26100.0</TargetPlatformVersion>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <MinimumVisualStudioVersion>16.0</MinimumVisualStudioVersion>
+    <AppContainerApplication>false</AppContainerApplication>
+    <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
+    <EntryPointProjectUniqueName>..\src\Fortiva.Personal\Fortiva.Personal.csproj</EntryPointProjectUniqueName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AppxManifest Include="Package.appxmanifest">
+      <SubType>Designer</SubType>
+    </AppxManifest>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\Fortiva.Personal\Fortiva.Personal.csproj">
+      <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
+    </ProjectReference>
+  </ItemGroup>
+
+  <Import Project="$(WapProjPath)\Microsoft.DesktopBridge.props" Condition="Exists('$(WapProjPath)\Microsoft.DesktopBridge.props')"/>
+  <Import Project="$(WapProjPath)\Microsoft.DesktopBridge.targets" Condition="Exists('$(WapProjPath)\Microsoft.DesktopBridge.targets')"/>
+</Project>

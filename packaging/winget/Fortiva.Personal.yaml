@@ -1,0 +1,32 @@
+PackageIdentifier: Fortiva.Personal
+PackageVersion: 1.0.0
+PackageLocale: en-US
+Publisher: icmclab studio
+PublisherUrl: https://studio.icmclab.cloud
+PackageName: Fortiva
+ShortDescription: Zero-knowledge, local-first Windows password manager
+Description: >-
+  Fortiva is a zero-knowledge, local-first password manager for Windows.
+  All encryption (AES-256-GCM + Argon2id) happens on-device using Windows CNG.
+  No cloud sync. No telemetry. No background services.
+  Supports Windows Hello biometric unlock, browser autofill (Edge/Chrome),
+  secure notes, password health reports, and portable USB mode.
+
+License: Proprietary
+LicenseUrl: https://studio.icmclab.cloud/fortiva/license
+Tags:
+  - password-manager
+  - security
+  - encryption
+  - local
+  - windows
+InstallerType: exe
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/ICITPROJ/Fortiva/releases/download/v1.0.0/FortivaPersonal-1.0.0-Setup.exe
+    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+    InstallerSwitches:
+      Silent: /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS
+      SilentWithProgress: /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS
+    UpgradeBehavior: install
+MinimumOSVersion: "10.0.19041.0"

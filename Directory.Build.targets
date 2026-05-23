@@ -1,0 +1,166 @@
+<Project>
+  <!--
+    CLI / unpackaged build shims.
+    These targets replace VS-only Appx/MrtCore tasks that are not available
+    without a Visual Studio workload installation.
+  -->
+
+  <!-- PRI / MrtCore / Appx targets — not needed for unpackaged dev builds without VS -->
+  <!--
+    ExpandPriContent: Normally expands PRI resources and declares XBF/XAML content for copying.
+    The full implementation requires VS-only AppxPackage PRI tasks, so we stub it but add a
+    separate target below to copy the XBF files (compiled XAML binaries) to the output.
+  -->
+  <Target Name="ExpandPriContent" />
+  <Target Name="AddPriPayloadFilesToCopyToOutputDirectoryItems" />
+
+  <!--
+    CopyXbfFilesToOutput — WinUI 3 requires compiled XAML binary (.xbf) files to be present
+    alongside the exe at runtime. The normal path (ExpandPriContent → PRI tasks) is disabled
+    for CLI builds, so we copy them directly from the intermediate output path.
+  -->
+  <Target Name="CopyXbfFilesToOutput"
+          AfterTargets="MarkupCompilePass2"
+          Condition="'$(UseWinUI)'=='true'">
+    <ItemGroup>
+      <_XbfInIntermediate Include="$(IntermediateOutputPath)**\*.xbf" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_XbfInIntermediate)"
+          DestinationFolder="$(OutDir)%(RecursiveDir)"
+          SkipUnchangedFiles="true"
+          OverwriteReadOnlyFiles="true"
+          Condition="'@(_XbfInIntermediate)' != ''" />
+  </Target>
+
+  <!--
+    AddXbfToPublishItems — Ensure XBF files are included in dotnet publish output.
+    Declares them as None items with CopyToPublishDirectory=PreserveNewest so
+    the publish pipeline picks them up.
+  -->
+  <Target Name="AddXbfToPublishItems"
+          BeforeTargets="ComputeFilesToPublish"
+          Condition="'$(UseWinUI)'=='true'">
+    <ItemGroup>
+      <_XbfForPublish Include="$(IntermediateOutputPath)**\*.xbf" />
+    </ItemGroup>
+    <ItemGroup>
+      <ResolvedFileToPublish Include="@(_XbfForPublish)">
+        <RelativePath>%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <IsKeyOutput>false</IsKeyOutput>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
+
+  <!--
+    GenerateAppResourcesPri — Generate a resources.pri for WinUI 3 unpackaged self-contained apps.
+    The app-level resources.pri is REQUIRED for XamlControlsResources (theme resources) to be
+    resolvable via ms-appx:/// URIs. We generate it by running makepri.exe with the WinUI
+    PRI files (Microsoft.UI.Xaml.Controls.pri, Microsoft.UI.pri) included as resource packs,
+    merged into the app's resource map (Fortiva.*).
+
+    This runs after publish so the WinUI PRI files are already in the output directory.
+    The MakePriExeFullPath property comes from Microsoft.Windows.SDK.BuildTools.props.
+  -->
+  <Target Name="GenerateAppResourcesPri"
+          AfterTargets="Publish"
+          Condition="'$(UseWinUI)'=='true' and '$(WindowsAppSDKSelfContained)'=='true'">
+    <PropertyGroup>
+      <!--
+        Use a path under %TEMP% so the temp dir is never inside PublishDir or
+        IntermediateOutputPath, eliminating the recursive-glob / nesting problem.
+      -->
+      <_AppPriTempDir>$([System.IO.Path]::Combine($([System.IO.Path]::GetTempPath()), 'FortivaAppPri', '$(AssemblyName)'))\</_AppPriTempDir>
+      <_AppPriOut>$(PublishDir)resources.pri</_AppPriOut>
+      <_AppPriConfig>$(_AppPriTempDir)priconfig.xml</_AppPriConfig>
+    </PropertyGroup>
+
+    <!-- Always start from a clean temp dir to avoid stale/nested files -->
+    <RemoveDir Directories="$(_AppPriTempDir)" />
+    <MakeDir  Directories="$(_AppPriTempDir)Pages;$(_AppPriTempDir)Admin" />
+
+    <!--
+      Source XBF files from IntermediateOutputPath (where the XAML compiler put them),
+      NOT from PublishDir (which may contain an AppPriSource subdir from a prior run).
+    -->
+    <ItemGroup>
+      <_PriSrcXbf Include="$(IntermediateOutputPath)**\*.xbf" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_PriSrcXbf)"
+          DestinationFolder="$(_AppPriTempDir)%(RecursiveDir)"
+          SkipUnchangedFiles="false"
+          Condition="'@(_PriSrcXbf)' != ''" />
+
+    <!-- WinUI PRI files ship in the publish dir alongside the EXE -->
+    <Copy SourceFiles="$(PublishDir)Microsoft.UI.Xaml.Controls.pri;$(PublishDir)Microsoft.UI.pri"
+          DestinationFolder="$(_AppPriTempDir)"
+          SkipUnchangedFiles="false"
+          Condition="Exists('$(PublishDir)Microsoft.UI.Xaml.Controls.pri')" />
+
+    <!-- Create priconfig.xml -->
+    <Exec Command="&quot;$(MakePriExeFullPath)&quot; createconfig /cf &quot;$(_AppPriConfig)&quot; /dq Language-en-US /o"
+          Condition="Exists('$(MakePriExeFullPath)')" />
+
+    <!--
+      Trailing-backslash quoting fix: Windows cmd interprets \" as an escaped quote, so a path
+      ending with \ inside "..." becomes "path\" which eats the closing quote.
+      Strip the trailing backslash for the /pr argument by using a separate property.
+    -->
+    <PropertyGroup>
+      <_AppPriTempDirNoSlash>$(_AppPriTempDir.TrimEnd('\'))</_AppPriTempDirNoSlash>
+    </PropertyGroup>
+
+    <!-- Generate resources.pri -->
+    <Exec Command="&quot;$(MakePriExeFullPath)&quot; new /pr &quot;$(_AppPriTempDirNoSlash)&quot; /cf &quot;$(_AppPriConfig)&quot; /o /of &quot;$(_AppPriOut)&quot; /in &quot;$(AssemblyName)&quot;"
+          Condition="Exists('$(MakePriExeFullPath)') and Exists('$(_AppPriConfig)')" />
+
+    <Message Text="Generated resources.pri at $(_AppPriOut)" Importance="high" Condition="Exists('$(_AppPriOut)')" />
+  </Target>
+  <Target Name="_ExpandPriFiles" />
+  <Target Name="_ExpandProjectPriFile" />
+  <Target Name="_GenerateCurrentProjectPriFile" />
+  <Target Name="_GenerateProjectPriFileCore" />
+  <Target Name="_GeneratePrisForPortableLibraries" />
+  <Target Name="_MergePriFiles" />
+  <Target Name="_GetSdkToolPaths" />
+  <Target Name="_GetSdkToolsPathsFromSdk" />
+  <Target Name="_GetSdkToolsPathsFromPackage" />
+  <Target Name="_GetPackageArchitecture" />
+  <Target Name="_GetDefaultResourceLanguage" />
+  <Target Name="_GetRecursiveProjectArchitecture" />
+  <Target Name="_GetProjectArchitecture" />
+  <Target Name="_ValidateConfiguration" />
+  <Target Name="GetMrtPackagingOutputs" Returns="@(PackagingOutputs)" />
+  <Target Name="GetOptionalProjectOutputs" Returns="@(OptionalProjectOutputs)" />
+
+  <!--
+    GetVCInstallPath — Normally discovers the VC++ toolchain installation path.
+    Only needed for C++/CX XAML projects; C# projects use managed metadata (UseVCMetaManaged=true).
+    VS Community without the C++ workload crashes the XAML compiler trying to enumerate the MSVC dir.
+    Stub it and supply empty-but-non-crashing dummy values so the XAML compiler skips vcmeta.dll lookups.
+  -->
+  <Target Name="GetVCInstallPath">
+    <PropertyGroup>
+      <VCInstallPath32 Condition="'$(VCInstallPath32)' == ''">none</VCInstallPath32>
+      <VCInstallPath64 Condition="'$(VCInstallPath64)' == ''">none</VCInstallPath64>
+      <VCInstallDir Condition="'$(VCInstallDir)' == ''">none</VCInstallDir>
+    </PropertyGroup>
+  </Target>
+
+  <!--
+    CopyLocalFilesOutputGroup — MrtCore.PriGen.targets overrides the standard
+    implementation with one that calls RemovePayloadDuplicates from
+    Microsoft.Build.AppxPackage.dll (VS-only). Replace it with a simple
+    pass-through for CLI builds.
+  -->
+  <Target Name="CopyLocalFilesOutputGroup"
+          DependsOnTargets="ResolveReferences"
+          Returns="@(CopyLocalFilesOutputGroupOutput)">
+    <ItemGroup>
+      <CopyLocalFilesOutputGroupOutput Include="@(ReferenceCopyLocalPaths)"
+          Condition="'%(Extension)' != '.xml' or '$(AppxCopyLocalFilesOutputGroupIncludeXmlFiles)' == 'true'">
+        <TargetPath>%(ReferenceCopyLocalPaths.DestinationSubDirectory)%(ReferenceCopyLocalPaths.Filename)%(ReferenceCopyLocalPaths.Extension)</TargetPath>
+      </CopyLocalFilesOutputGroupOutput>
+    </ItemGroup>
+  </Target>
+</Project>

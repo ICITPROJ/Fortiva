@@ -1,0 +1,150 @@
+name: Fortiva CI
+
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main]
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  # ── Core library + tests (runs on every push) ───────────────────────────────
+  core:
+    name: Core — build, test, analyze
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore packages
+        run: dotnet restore src/Fortiva.Core/Fortiva.Core.csproj
+
+      - name: Build Core
+        run: dotnet build src/Fortiva.Core/Fortiva.Core.csproj -c Release --no-restore
+
+      - name: Restore test packages
+        run: dotnet restore tests/Fortiva.Core.Tests/Fortiva.Core.Tests.csproj
+
+      - name: Build tests
+        run: dotnet build tests/Fortiva.Core.Tests/Fortiva.Core.Tests.csproj -c Release --no-restore
+
+      - name: Run tests (all 54 cases)
+        run: |
+          dotnet test tests/Fortiva.Core.Tests/Fortiva.Core.Tests.csproj `
+            -c Release --no-build `
+            --logger "trx;LogFileName=core-tests.trx" `
+            --logger "console;verbosity=normal" `
+            -- xunit.parallelizeTestCollections=false
+        timeout-minutes: 10
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-test-results
+          path: "**/*.trx"
+
+      - name: Roslyn analyzer
+        run: |
+          dotnet build src/Fortiva.Core/Fortiva.Core.csproj `
+            -c Release --no-restore `
+            /p:EnableNETAnalyzers=true `
+            /p:AnalysisMode=All `
+            /p:TreatWarningsAsErrors=false `
+            /warnaserror:CS8600,CS8602,CS8603,CS8604
+
+  # ── License tool (dotnet CLI, no VS required) ───────────────────────────────
+  license-tool:
+    name: LicenseTool — build + smoke test
+    runs-on: windows-latest
+    needs: core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - run: dotnet build src/Fortiva.LicenseTool/Fortiva.LicenseTool.csproj -c Release
+      - name: Smoke test — generate key
+        run: dotnet run --project src/Fortiva.LicenseTool/Fortiva.LicenseTool.csproj -- generate-key
+        continue-on-error: false
+
+  # ── Browser bridge host ──────────────────────────────────────────────────────
+  browser-bridge:
+    name: BrowserBridge.Host — build
+    runs-on: windows-latest
+    needs: core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - run: dotnet build src/Fortiva.BrowserBridge.Host/Fortiva.BrowserBridge.Host.csproj -c Release
+
+  # ── WinUI applications (requires VS workload; continue-on-error) ────────────
+  winui:
+    name: WinUI apps — build (VS)
+    runs-on: windows-latest
+    needs: core
+    continue-on-error: true  # VS Appx tooling required; CLI builds succeed for Core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v2
+      - name: Restore WinUI apps
+        run: |
+          dotnet restore src/Fortiva.AppHost/Fortiva.AppHost.csproj
+          dotnet restore src/Fortiva.Personal/Fortiva.Personal.csproj
+          dotnet restore src/Fortiva.Enterprise/Fortiva.Enterprise.csproj
+          dotnet restore src/Fortiva.Admin/Fortiva.Admin.csproj
+      - name: Build Fortiva.Personal
+        run: dotnet build src/Fortiva.Personal/Fortiva.Personal.csproj -c Release --no-restore
+      - name: Build Fortiva.Enterprise
+        run: dotnet build src/Fortiva.Enterprise/Fortiva.Enterprise.csproj -c Release --no-restore
+      - name: Build Fortiva.Admin
+        run: dotnet build src/Fortiva.Admin/Fortiva.Admin.csproj -c Release --no-restore
+
+  # ── Security scan ────────────────────────────────────────────────────────────
+  security:
+    name: Security — CodeQL
+    runs-on: windows-latest
+    needs: core
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: csharp
+          queries: security-extended
+      - name: Build for CodeQL
+        run: |
+          dotnet build src/Fortiva.Core/Fortiva.Core.csproj -c Release
+          dotnet build src/Fortiva.LicenseTool/Fortiva.LicenseTool.csproj -c Release
+          dotnet build src/Fortiva.BrowserBridge.Host/Fortiva.BrowserBridge.Host.csproj -c Release
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+
+  # ── Summary status check ─────────────────────────────────────────────────────
+  all-clear:
+    name: All checks passed
+    runs-on: ubuntu-latest
+    needs: [core, license-tool, browser-bridge]
+    steps:
+      - run: echo "All required CI checks passed."

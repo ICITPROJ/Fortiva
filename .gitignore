@@ -1,0 +1,36 @@
+# Build outputs
+bin/
+obj/
+dist/
+deploy-ionos/
+
+# Logs and local build artifacts
+*.binlog
+build-out.txt
+build-release.log
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Dev scratch files
+tmp_*.cs
+
+# License signing keys (see packaging/dev-keys/.gitignore)
+packaging/dev-keys/*.xml
+!packaging/dev-keys/fortiva-dev-private.example.xml
+
+# Local env / secrets
+.env
+.env.*
+*.pfx

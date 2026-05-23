@@ -1,0 +1,3 @@
+<!-- Generate with: dotnet run --project src/Fortiva.LicenseTool -- generate-key -->
+<!-- Copy the PUBLIC KEY into LicenseVerifier.EmbeddedPublicKeyXml -->
+<!-- Save the PRIVATE KEY locally (never commit) for: sign "Company" 365 private-key.xml -->

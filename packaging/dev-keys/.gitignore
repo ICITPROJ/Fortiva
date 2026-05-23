@@ -1,0 +1,3 @@
+# Never commit license signing private keys.
+*.xml
+!fortiva-dev-private.example.xml
