@@ -70,6 +70,7 @@ jobs:
       - name: Build installers
         shell: pwsh
         run: ./build-installers.ps1 -Version ${{ steps.version.outputs.value }}
+        timeout-minutes: 30
 
       - name: Generate update manifest
         shell: pwsh
@@ -91,6 +92,7 @@ jobs:
           tag_name: v${{ steps.version.outputs.value }}
           name: Fortiva ${{ steps.version.outputs.value }}
           generate_release_notes: true
+          fail_on_unmatched_files: false
           files: |
             dist/installers/FortivaPersonal-${{ steps.version.outputs.value }}-Setup.exe
             dist/installers/FortivaEnterprise-${{ steps.version.outputs.value }}-Setup.exe

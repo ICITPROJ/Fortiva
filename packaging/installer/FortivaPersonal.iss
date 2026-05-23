@@ -54,7 +54,7 @@ OutputDir={#OutputDir}
 
 OutputBaseFilename=FortivaPersonal-{#AppVersion}-Setup
 
-Compression=lzma2/ultra64
+Compression=lzma2/max
 
 SolidCompression=yes
 
