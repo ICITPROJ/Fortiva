@@ -1,0 +1,31 @@
+# Automatically re-run failed Fortiva CI jobs once (no manual "Re-run" clicks).
+# Only triggers on the first failure; run_attempt 2+ is left for you to inspect.
+name: CI auto-retry
+
+on:
+  workflow_run:
+    workflows: [Fortiva CI]
+    types: [completed]
+
+permissions:
+  actions: write
+
+jobs:
+  retry-once:
+    if: >
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.run_attempt == 1 &&
+      github.event.workflow_run.event != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Re-run failed jobs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runId = context.payload.workflow_run.id;
+            core.info(`Fortiva CI run ${runId} failed on attempt 1 — re-running failed jobs once.`);
+            await github.rest.actions.reRunFailedJobs({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+            });

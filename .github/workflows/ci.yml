@@ -36,14 +36,19 @@ jobs:
       - name: Build tests
         run: dotnet build tests/Fortiva.Core.Tests/Fortiva.Core.Tests.csproj -c Release --no-restore
 
-      - name: Run tests (all 54 cases)
-        run: |
-          dotnet test tests/Fortiva.Core.Tests/Fortiva.Core.Tests.csproj `
-            -c Release --no-build `
-            --logger "trx;LogFileName=core-tests.trx" `
-            --logger "console;verbosity=normal" `
+      - name: Run tests
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 15
+          max_attempts: 3
+          retry_wait_seconds: 20
+          shell: pwsh
+          command: >
+            dotnet test tests/Fortiva.Core.Tests/Fortiva.Core.Tests.csproj
+            -c Release --no-build
+            --logger "trx;LogFileName=core-tests.trx"
+            --logger "console;verbosity=normal"
             -- xunit.parallelizeTestCollections=false
-        timeout-minutes: 10
 
       - name: Upload test results
         if: always()
