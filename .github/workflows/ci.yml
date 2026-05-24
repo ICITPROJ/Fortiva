@@ -50,6 +50,17 @@ jobs:
             --logger "console;verbosity=normal"
             -- xunit.parallelizeTestCollections=false
 
+      - name: Restore AppHost tests
+        run: dotnet restore tests/Fortiva.AppHost.Tests/Fortiva.AppHost.Tests.csproj
+
+      - name: Build AppHost tests
+        run: dotnet build tests/Fortiva.AppHost.Tests/Fortiva.AppHost.Tests.csproj -c Release --no-restore
+
+      - name: Run AppHost tests
+        run: >
+          dotnet test tests/Fortiva.AppHost.Tests/Fortiva.AppHost.Tests.csproj
+          -c Release --no-build --verbosity normal
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4

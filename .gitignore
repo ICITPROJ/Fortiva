@@ -25,6 +25,10 @@ Desktop.ini
 
 # Dev scratch files
 tmp_*.cs
+xaml-log.txt
+
+# Test output
+**/TestResults/
 
 # License signing keys (see packaging/dev-keys/.gitignore)
 packaging/dev-keys/*.xml
