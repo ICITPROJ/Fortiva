@@ -15,7 +15,7 @@ namespace Fortiva.AppHost.Admin;
 public sealed partial class AdminMainWindow : Page
 {
     private readonly ShellViewModel _vm = ShellViewModel.Current;
-    private readonly AuditLogger _audit = new();
+    private readonly AuditLogger _audit = AuditLogger.Default;
     private FortivaPolicy _policy;
     private List<SharedVaultDefinition> _sharedVaultEntries = [];
 
@@ -33,11 +33,17 @@ public sealed partial class AdminMainWindow : Page
 
         LoadLicenseStatus();
         LoadPolicyToUI();
-        LoadAuditLog();
         LoadSharedVaults();
+        MainTabView.SelectionChanged += MainTabView_SelectionChanged;
 #if !DEBUG
         GenerateTrialBtn.Visibility = Visibility.Collapsed;
 #endif
+    }
+
+    protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+        LoadAuditLog();
     }
 
     // ── License tab ──────────────────────────────────────────────────────────
@@ -265,17 +271,27 @@ public sealed partial class AdminMainWindow : Page
     private void LoadAuditLog()
     {
         var events = _audit.ReadRecent(200);
-        AuditList.ItemsSource = events
-            .OrderByDescending(e => e.Timestamp)
-            .Select(ev => new TextBlock
+        AuditList.Items.Clear();
+
+        foreach (var ev in events.OrderByDescending(e => e.Timestamp))
+        {
+            AuditList.Items.Add(new TextBlock
             {
-                Text = $"{ev.Timestamp.LocalDateTime:HH:mm:ss}  {ev.EventType,-20}  {ev.Message}",
+                Text = $"{ev.Timestamp.LocalDateTime:yyyy-MM-dd HH:mm:ss}  {ev.EventType,-20}  {ev.Message}",
                 FontFamily = new FontFamily("Consolas"),
                 FontSize = 11,
                 Padding = new Thickness(8, 2, 8, 2)
-            })
-            .ToList<object>();
+            });
+        }
+
         AuditCount.Text = $"{events.Count} events";
+    }
+
+    private void MainTabView_SelectionChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (sender is TabView { SelectedItem: TabViewItem item } &&
+            item.Header?.ToString() == "Audit")
+            LoadAuditLog();
     }
 
     private async void ExportAudit_Click(object sender, RoutedEventArgs e)

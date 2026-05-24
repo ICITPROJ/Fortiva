@@ -99,6 +99,7 @@ public sealed partial class SettingsPage : Page
         if (showUpdates)
         {
             AutoUpdateSwitch.IsOn = _vm.PersonalSettings.AutoUpdateEnabled;
+            UpdateFeedText.Text = $"Update feed: {ReleaseManifestUrls.PersonalLatest}";
             UpdateStatusText.Text = _vm.PersonalSettings.LastUpdateCheckUtc is null
                 ? "Automatic update check on launch (once per day)."
                 : $"Last checked { _vm.PersonalSettings.LastUpdateCheckUtc:yyyy-MM-dd HH:mm} UTC.";
@@ -255,7 +256,7 @@ public sealed partial class SettingsPage : Page
         var desc   = new TextBlock
         {
             Text = "Enter your master password to bind Windows Hello. " +
-                   "After setup you can unlock Fortiva with biometrics alone.",
+                   "After setup you can unlock with face, fingerprint, or PIN.",
             TextWrapping = Microsoft.UI.Xaml.TextWrapping.WrapWholeWords,
             Opacity = 0.8,
             Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 12)
@@ -296,7 +297,7 @@ public sealed partial class SettingsPage : Page
         _vm.SyncHelloCredential(pwdBox.Password);
         HelloStatus.Text = "Windows Hello is configured.";
         RemoveHelloBtn.IsEnabled = true;
-        ShowInfo("Windows Hello set up. You can now unlock with biometrics.", InfoBarSeverity.Success);
+        ShowInfo("Windows Hello set up. You can unlock with face, fingerprint, or PIN.", InfoBarSeverity.Success);
     }
 
     private void RemoveHello_Click(object sender, RoutedEventArgs e)

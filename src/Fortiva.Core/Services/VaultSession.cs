@@ -35,7 +35,7 @@ public sealed class VaultSession : IDisposable
         _requireEnterpriseLicense = requireEnterpriseLicense;
         _enterpriseClient = enterpriseClient;
         if (enableAudit)
-            _audit = new AuditLogger();
+            _audit = AuditLogger.Default;
     }
 
     public bool IsUnlocked => _context is not null;

@@ -1,0 +1,4 @@
+# Prerequisites downloaded by scripts/fetch-installer-prerequisites.ps1 before ISCC build.
+# Large binaries are not committed — CI and local release builds fetch them automatically.
+
+*.exe

@@ -16,10 +16,12 @@ public sealed class UpdateMessagesTests
     }
 
     [Fact]
-    public void ForCheckFailure_maps_socket_host_not_found()
+    public void ForCheckFailure_never_exposes_host_details()
     {
-        var msg = UpdateMessages.ForCheckFailure(new SocketException((int)SocketError.HostNotFound));
-        Assert.Contains("update server", msg, StringComparison.OrdinalIgnoreCase);
+        var ex = new HttpRequestException("No such host is known. (icmclab.studio:443)");
+        var msg = UpdateMessages.ForCheckFailure(ex);
+        Assert.DoesNotContain("icmclab.studio", msg);
+        Assert.DoesNotContain("443", msg);
     }
 }
 

@@ -10,7 +10,7 @@ and no Electron runtime.
 
 | Component | Description |
 |-----------|-------------|
-| `Fortiva.Core` | Shared library: vault format, crypto, policy, audit, Hello |
+| `Fortiva.Core` | Shared library: vault format, crypto, policy, audit, security scan |
 | `Fortiva.Personal` | Free, local-first WinUI 3 app for individuals |
 | `Fortiva.Enterprise` | Licensed, policy-driven WinUI 3 app for businesses |
 | `Fortiva.Admin` | IT/admin WinUI 3 console for licenses, policies, shared vaults |
@@ -37,91 +37,85 @@ Master Key (MK)  ──AES-256-GCM──►  Wrapped Vault Key (VK)
   The master password remains the cryptographic root.
 - **Paranoia Mode**: Vault opens read-only if revision counter or DPAPI state indicates rollback.
 - **Snapshot rotation**: Last N vault snapshots retained for recovery.
+- **Security audit**: Full in-app scan (passwords, settings, vault hygiene) with JSON/HTML export.
 - **SecureZeroMemory**: All sensitive buffers explicitly zeroed via `CryptographicOperations.ZeroMemory`.
 
 ## Build
 
-### Prerequisites
+### Prerequisites (developers)
 
 - .NET 8 SDK (`dotnet --version` ≥ 8.0)
-- Windows 10 1903+ (19041) or Windows 11
+- Windows 10 19041+ or Windows 11
 - Visual Studio 2022 with **Windows App SDK** workload (WinUI builds only)
+- Inno Setup 6 (for EXE installers)
 
 ### Core library + tests (CLI, no VS required)
 
 ```powershell
 dotnet build src/Fortiva.Core/Fortiva.Core.csproj -c Release
-dotnet test  tests/Fortiva.Core.Tests/                        # 54 tests
+dotnet test  tests/Fortiva.Core.Tests/                        # 119+ tests
 ```
+
+### Release build + installers
+
+```powershell
+./build-release.ps1
+./build-installers.ps1 -Version 1.0.0
+```
+
+`build-installers.ps1` downloads **WebView2** and **VC++ redistributable** bootstrappers and embeds them in each setup EXE. Clients receive silent prerequisite installation on first run.
 
 ### License tool (CLI)
 
 ```powershell
 dotnet build src/Fortiva.LicenseTool/ -c Release
 
-# Generate a new RSA 2048 key pair
 dotnet run --project src/Fortiva.LicenseTool -- generate-key
-
-# Sign a license (requires private key XML)
 dotnet run --project src/Fortiva.LicenseTool -- sign "Acme Corp" 365 private-key.xml
-
-# Verify a license
 dotnet run --project src/Fortiva.LicenseTool -- verify fortiva-license-acme-corp.json
 ```
 
 ### WinUI applications (requires Visual Studio)
 
 ```powershell
-dotnet build src/Fortiva.Personal/    -c Release
-dotnet build src/Fortiva.Enterprise/  -c Release
-dotnet build src/Fortiva.Admin/       -c Release
+./build-release.ps1   # preferred — MSBuild + resources.pri
 ```
-
-### MSIX packaging
-
-See `packaging/msix/` — open `Fortiva.Personal.wapproj` in VS with
-"MSIX Packaging Tools" workload installed.
 
 ## Distribution
 
 | Channel | App |
 |---------|-----|
-| Microsoft Store | `Fortiva.Personal` |
-| Winget | `winget install Fortiva.Personal` (see `packaging/winget/`) |
-| EXE installer | `FortivaPersonal-Setup-x64.exe` (Inno Setup, `packaging/installer/`) |
+| GitHub Releases | `FortivaPersonal-{version}-Setup.exe` (auto-update manifest) |
+| EXE installer | Inno Setup — `packaging/installer/` |
 | Intune / Endpoint Manager | `.intunewin` wrap (see `packaging/intune/`) |
 | SCCM / GPO | Silent install via EXE `/VERYSILENT` |
+
+Installers bundle .NET 8 + Windows App SDK and install **WebView2** + **VC++ x64** when missing.
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
+| [`docs/UserManual.md`](docs/UserManual.md) | End-user guide (install, vault, security audit, backup) |
 | [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) | Threat model, trust boundaries, mitigations |
 | [`docs/VAULT-FORMAT.md`](docs/VAULT-FORMAT.md) | `.fva` binary format specification |
 | [`docs/POLICY-LICENSING.md`](docs/POLICY-LICENSING.md) | License structure, policy engine |
 | [`docs/ONBOARDING-RECOVERY.md`](docs/ONBOARDING-RECOVERY.md) | Onboarding, panic lock, snapshot recovery |
+| [`docs/UPDATE-STRATEGY.md`](docs/UPDATE-STRATEGY.md) | Personal auto-update via GitHub Releases |
+| [`docs/RELEASE-PIPELINE.md`](docs/RELEASE-PIPELINE.md) | CI/CD release workflow |
+| [`docs/SECURITY-PENTEST-REPORT.md`](docs/SECURITY-PENTEST-REPORT.md) | Adversarial review findings |
 
-## Test matrix
+## QA
 
-| Suite | Tests | Description |
-|-------|-------|-------------|
-| `Crypto/CngAesGcmTests` | 4 | AES-256-GCM round-trip, tampering |
-| `Crypto/Argon2Tests` | 5 | KDF determinism, salt uniqueness, serialization |
-| `Crypto/KeyHierarchyTests` | 5 | MK→VK wrap/unwrap, wrong password, payload AEAD |
-| `Vault/VaultEngineTests` | 4 | Create/unlock/add/rollback |
-| `Vault/VaultParserFuzzTests` | 2 | Garbage/bad-magic rejection |
-| `Vault/VaultIntegrationTests` | 8 | Full workflow, 10k entries, rapid lock/unlock |
-| `Vault/AutoLockTimerTests` | 3 | Fire, reset, dispose |
-| `Password/PasswordStrengthTests` | 6 | Scoring, entropy, generation |
-| `Policy/PolicyEnforcerTests` | 3 | KDF enforcement, clipboard, export |
-| `Licensing/LicenseTests` | 3 | Sign/verify, tamper, expired |
-| **Total** | **43+** | All passing (`dotnet test`) |
+```powershell
+dotnet test tests/Fortiva.Core.Tests/
+powershell -ExecutionPolicy Bypass -File scripts/qa-stress-audit.ps1 -SkipBuild
+```
 
 ## CI/CD
 
-GitHub Actions (`.github/workflows/ci.yml`):
-1. **Core** — build + test + Roslyn analyzers
-2. **LicenseTool** — build + smoke test
-3. **BrowserBridge.Host** — build
-4. **WinUI** — build (VS workload required; `continue-on-error`)
-5. **CodeQL** — security scanning across all managed projects
+GitHub Actions (`.github/workflows/ci.yml`, `release.yml`):
+
+1. **Core** — build + test
+2. **Release** — `build-release.ps1`, prerequisites fetch, Inno Setup installers, GitHub Release assets
+3. **CodeQL** — security scanning

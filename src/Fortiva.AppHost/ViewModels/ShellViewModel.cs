@@ -6,6 +6,7 @@ using Fortiva.Core.Hello;
 using Fortiva.Core.Licensing;
 using Fortiva.Core.LocalState;
 using Fortiva.Core.Password;
+using Fortiva.Core.Security;
 using Fortiva.Core.Platform;
 using Fortiva.Core.Policy;
 using Fortiva.Core.Services;
@@ -167,6 +168,15 @@ public sealed class ShellViewModel : ViewModelBase
         OnPropertyChanged(nameof(VaultExists));
     }
 
+    public async Task CreateVaultAsync(string masterPassword, SecurityLevel level)
+    {
+        EnsureSession();
+        await Task.Run(() => _session!.CreateVault(masterPassword, level)).ConfigureAwait(false);
+        VaultExists = true;
+        StatusMessage = "Vault created.";
+        RunOnUi(() => OnPropertyChanged(nameof(VaultExists)));
+    }
+
     public async Task<(bool ok, string? error)> UnlockAsync(
         string masterPassword, bool paranoiaMode = false, bool confirmRollback = false)
     {
@@ -316,6 +326,35 @@ public sealed class ShellViewModel : ViewModelBase
 
     public PasswordHealthReport GetHealthReport()
         => PasswordHealthAnalyzer.Analyze(_session?.AllEntries() ?? []);
+
+    public SecurityAuditReport GetSecurityAuditReport(bool helloConfigured)
+    {
+        var entries = _session?.AllEntries() ?? [];
+        var policy = Policy;
+        var autoLock = policy?.MaxAutoLockSeconds ?? _personalSettings.AutoLockSeconds;
+        var clipboard = policy is not null
+            ? PolicyEnforcer.GetClipboardClearSeconds(policy, _personalSettings.ClipboardClearSeconds)
+            : _personalSettings.ClipboardClearSeconds;
+
+        IReadOnlyList<Core.Audit.AuditEvent>? auditEvents = null;
+        if (IsEnterprise)
+        {
+            try { auditEvents = Core.Audit.AuditLogger.Default.ReadRecent(1000); }
+            catch { /* audit dir may be unavailable */ }
+        }
+
+        return SecurityAuditRunner.Run(new SecurityAuditContext
+        {
+            Entries = entries,
+            AutoLockSeconds = autoLock,
+            ClipboardClearSeconds = clipboard,
+            WindowsHelloConfigured = helloConfigured,
+            ParanoiaMode = PreferParanoiaMode,
+            SnapshotCount = ListSnapshots().Count,
+            AuditEvents = auditEvents,
+            IncludeActivityAudit = IsEnterprise
+        });
+    }
 
     public string GeneratePassword(int length, PasswordGeneratorMode mode)
         => PasswordGenerator.Generate(length, mode);

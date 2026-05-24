@@ -27,6 +27,7 @@ public sealed class PasswordGeneratorPanel
     private readonly TextBlock _preview;
     private readonly TextBlock _strengthLabel;
     private readonly TextBlock _errorLabel;
+    private readonly Border _previewBorder;
 
     public StackPanel Root { get; }
 
@@ -103,20 +104,10 @@ public sealed class PasswordGeneratorPanel
             TextWrapping = TextWrapping.Wrap,
             IsTextSelectionEnabled = true
         };
-        var previewBorder = new Border
-        {
-            Padding = new Thickness(12),
-            Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
-            Child = _preview
-        };
+        _previewBorder = new Border { Padding = new Thickness(12), Child = _preview };
 
         _strengthLabel = new TextBlock { FontSize = 11, Opacity = 0.7 };
-        _errorLabel = new TextBlock
-        {
-            FontSize = 11,
-            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SystemFillColorCriticalBrush"],
-            Visibility = Visibility.Collapsed
-        };
+        _errorLabel = new TextBlock { FontSize = 11, Visibility = Visibility.Collapsed };
 
         void ApplyPresetUi()
         {
@@ -249,14 +240,24 @@ public sealed class PasswordGeneratorPanel
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
             Margin = new Thickness(0, 8, 0, 0)
         });
-        Root.Children.Add(previewBorder);
+        Root.Children.Add(_previewBorder);
         Root.Children.Add(_strengthLabel);
         Root.Children.Add(_errorLabel);
 
+        ApplyThemeResources();
         Regenerate();
     }
 
     private Action RegenerateInternal { get; }
 
     public void Regenerate() => RegenerateInternal();
+
+    public void ApplyThemeResources()
+    {
+        if (Application.Current?.Resources is not ResourceDictionary resources)
+            return;
+
+        _previewBorder.Background = (Microsoft.UI.Xaml.Media.Brush)resources["CardBackgroundFillColorDefaultBrush"];
+        _errorLabel.Foreground = (Microsoft.UI.Xaml.Media.Brush)resources["SystemFillColorCriticalBrush"];
+    }
 }

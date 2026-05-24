@@ -10,7 +10,7 @@ namespace Fortiva.AppHost.Pages;
 
 public sealed partial class AuditPage : Page
 {
-    private readonly AuditLogger _logger = new();
+    private readonly AuditLogger _logger = AuditLogger.Default;
 
     public AuditPage() => InitializeComponent();
 
@@ -23,9 +23,12 @@ public sealed partial class AuditPage : Page
     private void Refresh()
     {
         var events = _logger.ReadRecent(500);
-        var items = events.OrderByDescending(e => e.Timestamp).Select(ev => BuildRow(ev)).ToList();
-        AuditList.ItemsSource = items;
-        CountLabel.Text = $"{items.Count} events";
+        AuditList.Items.Clear();
+
+        foreach (var ev in events)
+            AuditList.Items.Add(BuildRow(ev));
+
+        CountLabel.Text = $"{events.Count} events";
     }
 
     private static Grid BuildRow(AuditEvent ev)

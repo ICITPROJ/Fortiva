@@ -47,7 +47,7 @@ public sealed class UpdateChecker
             {
                 manifest = _loader.TryLoadBundled(resolved);
                 if (manifest is null)
-                    return Fail("Update manifest file is missing or invalid.");
+                    return Fail(UpdateMessages.ManifestUnavailable);
             }
             else
             {
@@ -58,12 +58,22 @@ public sealed class UpdateChecker
             }
 
             if (manifest is null || !manifest.IsValid)
-                return Fail(UpdateMessages.ForCheckFailure(new HttpRequestException("manifest unavailable")));
+            {
+                manifest = _loader.TryLoadBundled(bundledManifestPath);
+                fromNetwork = false;
+            }
+
+            if (manifest is null || !manifest.IsValid)
+                return Fail(UpdateMessages.ManifestUnavailable);
 
             return ReleaseManifestEvaluator.Evaluate(manifest, currentVersion, fromNetwork);
         }
         catch (Exception ex)
         {
+            var bundled = _loader.TryLoadBundled(bundledManifestPath);
+            if (bundled is not null && bundled.IsValid)
+                return ReleaseManifestEvaluator.Evaluate(bundled, currentVersion, fromNetwork: false);
+
             return Fail(UpdateMessages.ForCheckFailure(ex));
         }
     }

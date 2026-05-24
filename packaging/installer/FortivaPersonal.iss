@@ -109,8 +109,7 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 Source: "..\..\dist\BrowserBridge\*"; DestDir: "{app}\BrowserBridge"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 Source: "..\..\extension\*"; DestDir: "{app}\extension"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "com.fortiva.browserbridge.json"
-
-
+#include "FortivaPrerequisitesFiles.iss"
 
 [Registry]
 
@@ -133,7 +132,7 @@ Name: "{userdesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: deskto
 
 
 [Run]
-
+#include "FortivaPrerequisitesRun.iss"
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 
@@ -162,6 +161,7 @@ Type: filesandordirs; Name: "{localappdata}\Fortiva"
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Remove-Item -LiteralPath ($env:APPDATA+'\Fortiva\Personal'),($env:APPDATA+'\Fortiva'),($env:LOCALAPPDATA+'\FortivaPersonal'),($env:LOCALAPPDATA+'\Fortiva') -Recurse -Force -ErrorAction SilentlyContinue"""; Flags: runascurrentuser waituntilterminated; RunOnceId: "FortivaPersonalUserDataCleanup"
 
 [Code]
+#include "FortivaPrerequisitesCode.iss"
 
 procedure KillFortivaProcesses();
 
@@ -210,12 +210,14 @@ end;
 
 
 function InitializeSetup(): Boolean;
-
 var
-
   VaultFile: String;
-
 begin
+  if not FortivaPrereq_Initialize() then
+  begin
+    Result := False;
+    Exit;
+  end;
 
   VaultFile := ExpandConstant('{userappdata}\Fortiva\vault.fva');
 
@@ -294,8 +296,9 @@ var
 begin
 
   if CurStep <> ssPostInstall then
-
     Exit;
+
+  FortivaPrereq_AfterInstall();
 
   BridgeExe := ExpandConstant('{app}\BrowserBridge\Fortiva.BrowserBridge.Host.exe');
 

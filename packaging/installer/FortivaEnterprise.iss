@@ -47,6 +47,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\dist\BrowserBridge\*"; DestDir: "{app}\BrowserBridge"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\extension\*"; DestDir: "{app}\extension"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "com.fortiva.browserbridge.json"
+#include "FortivaPrerequisitesFiles.iss"
 
 [Registry]
 Root: HKCU; Subkey: "Software\Google\Chrome\NativeMessagingHosts\com.fortiva.browserbridge.enterprise"; \
@@ -61,6 +62,7 @@ Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"; \
 Name: "{commondesktop}\{#AppName}";   Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Run]
+#include "FortivaPrerequisitesRun.iss"
 Filename: "{app}\{#AppExeName}"; \
     Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; \
     Flags: nowait postinstall skipifsilent
@@ -71,6 +73,13 @@ Type: filesandordirs; Name: "{app}\temp"
 Type: dirifempty;     Name: "{app}"
 
 [Code]
+#include "FortivaPrerequisitesCode.iss"
+
+function InitializeSetup(): Boolean;
+begin
+  Result := FortivaPrereq_Initialize();
+end;
+
 procedure DeleteFileIfExists(const Path: String);
 begin
   if FileExists(Path) then DeleteFile(Path);
@@ -156,6 +165,8 @@ var
 begin
   if CurStep <> ssPostInstall then
     Exit;
+
+  FortivaPrereq_AfterInstall();
 
   BridgeExe := ExpandConstant('{app}\BrowserBridge\Fortiva.BrowserBridge.Host.exe');
   JsonPath := ExpandConstant('{app}\extension');

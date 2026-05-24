@@ -2,15 +2,20 @@
     x:Class="Fortiva.AppHost.Pages.LicenseRequiredPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+    Background="Transparent">
 
-    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16" MaxWidth="480" Padding="24">
-        <FontIcon Glyph="&#xE785;" FontSize="48" HorizontalAlignment="Center"
-                  Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
-        <TextBlock Text="Enterprise license required" FontSize="24" FontWeight="SemiBold" TextAlignment="Center"/>
-        <TextBlock TextWrapping="WrapWholeWords" TextAlignment="Center" Opacity="0.8"
-                   Text="Fortiva Enterprise requires a valid license installed by your administrator. Contact your IT team or use Fortiva Admin Console to import a license file."/>
-        <TextBlock x:Name="DetailText" TextWrapping="WrapWholeWords" TextAlignment="Center" Opacity="0.6" FontSize="12"/>
-        <Button x:Name="RecheckBtn" Content="Check again" HorizontalAlignment="Center" Click="RecheckBtn_Click"/>
-    </StackPanel>
+    <Grid HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="480" Padding="24">
+        <Border Style="{StaticResource FortivaGlassPanelGlow}" Padding="32">
+            <StackPanel Spacing="16">
+                <FontIcon Glyph="&#xE785;" FontSize="48" HorizontalAlignment="Center"
+                          Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                <TextBlock Text="Enterprise license required" Style="{StaticResource FortivaPageTitle}" TextAlignment="Center"/>
+                <TextBlock TextWrapping="WrapWholeWords" TextAlignment="Center" Opacity="0.8"
+                           Text="Fortiva Enterprise requires a valid license installed by your administrator. Contact your IT team or use Fortiva Admin Console to import a license file."/>
+                <TextBlock x:Name="DetailText" TextWrapping="WrapWholeWords" TextAlignment="Center" Opacity="0.6" FontSize="12"/>
+                <Button x:Name="RecheckBtn" Content="Check again" HorizontalAlignment="Center"
+                        Style="{StaticResource FortivaAccentButton}" Click="RecheckBtn_Click"/>
+            </StackPanel>
+        </Border>
+    </Grid>
 </Page>

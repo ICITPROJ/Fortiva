@@ -238,6 +238,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
 
     private void SetBusy(bool busy)
     {
+        BusyRing.Visibility = busy ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
         BusyRing.IsActive = busy;
         var helloBlocksPassword = HelloMandatory && _helloProtector.IsConfigured;
         UnlockBtn.IsEnabled = !busy && _helloCheckComplete && !helloBlocksPassword;

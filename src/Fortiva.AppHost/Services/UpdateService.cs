@@ -75,7 +75,7 @@ public sealed class UpdateService
             result = new UpdateCheckResult
             {
                 Status = UpdateStatus.CheckFailed,
-                Message = ex.Message
+                Message = UpdateMessages.ForCheckFailure(ex)
             };
         }
 
@@ -127,7 +127,7 @@ public sealed class UpdateService
         UpdateStatus.UpdateAvailable => result.Message ?? "Update available.",
         UpdateStatus.PlatformUntested => result.Message ?? "Update recommended for this Windows version.",
         UpdateStatus.PlatformUnsupported => result.Message ?? "Windows version not supported.",
-        UpdateStatus.CheckFailed => result.Message ?? "Update check failed.",
+        UpdateStatus.CheckFailed => result.Message ?? UpdateMessages.ManifestUnavailable,
         _ => "Unknown"
     };
 }

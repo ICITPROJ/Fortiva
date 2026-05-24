@@ -5,13 +5,15 @@
     xmlns:local="using:Fortiva.AppHost"
     Title="Fortiva">
     <Grid>
+        <Rectangle Fill="{ThemeResource FortivaAmbientBrush}"/>
+        <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
         <!-- Custom title bar area -->
-        <Grid x:Name="AppTitleBar" Height="48" Background="{ThemeResource LayerFillColorDefaultBrush}">
+        <Grid x:Name="AppTitleBar" Height="48" Background="{ThemeResource FortivaTitleBarBrush}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
@@ -35,10 +37,11 @@
         <!-- NavigationView -->
         <NavigationView x:Name="NavView"
                         Grid.Row="1"
+                        Background="Transparent"
                         IsBackButtonVisible="Collapsed"
                         IsSettingsVisible="false"
                         PaneDisplayMode="Left"
-                        OpenPaneLength="200"
+                        OpenPaneLength="220"
                         SelectionChanged="NavView_SelectionChanged">
             <NavigationView.MenuItems>
                 <NavigationViewItem x:Name="NavLock"    Tag="Lock"       Content="Lock vault">
@@ -50,7 +53,7 @@
                 <NavigationViewItem x:Name="NavGenerator" Tag="Generator" Content="Password generator">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE9D5;"/></NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="NavHealth"  Tag="Health"     Content="Password Health">
+                <NavigationViewItem x:Name="NavHealth"  Tag="Health"     Content="Security audit">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE946;"/></NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem x:Name="NavImport"  Tag="ImportExport" Content="Import / Export">
@@ -68,7 +71,8 @@
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE8A1;"/></NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.FooterMenuItems>
-            <Frame x:Name="ContentFrame" IsNavigationStackEnabled="True"/>
+            <Frame x:Name="ContentFrame" Background="Transparent" IsNavigationStackEnabled="True"/>
         </NavigationView>
+        </Grid>
     </Grid>
 </Window>

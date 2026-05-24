@@ -30,10 +30,12 @@ public sealed class AuditEvent
 
 public sealed class AuditLogger
 {
-    private readonly string _logPath;
+    private static readonly object FileLock = new();
+
     private readonly string _auditDirectory;
     private readonly byte[] _hmacKey;
-    private readonly object _lock = new();
+
+    public static AuditLogger Default { get; } = new();
 
     public AuditLogger(string? logDirectory = null)
     {
@@ -41,7 +43,6 @@ public sealed class AuditLogger
             Environment.ExpandEnvironmentVariables(@"%PROGRAMDATA%\Fortiva"),
             "audit");
         Directory.CreateDirectory(_auditDirectory);
-        _logPath = Path.Combine(_auditDirectory, $"audit-{DateTime.UtcNow:yyyy-MM}.jsonl");
         _hmacKey = AuditIntegrity.LoadOrCreateHmacKey(_auditDirectory);
     }
 
@@ -57,32 +58,95 @@ public sealed class AuditLogger
         var json = JsonSerializer.Serialize(evt);
         var sig = AuditIntegrity.SignLine(json, _hmacKey);
         var line = json + "\t" + sig + Environment.NewLine;
-        lock (_lock)
-            File.AppendAllText(_logPath, line);
+        var logPath = GetLogPathForMonth(DateTime.UtcNow);
+
+        lock (FileLock)
+            File.AppendAllText(logPath, line);
     }
 
     public IReadOnlyList<AuditEvent> ReadRecent(int maxLines = 500)
     {
-        if (!File.Exists(_logPath)) return [];
         var events = new List<AuditEvent>();
-        foreach (var rawLine in File.ReadAllLines(_logPath).TakeLast(maxLines))
+        string[] files;
+
+        lock (FileLock)
+            files = Directory.GetFiles(_auditDirectory, "audit-*.jsonl");
+
+        foreach (var file in files.OrderByDescending(Path.GetFileName, StringComparer.Ordinal))
         {
-            if (string.IsNullOrWhiteSpace(rawLine)) continue;
-            var tab = rawLine.LastIndexOf('\t');
-            if (tab < 0) continue;
-            var json = rawLine[..tab];
-            var sig = rawLine[(tab + 1)..];
-            if (!AuditIntegrity.VerifyLine(json, sig, _hmacKey))
-                continue;
-            var evt = JsonSerializer.Deserialize<AuditEvent>(json);
-            if (evt is not null) events.Add(evt);
+            foreach (var evt in ReadValidatedEvents(file))
+                events.Add(evt);
         }
-        return events;
+
+        return events
+            .OrderByDescending(e => e.Timestamp)
+            .Take(maxLines)
+            .ToList();
     }
 
     public void ExportTo(string destinationPath)
     {
-        if (File.Exists(_logPath))
-            File.Copy(_logPath, destinationPath, overwrite: true);
+        var lines = new List<string>();
+        string[] files;
+
+        lock (FileLock)
+            files = Directory.GetFiles(_auditDirectory, "audit-*.jsonl");
+
+        foreach (var file in files.OrderBy(Path.GetFileName, StringComparer.Ordinal))
+        {
+            foreach (var rawLine in File.ReadLines(file))
+            {
+                if (string.IsNullOrWhiteSpace(rawLine))
+                    continue;
+
+                var tab = rawLine.LastIndexOf('\t');
+                if (tab < 0)
+                    continue;
+
+                var json = rawLine[..tab];
+                var sig = rawLine[(tab + 1)..];
+                if (AuditIntegrity.VerifyLine(json, sig, _hmacKey))
+                    lines.Add(rawLine);
+            }
+        }
+
+        var directory = Path.GetDirectoryName(destinationPath);
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+
+        lock (FileLock)
+            File.WriteAllLines(destinationPath, lines);
     }
+
+    private IEnumerable<AuditEvent> ReadValidatedEvents(string filePath)
+    {
+        if (!File.Exists(filePath))
+            yield break;
+
+        string[] lines;
+        lock (FileLock)
+            lines = File.ReadAllLines(filePath);
+
+        foreach (var rawLine in lines)
+        {
+            if (string.IsNullOrWhiteSpace(rawLine))
+                continue;
+
+            var tab = rawLine.LastIndexOf('\t');
+            if (tab < 0)
+                continue;
+
+            var json = rawLine[..tab];
+            var sig = rawLine[(tab + 1)..];
+            if (!AuditIntegrity.VerifyLine(json, sig, _hmacKey))
+                continue;
+
+            var evt = JsonSerializer.Deserialize<AuditEvent>(json);
+            if (evt is not null)
+                yield return evt;
+        }
+    }
+
+    private string GetLogPathForMonth(DateTime utcNow) =>
+        Path.Combine(_auditDirectory, $"audit-{utcNow:yyyy-MM}.jsonl");
 }

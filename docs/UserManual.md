@@ -11,7 +11,7 @@
 4. [First Launch — Onboarding Wizard](#4-first-launch--onboarding-wizard)
 5. [Unlocking Your Vault](#5-unlocking-your-vault)
 6. [Managing Entries](#6-managing-entries)
-7. [Password Health](#7-password-health)
+7. [Security Audit](#7-security-audit)
 8. [Import & Export](#8-import--export)
 9. [Settings](#9-settings)
 10. [Windows Hello Biometric Unlock](#10-windows-hello-biometric-unlock)
@@ -54,7 +54,9 @@ Fortiva never transmits your passwords to any server. There is no cloud sync, no
 | Disk space | 250 MB |
 | .NET runtime | **Not required** — bundled inside the installer |
 | Windows App SDK | **Not required** — bundled inside the installer |
-| Internet connection | **Not required** |
+| Microsoft Edge WebView2 | **Installed automatically** by setup if missing |
+| Visual C++ 2015–2022 (x64) | **Installed automatically** by setup if missing |
+| Internet connection | **Not required** for daily use (needed once during install if prerequisites must be downloaded — they are embedded in the Fortiva installer) |
 
 ---
 
@@ -68,7 +70,7 @@ Fortiva never transmits your passwords to any server. There is no cloud sync, no
 4. Choose an install folder (the default `C:\Program Files\icmclab studio\Fortiva Personal` is recommended) and click **Next**.
 5. Choose a Start Menu folder (default: `Fortiva (icmclab studio)`) and click **Next**.
 6. Optionally tick **"Create a desktop icon"** then click **Install**.
-7. Wait for the progress bar to complete (~30 seconds).
+7. Wait for the progress bar to complete (~30 seconds). If WebView2 or the Visual C++ runtime is not already on your PC, setup installs them silently first.
 8. Tick **"Launch Fortiva Personal"** and click **Finish**.
 
 ### 3.2 Silent / Scripted Installation
@@ -99,50 +101,48 @@ FortivaPersonal-1.0.0-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES
 
 ## 4. First Launch — Onboarding Wizard
 
-The first time Fortiva launches (no existing vault found), a four-step wizard guides you through setup.
+The first time Fortiva launches (no existing vault found), a four-step wizard guides you through setup with a glass-style layout and progress indicators at the bottom.
 
 ### Step 1 — Welcome
-An introduction to Fortiva's security model. Click **Next** to continue.
+An introduction to Fortiva's zero-knowledge security model: local encryption, no cloud sync, and Argon2id key derivation. Click **Get started** to continue.
 
 ### Step 2 — Create Your Master Password
 
 This is the single password that protects everything. It is never stored anywhere — only a cryptographic key derived from it is used to unlock the vault.
 
 - Type a strong master password in the first box.
+- A prominent **Write it down offline** warning reminds you that Fortiva cannot reset or recover your master password.
 - The **live strength meter** shows your password's entropy and strength:
   - **Very Weak / Weak** — shown in red. Fortiva will not proceed until you improve it.
   - **Moderate** — shown in amber. Acceptable but improvable.
   - **Strong / Very Strong** — shown in green. Recommended.
 - Confirm the password in the second box.
-- Click **Next** when both boxes match and the password is at least Moderate strength.
+- Click **Continue** when both boxes match and the password is at least Moderate strength.
 
 **Tips for a strong master password:**
 - Use a passphrase of 4+ random words (e.g. "correct-horse-battery-staple")
 - Aim for at least 50 bits of entropy (the meter shows this)
 - Do not reuse a password you use anywhere else
-- Write it down and store it somewhere physically secure — there is no recovery if you forget it
+- **Record it on paper** and store it somewhere physically secure — not in email, cloud notes, or another password manager
 
 ### Step 3 — Windows Hello (Optional)
 
 Windows Hello lets you unlock Fortiva using your fingerprint, face, or PIN instead of typing your master password every time.
 
 - Click **Enable Windows Hello** to set it up. Windows will prompt you for your chosen Hello method.
-- Or click **Skip** to use your master password only. You can enable Hello later in Settings.
+- Or click **Skip for now** to use your master password only. You can enable Hello later in Settings.
 
-### Step 4 — Paranoia Mode (Optional)
+### Step 4 — Final Security Setup
 
-Paranoia Mode adds extra restrictions for high-security environments:
+Before your vault is created, confirm you understand the recovery model:
 
-| Setting | Normal mode | Paranoia mode |
-|---|---|---|
-| Password visibility | Toggle to reveal | Never revealed |
-| Clipboard auto-clear | 30 seconds | 10 seconds |
-| Auto-lock timeout | Up to 15 minutes | Maximum 5 minutes |
-| Rollback detected | Warning shown | Vault opened read-only |
+- **Paranoia Mode** (recommended) protects against silent vault rollbacks.
+- You must check **I have recorded my master password offline in a secure place** before **Create vault** becomes available.
+- Click **Create vault** when ready.
 
-Toggle **Enable Paranoia Mode** if you want these restrictions, then click **Create Vault**.
+While the vault is being created, a busy overlay appears with progress feedback. Key derivation (Argon2id) runs in the background so the UI stays responsive — this may take a few seconds.
 
-Your vault is created and the app navigates to the main vault view.
+Your vault is created, unlocked automatically, and the app navigates to the main vault view.
 
 ---
 
@@ -219,18 +219,44 @@ Open the entry and click the **eye icon** next to the password field. The passwo
 
 ---
 
-## 7. Password Health
+## 7. Security Audit
 
-The **Password Health** screen analyses your entire vault and produces a report.
+Navigate to **Security audit** in the left menu. This runs a **full vault scan** covering passwords, app settings, vault hygiene, and (Enterprise) recent activity.
 
-| Category | What it checks |
+### 7.1 What it checks
+
+| Area | What it checks |
 |---|---|
-| Weak passwords | Passwords scoring below "Strong" on the entropy analyser |
-| Reused passwords | Identical passwords used across multiple entries |
-| Old passwords | Passwords not changed in over 12 months |
-| Missing passwords | Entries with no password set |
+| **Passwords** | Weak, reused, old (12+ months), and missing passwords |
+| **Settings** | Auto-lock timeout, clipboard auto-clear, Windows Hello, Paranoia Mode |
+| **Vault hygiene** | HTTP URLs, missing site URLs, encrypted snapshot availability |
+| **Activity** (Enterprise) | Failed unlock attempts and policy violations (30-day window) |
 
-A **Security Score** (0–100) is shown at the top. Click any category to expand the list of affected entries and jump directly to them to fix.
+### 7.2 Running an audit
+
+1. Click **Run full audit** (or open the page — it runs automatically).
+2. Review your **overall score** (0–100), category issue counts, and the findings list.
+3. Click any finding’s action button (**Open generator**, **Open settings**, **Export backup**, etc.) or expand password lists to jump to affected entries.
+
+Severity badges:
+
+| Badge | Meaning |
+|---|---|
+| **CRITICAL** | Fix immediately (e.g. clipboard disabled, many failed unlocks) |
+| **WARNING** | Should fix soon (weak/reused passwords, slow auto-lock) |
+| **INFO** | Recommended improvement |
+| **PASS** | Check passed |
+
+### 7.3 Export audit report
+
+After an audit completes, click **Export report**:
+
+| Format | Use |
+|---|---|
+| **JSON** (`.json`) | Machine-readable summary for IT/SIEM scripts or record-keeping |
+| **HTML** (`.html`) | Human-readable report — open in a browser and use **Print → Save as PDF** |
+
+Exported reports include scores, findings, and password **counts only**. **No vault passwords or secrets** are ever written to the export file.
 
 ---
 
@@ -459,7 +485,9 @@ Open the **Audit** tab to view recent audit events. Click **Export log** to save
 Click **More info** → **Run anyway**. This appears because the installer is not yet signed with an Extended Validation (EV) code-signing certificate. The software is safe — this is an icmclab studio product.
 
 ### The app won't launch — "Application failed to start"
-The Windows App SDK runtime is bundled in the installer. If you extracted the files manually without running the installer, the runtime may be missing. Re-run the installer.
+Re-run the Fortiva installer — it bundles .NET 8 and the Windows App SDK, and **automatically installs Microsoft Edge WebView2 and the Visual C++ x64 runtime** if they are missing. Do not copy files out of the install folder manually; always use the setup EXE.
+
+If the problem persists after reinstalling, export a **Security audit** HTML report (see [Section 7](#7-security-audit)) and check Settings for clipboard/auto-lock issues.
 
 ### "Invalid or expired license" (Enterprise)
 - Confirm `license.dat` is in `%AppData%\Fortiva\Enterprise\`
@@ -489,6 +517,7 @@ Windows Hello must be configured in **Windows Settings → Accounts → Sign-in 
 - **Memory safety**: Sensitive key material is zeroed from memory immediately after use using `CryptographicOperations.ZeroMemory`.
 - **Integrity log**: Every vault mutation is recorded in a tamper-evident integrity log stored inside the encrypted vault.
 - **Snapshots**: Up to 5 rolling backup snapshots are kept alongside the vault. If the vault file is corrupted, the most recent clean snapshot is automatically restored.
+- **Security audit**: In-app scan of password hygiene, settings, and vault health. Export JSON or HTML (print to PDF) — never includes plaintext passwords.
 
 ---
 

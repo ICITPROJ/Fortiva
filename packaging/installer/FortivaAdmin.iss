@@ -47,6 +47,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\dist\LicenseTool\*"; DestDir: "{app}\LicenseTool"; Flags: ignoreversion recursesubdirs createallsubdirs
+#include "FortivaPrerequisitesFiles.iss"
 
 [Icons]
 Name: "{group}\{#AppName}";           Filename: "{app}\{#AppExeName}"
@@ -55,6 +56,7 @@ Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"; \
 Name: "{commondesktop}\{#AppName}";   Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Run]
+#include "FortivaPrerequisitesRun.iss"
 Filename: "{app}\{#AppExeName}"; \
     Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; \
     Flags: nowait postinstall skipifsilent
@@ -65,6 +67,13 @@ Type: filesandordirs; Name: "{app}\temp"
 Type: dirifempty;     Name: "{app}"
 
 [Code]
+#include "FortivaPrerequisitesCode.iss"
+
+function InitializeSetup(): Boolean;
+begin
+  Result := FortivaPrereq_Initialize();
+end;
+
 procedure DeleteFileIfExists(const Path: String);
 begin
   if FileExists(Path) then DeleteFile(Path);

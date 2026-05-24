@@ -15,7 +15,10 @@ public sealed partial class PasswordGeneratorPage : Page
     {
         InitializeComponent();
         _clipboard = new ClipboardService(_vm.Policy, _vm.PersonalSettings.ClipboardClearSeconds);
+        _vm.ThemeChanged += OnThemeChanged;
     }
+
+    private void OnThemeChanged() => _panel?.ApplyThemeResources();
 
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {

@@ -2,6 +2,7 @@ using Fortiva.AppHost.Pages;
 using Fortiva.AppHost.Services;
 using Fortiva.AppHost.ViewModels;
 using Microsoft.UI;
+using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -19,11 +20,13 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
 
-        ThemeService.Apply(this, _vm.ThemePreference);
-
-        // Custom title bar
+        // Custom title bar (before theme chrome so title-bar colors apply)
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
+
+        ThemeService.Apply(this, _vm.ThemePreference);
+        ThemeService.ApplySystemBackdrop(this);
+
         TitleText.Text = $"Fortiva {App.Edition}";
 
         RefreshBrandAppearance();
@@ -250,7 +253,12 @@ public sealed partial class MainWindow : Window
 
     private void OnThemeChanged()
     {
-        DispatcherQueue.TryEnqueue(() => ThemeService.Apply(this, _vm.ThemePreference));
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            ThemeService.Apply(this, _vm.ThemePreference);
+            ThemeService.ApplySystemBackdrop(this);
+            RefreshBrandAppearance();
+        });
     }
 
     private void RefreshBrandAppearance()

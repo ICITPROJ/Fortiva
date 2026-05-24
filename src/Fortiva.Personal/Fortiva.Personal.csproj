@@ -37,6 +37,7 @@
 
   <!-- XAML pages -->
   <ItemGroup>
+    <Page Include="..\Fortiva.AppHost\Resources\FortivaTheme.xaml" Link="Resources\FortivaTheme.xaml" />
     <Page Include="..\Fortiva.AppHost\MainWindow.xaml"             Link="MainWindow.xaml" />
     <Page Include="..\Fortiva.AppHost\Pages\UnlockPage.xaml"       Link="Pages\UnlockPage.xaml" />
     <Page Include="..\Fortiva.AppHost\Pages\OnboardingPage.xaml"   Link="Pages\OnboardingPage.xaml" />

@@ -18,7 +18,9 @@ GitHub Actions (release.yml)
 
   • unit tests
 
-  • build-release.ps1 + Inno Setup installers
+  • build-release.ps1
+  • fetch-installer-prerequisites.ps1 (WebView2 + VC++ embedded in installers)
+  • Inno Setup installers
 
   • latest.personal.json (version + SHA-256 + GitHub asset URLs)
 
@@ -109,8 +111,9 @@ GitHub Actions runs automatically. Watch **Actions → Release**.
 
 
 ```powershell
-
 ./build-release.ps1
+
+./scripts/fetch-installer-prerequisites.ps1   # WebView2 + VC++ (also run by build-installers.ps1)
 
 ./build-installers.ps1 -Version 1.0.1
 

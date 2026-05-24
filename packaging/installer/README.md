@@ -1,11 +1,29 @@
-# EXE installer (MSIX wrapper)
+# EXE installer (Inno Setup)
 
-Production builds should:
+Production builds use **Inno Setup** with self-contained publish output plus embedded prerequisites.
 
-1. Build signed MSIX (`Fortiva.Personal.msix`, `Fortiva.Enterprise.msix`, `Fortiva.Admin.msix`).
-2. Wrap with bootstrapper EXE (WiX or MSIX App Installer offline bundle) for environments without Microsoft Store or App Installer.
-3. Deploy Enterprise/Admin via Intune Win32/MSIX LOB apps.
+## Bundled in the app
 
-No custom update service for Enterprise — use Intune (Win32 supersedence).
+- .NET 8 runtime (`SelfContained=true`)
+- Windows App SDK (`WindowsAppSDKSelfContained=true`)
 
-Personal: automatic HTTPS update check (see `docs/UPDATE-STRATEGY.md`) or Microsoft Store / winget.
+## Installed automatically when missing
+
+- Microsoft Edge WebView2 Runtime
+- Visual C++ 2015–2022 Redistributable (x64)
+
+Fetch before compile:
+
+```powershell
+./scripts/fetch-installer-prerequisites.ps1
+./build-installers.ps1
+```
+
+`build-installers.ps1` runs the fetch script automatically.
+
+## Deployment
+
+- **Personal** — per-user install (`PrivilegesRequired=lowest`); prerequisites install silently without admin when possible.
+- **Enterprise / Admin** — machine-wide install under Program Files; IT can use `/VERYSILENT`.
+
+See `packaging/intune/README.md` for Intune Win32 deployment.

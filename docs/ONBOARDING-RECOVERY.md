@@ -12,6 +12,7 @@
 - Target unlock &lt; 500 ms on typical hardware (after KDF warm cache).
 - Copy password only via explicit action; clipboard clears per settings.
 - **Panic lock** hotkey: lock, wipe memory, hide window.
+- Run **Security audit** periodically (nav → Security audit → Run full audit). Export JSON for IT records or HTML → Print to PDF for compliance. Exports contain scores and findings only — never vault passwords.
 
 ## Recovery
 
@@ -19,7 +20,8 @@
 |----------|--------|
 | Corrupt vault | Open snapshot 1–5 from same folder |
 | Rollback detected | Confirm override or stay read-only (Paranoia) |
-| Forgot master password | No recovery — by design |
+| Forgot master password | No recovery — by design. Restore from `.fvab` encrypted backup if you have one. |
+| New PC / reinstall | Install Fortiva → unlock with master password (vault in `%AppData%\Fortiva\` if same Windows user). Or import `.fvab` backup. |
 | Portable USB | Copy `Fortiva` folder; expect host traces (prefetch, MRU) |
 
 ## Enterprise

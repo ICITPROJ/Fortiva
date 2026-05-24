@@ -1,9 +1,10 @@
 using Microsoft.UI.Xaml;
 using System;
 using System.IO;
+using Fortiva.AppHost.Services;
+using Fortiva.AppHost.ViewModels;
 using Fortiva.Core.Licensing;
 using Fortiva.Core.Platform;
-using Fortiva.AppHost.Services;
 
 namespace Fortiva.AppHost;
 
@@ -78,6 +79,8 @@ public partial class App : Application
                     "Fortiva Admin Console requires Administrator privileges. " +
                     "Right-click the app and choose Run as administrator.");
             }
+
+            ThemeService.ApplyApplicationThemeEarly(ShellViewModel.Current.ThemePreference);
 
             _window = new MainWindow();
             MainWindowHandle = WinRT.Interop.WindowNative.GetWindowHandle(_window);

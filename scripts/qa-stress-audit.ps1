@@ -45,6 +45,8 @@ Step "Personal installer compile" {
         if (-not (Test-Path $installer)) { throw "Missing installer" }
         return
     }
+    & powershell -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\fetch-installer-prerequisites.ps1')
+    if ($LASTEXITCODE -ne 0) { throw "fetch-installer-prerequisites failed" }
     $iscc = "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
     if (-not (Test-Path $iscc)) { throw "ISCC not installed" }
     & $iscc (Join-Path $root 'packaging\installer\FortivaPersonal.iss') | Out-Null
@@ -64,6 +66,17 @@ Step "Enterprise + Admin installer compile" {
     $adm = Join-Path $root 'dist\installers\FortivaAdmin-1.0.0-Setup.exe'
     if (-not (Test-Path $ent)) { throw "Enterprise installer missing" }
     if (-not (Test-Path $adm)) { throw "Admin installer missing" }
+}
+
+Step "Installer prerequisites audit" {
+    & powershell -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\fetch-installer-prerequisites.ps1')
+    if ($LASTEXITCODE -ne 0) { throw "fetch-installer-prerequisites failed" }
+    foreach ($req in @('MicrosoftEdgeWebview2Setup.exe', 'vc_redist.x64.exe')) {
+        $p = Join-Path $root "packaging\prerequisites\$req"
+        if (-not (Test-Path $p)) { throw "Missing prerequisite: $req" }
+        if ((Get-Item $p).Length -lt 1MB) { throw "Prerequisite too small: $req" }
+    }
+    Pass "WebView2 + VC++ redistributables present"
 }
 
 Step "Static asset audit" {

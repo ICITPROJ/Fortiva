@@ -30,6 +30,7 @@
 - **Memory**: `CryptographicOperations.ZeroMemory` / `RtlSecureZeroMemory`; panic lock wipes session keys.
 - **Clipboard**: explicit copy, auto-clear, policy disable.
 - **Export**: encrypted default; plaintext requires explicit confirmation (Personal) or blocked (Enterprise policy).
+- **Security audit export**: JSON/HTML reports contain findings and counts only — no secrets.
 
 ## Out of scope (explicit non-goals)
 

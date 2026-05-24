@@ -6,7 +6,7 @@
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
     <Grid>
-        <TabView IsAddTabButtonVisible="False" VerticalAlignment="Stretch">
+        <TabView x:Name="MainTabView" IsAddTabButtonVisible="False" VerticalAlignment="Stretch">
             <!-- ── License ─────────────────────────────────────────────── -->
             <TabViewItem Header="License">
                 <ScrollViewer>

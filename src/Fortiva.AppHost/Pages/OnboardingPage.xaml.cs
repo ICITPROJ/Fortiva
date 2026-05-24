@@ -8,7 +8,6 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Shapes;
 using Windows.UI;
 
 namespace Fortiva.AppHost.Pages;
@@ -19,7 +18,7 @@ public sealed partial class OnboardingPage : Page
     private readonly WindowsHelloKeyProtector _helloProtector;
     private int _step;
     private readonly StackPanel[] _steps;
-    private readonly Ellipse[] _dots;
+    private readonly Border[] _dots;
     private bool _isFinishing;
     private bool _helloEnrollmentPending;
 
@@ -83,15 +82,29 @@ public sealed partial class OnboardingPage : Page
     private void HelloContinue_Click(object sender, RoutedEventArgs e)
         => ShowStep(Math.Min(_step + 1, _steps.Length - 1));
 
+    private void OfflineAck_Changed(object sender, RoutedEventArgs e)
+        => FinishBtn.IsEnabled = OfflineAckCheck.IsChecked == true && !_isFinishing;
+
+    private void ShowFinishError(string message)
+    {
+        FinishErrorBar.Message = message;
+        FinishErrorBar.IsOpen = true;
+    }
+
     private void ShowStep(int step)
     {
         for (var i = 0; i < _steps.Length; i++)
-        {
             _steps[i].Visibility = i == step ? Visibility.Visible : Visibility.Collapsed;
-            _dots[i].Fill = i == step
-                ? (SolidColorBrush)Application.Current.Resources["AccentFillColorDefaultBrush"]
-                : (SolidColorBrush)Application.Current.Resources["ControlFillColorDefaultBrush"];
+
+        for (var i = 0; i < _dots.Length; i++)
+        {
+            _dots[i].Width = i == step ? 28 : 10;
+            _dots[i].Opacity = i == step ? 1.0 : 0.45;
+            _dots[i].Background = i == step
+                ? (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"]
+                : (Brush)Application.Current.Resources["ControlFillColorDefaultBrush"];
         }
+
         _step = step;
     }
 
@@ -147,9 +160,9 @@ public sealed partial class OnboardingPage : Page
     {
         if (string.IsNullOrEmpty(NewPasswordBox.Password))
         {
-            HelloInfoBar.Message  = "Go back to Step 1 and set a master password first.";
+            HelloInfoBar.Message = "Go back and set a master password first.";
             HelloInfoBar.Severity = InfoBarSeverity.Warning;
-            HelloInfoBar.IsOpen   = true;
+            HelloInfoBar.IsOpen = true;
             return;
         }
 
@@ -157,45 +170,60 @@ public sealed partial class OnboardingPage : Page
         if (result.Verified)
         {
             _helloEnrollmentPending = true;
-            HelloInfoBar.Message  = "Windows Hello verified. It will be enabled after your vault is created.";
+            HelloInfoBar.Message = "Windows Hello verified. It will be enabled after your vault is created.";
             HelloInfoBar.Severity = InfoBarSeverity.Success;
-            HelloInfoBar.IsOpen   = true;
+            HelloInfoBar.IsOpen = true;
             ShowHelloContinue(hideSkip: true);
         }
         else
         {
-            HelloInfoBar.Message  = result.ErrorMessage ?? "Verification failed.";
+            HelloInfoBar.Message = result.ErrorMessage ?? "Verification failed.";
             HelloInfoBar.Severity = InfoBarSeverity.Error;
-            HelloInfoBar.IsOpen   = true;
+            HelloInfoBar.IsOpen = true;
         }
     }
 
     private async void FinishOnboarding_Click(object sender, RoutedEventArgs e)
     {
-        if (_isFinishing || _vm.VaultExists) return;
+        FinishErrorBar.IsOpen = false;
+
+        if (_isFinishing) return;
+        if (_vm.VaultExists)
+        {
+            ShowFinishError("A vault already exists on this device. Restart Fortiva to unlock it.");
+            return;
+        }
+
+        if (OfflineAckCheck.IsChecked != true)
+        {
+            ShowFinishError("Please confirm you have recorded your master password offline.");
+            return;
+        }
+
+        var password = NewPasswordBox.Password;
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            ShowFinishError("Master password was lost — go back to step 2 and re-enter it.");
+            return;
+        }
 
         _isFinishing = true;
         FinishBtn.IsEnabled = false;
+        SetBusyOverlay(true, "Creating your encrypted vault…", "Deriving keys with Argon2id — this may take a few seconds.");
 
         try
         {
-            var password = NewPasswordBox.Password;
-            if (string.IsNullOrWhiteSpace(password))
-            {
-                PasswordErrorBar.Message = "Master password cannot be empty.";
-                PasswordErrorBar.IsOpen = true;
-                return;
-            }
+            var paranoia = ParanoiaToggle.IsOn;
+            _vm.SetParanoiaMode(paranoia);
 
-            _vm.CreateVault(
-                password,
-                ParanoiaToggle.IsOn ? SecurityLevel.Paranoia : SecurityLevel.Standard);
+            var level = paranoia ? SecurityLevel.Paranoia : SecurityLevel.Standard;
+            await _vm.CreateVaultAsync(password, level).ConfigureAwait(true);
 
-            var (ok, error) = await _vm.UnlockAsync(password);
+            BusyDetail.Text = "Unlocking vault…";
+            var (ok, error) = await _vm.UnlockAsync(password, paranoiaMode: paranoia).ConfigureAwait(true);
             if (!ok)
             {
-                PasswordErrorBar.Message = error ?? "Vault created but unlock failed. Try again on the unlock screen.";
-                PasswordErrorBar.IsOpen = true;
+                SetBusyOverlay(false);
                 NavigationService.Current.ResetCurrent();
                 NavigationService.Current.Navigate<UnlockPage>();
                 NavigationService.Current.ClearHistory();
@@ -205,17 +233,27 @@ public sealed partial class OnboardingPage : Page
             if (_helloEnrollmentPending)
                 _vm.SyncHelloCredentialFromSession();
 
-            NavigationService.Current.ClearHistory();
+            SetBusyOverlay(false);
+            _vm.RequestNavigationTab("Vault");
         }
         catch (Exception ex)
         {
-            PasswordErrorBar.Message = $"Failed to create vault: {ex.Message}";
-            PasswordErrorBar.IsOpen = true;
+            SetBusyOverlay(false);
+            App.LogException("OnboardingPage.FinishOnboarding", ex);
+            ShowFinishError($"Failed to create vault: {ex.Message}");
         }
         finally
         {
             _isFinishing = false;
-            FinishBtn.IsEnabled = true;
+            FinishBtn.IsEnabled = OfflineAckCheck.IsChecked == true;
         }
+    }
+
+    private void SetBusyOverlay(bool visible, string? title = null, string? detail = null)
+    {
+        BusyOverlay.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        BusyRing.IsActive = visible;
+        if (title is not null) BusyTitle.Text = title;
+        if (detail is not null) BusyDetail.Text = detail;
     }
 }
