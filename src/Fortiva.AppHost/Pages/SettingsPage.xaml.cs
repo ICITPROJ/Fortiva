@@ -208,7 +208,7 @@ public sealed partial class SettingsPage : Page
         NewPwdStrengthLabel.Text = result.Label;
     }
 
-    private void ChangePassword_Click(object sender, RoutedEventArgs e)
+    private async void ChangePassword_Click(object sender, RoutedEventArgs e)
     {
         if (!_vm.IsUnlocked) { ShowInfo("Unlock the vault before changing your master password."); return; }
         if (_vm.IsReadOnly) { ShowInfo("Vault is read-only. Confirm rollback on the unlock screen first.", InfoBarSeverity.Warning); return; }
@@ -223,6 +223,7 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
+        ChangePasswordBtn.IsEnabled = false;
         try
         {
             if (!_vm.VerifyMasterPassword(CurrentPwd.Password))
@@ -231,9 +232,8 @@ public sealed partial class SettingsPage : Page
                 return;
             }
 
-            _vm.ChangeMasterPassword(NewPwd.Password);
+            await _vm.ChangeMasterPasswordAsync(NewPwd.Password);
 
-            // Keep Windows Hello in sync with the new master password
             if (_hello.IsConfigured)
                 _vm.SyncHelloCredential(NewPwd.Password);
 
@@ -244,7 +244,12 @@ public sealed partial class SettingsPage : Page
         }
         catch (Exception ex)
         {
-            ShowInfo($"Failed: {ex.Message}", InfoBarSeverity.Error);
+            var detail = string.IsNullOrWhiteSpace(ex.Message) ? ex.GetType().Name : ex.Message;
+            ShowInfo($"Failed: {detail}", InfoBarSeverity.Error);
+        }
+        finally
+        {
+            ChangePasswordBtn.IsEnabled = true;
         }
     }
 

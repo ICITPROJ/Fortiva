@@ -38,6 +38,14 @@ public sealed partial class OnboardingPage : Page
     {
         base.OnNavigatedTo(e);
         RefreshPortableHint();
+
+        _vm.RefreshVaultExists();
+        if (_vm.VaultExists && !_vm.IsUnlocked)
+        {
+            NavigationService.Current.ResetCurrent();
+            NavigationService.Current.Navigate<UnlockPage>();
+            NavigationService.Current.ClearHistory();
+        }
     }
 
     private void RefreshPortableHint()
@@ -188,9 +196,13 @@ public sealed partial class OnboardingPage : Page
         FinishErrorBar.IsOpen = false;
 
         if (_isFinishing) return;
+
+        _vm.RefreshVaultExists();
         if (_vm.VaultExists)
         {
-            ShowFinishError("A vault already exists on this device. Restart Fortiva to unlock it.");
+            NavigationService.Current.ResetCurrent();
+            NavigationService.Current.Navigate<UnlockPage>();
+            NavigationService.Current.ClearHistory();
             return;
         }
 
@@ -219,14 +231,15 @@ public sealed partial class OnboardingPage : Page
             var level = paranoia ? SecurityLevel.Paranoia : SecurityLevel.Standard;
             await _vm.CreateVaultAsync(password, level).ConfigureAwait(true);
 
-            BusyDetail.Text = "Unlocking vault…";
+            DispatcherQueue.TryEnqueue(() => BusyDetail.Text = "Unlocking vault…");
             var (ok, error) = await _vm.UnlockAsync(password, paranoiaMode: paranoia).ConfigureAwait(true);
             if (!ok)
             {
-                SetBusyOverlay(false);
-                NavigationService.Current.ResetCurrent();
-                NavigationService.Current.Navigate<UnlockPage>();
-                NavigationService.Current.ClearHistory();
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    SetBusyOverlay(false);
+                    ShowFinishError(error ?? "Vault was created but unlock failed. Restart Fortiva and enter your master password.");
+                });
                 return;
             }
 
@@ -240,7 +253,8 @@ public sealed partial class OnboardingPage : Page
         {
             SetBusyOverlay(false);
             App.LogException("OnboardingPage.FinishOnboarding", ex);
-            ShowFinishError($"Failed to create vault: {ex.Message}");
+            var detail = string.IsNullOrWhiteSpace(ex.Message) ? ex.GetType().Name : ex.Message;
+            ShowFinishError($"Failed to create vault: {detail}");
         }
         finally
         {

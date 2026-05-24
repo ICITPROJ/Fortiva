@@ -99,15 +99,21 @@ public sealed partial class HealthPage : Page
         }
         catch (Exception ex)
         {
-            ScoreHeading.Text = "Could not complete security audit.";
-            ScoreDetail.Text = ex.Message;
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                ScoreHeading.Text = "Could not complete security audit.";
+                ScoreDetail.Text = string.IsNullOrWhiteSpace(ex.Message) ? ex.GetType().Name : ex.Message;
+            });
         }
         finally
         {
-            LoadingRing.IsActive = false;
-            RunAuditBtn.IsEnabled = true;
-            GeneratorBtn.IsEnabled = true;
-            ExportAuditBtn.IsEnabled = _lastAuditReport is not null;
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                LoadingRing.IsActive = false;
+                RunAuditBtn.IsEnabled = true;
+                GeneratorBtn.IsEnabled = true;
+                ExportAuditBtn.IsEnabled = _lastAuditReport is not null;
+            });
         }
     }
 

@@ -64,6 +64,12 @@ public static class FortivaPaths
     public static string EnterpriseProgramData =>
         Environment.ExpandEnvironmentVariables(@"%PROGRAMDATA%\Fortiva");
 
+    public static string EnterpriseAuditDirectory =>
+        Path.Combine(EnterpriseProgramData, "audit");
+
+    public static string EnterpriseHelloDirectory =>
+        Path.Combine(EnterpriseCrashLogDirectory, "Hello");
+
     public static string EnterpriseCrashLogDirectory =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FortivaEnterprise");
 
@@ -179,6 +185,26 @@ public static class FortivaPaths
         PersonalCrashLogDirectory,
         PersonalLegacyLocalRoot
     ];
+
+    /// <summary>LocalAppData folders removed when Enterprise client is uninstalled.</summary>
+    public static IReadOnlyList<string> EnterpriseUninstallLocalDirectories =>
+        [EnterpriseCrashLogDirectory];
+
+    /// <summary>ProgramData files removed when user opts to delete enterprise vault.</summary>
+    public static IReadOnlyList<string> EnterpriseVaultFileNames =>
+        [Vault.VaultConstants.VaultFileName, "local.state"];
+
+    /// <summary>ProgramData files removed when Admin uninstall deletes configuration.</summary>
+    public static IReadOnlyList<string> AdminConfigFileNames =>
+        ["policies.json", "license.dat", "shared-vaults.json"];
+
+    /// <summary>ProgramData directories removed when user opts to delete audit logs.</summary>
+    public static IReadOnlyList<string> SharedAuditUninstallDirectories =>
+        [EnterpriseAuditDirectory];
+
+    /// <summary>Downloaded Personal auto-update installers in %TEMP% (cleaned on uninstall).</summary>
+    public static string PersonalUpdateInstallerTempPattern =>
+        "FortivaPersonal-*-Setup.exe";
 
     /// <summary>Delete all Personal user data (same paths as uninstall). Used by QA scripts only.</summary>
     public static void DeletePersonalUserData()

@@ -65,6 +65,8 @@ function Remove-FortivaPersonalUserData {
             Write-Host "   Deleted: $p"
         }
     }
+    Get-ChildItem -LiteralPath $env:TEMP -Filter 'FortivaPersonal-*-Setup.exe' -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
 }
 
 function Test-FortivaPersonalVaultExists {

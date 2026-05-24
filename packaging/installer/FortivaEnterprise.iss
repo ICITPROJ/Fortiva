@@ -85,12 +85,18 @@ begin
   if FileExists(Path) then DeleteFile(Path);
 end;
 
+procedure DeleteAuditLogs;
+var AuditDir: String;
+begin
+  AuditDir := ExpandConstant('{commonappdata}\Fortiva\audit');
+  if DirExists(AuditDir) then DelTree(AuditDir, True, True, True);
+end;
+
 procedure ClearHelloCredential;
 var HelloDir: String;
 begin
   HelloDir := ExpandConstant('{localappdata}\FortivaEnterprise\Hello');
-  DeleteFileIfExists(HelloDir + '\hello.keyprotect');
-  DeleteFileIfExists(HelloDir + '\hello.binding');
+  if DirExists(HelloDir) then DelTree(HelloDir, True, True, True);
 end;
 
 procedure DeleteEnterpriseVault(const Dir: String);
@@ -121,8 +127,8 @@ end;
 procedure KillFortivaProcesses();
 var ResultCode: Integer;
 begin
-  Exec('taskkill.exe', '/F /IM Fortiva.Enterprise.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec('taskkill.exe', '/F /IM Fortiva.Personal.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('taskkill.exe', '/F /IM Fortiva.BrowserBridge.Host.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(1500);
 end;
 
@@ -152,6 +158,8 @@ begin
       begin
         DeleteEnterpriseVault(ConfigDir);
         ClearHelloCredential;
+        if MsgBox('Also delete enterprise audit logs in ' + ConfigDir + '\audit?', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+          DeleteAuditLogs;
       end
       else
         ClearHelloCredential;

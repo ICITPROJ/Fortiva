@@ -92,6 +92,8 @@ public sealed class WindowsHelloKeyProtector
     public void Clear()
     {
         if (File.Exists(_protectorPath)) File.Delete(_protectorPath);
+        var bindingPath = Path.Combine(Path.GetDirectoryName(_protectorPath)!, "hello.binding");
+        if (File.Exists(bindingPath)) File.Delete(bindingPath);
     }
 
     private byte[] BuildEntropy(bool helloVerified)

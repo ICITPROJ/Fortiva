@@ -65,9 +65,11 @@ Fortiva never transmits your passwords to any server. There is no cloud sync, no
 ### 3.1 Standard Installation (Recommended)
 
 1. Double-click **`FortivaPersonal-1.0.0-Setup.exe`** (or the edition you need).
-2. If Windows shows a User Account Control (UAC) prompt saying *"Do you want to allow this app to make changes?"* — click **Yes**. This is needed to write to `Program Files`.
+2. **Personal edition** installs per-user (no admin required). **Enterprise and Admin** may show a UAC prompt — click **Yes** to install to Program Files.
 3. The setup wizard opens. Click **Next**.
-4. Choose an install folder (the default `C:\Program Files\icmclab studio\Fortiva Personal` is recommended) and click **Next**.
+4. Choose an install folder and click **Next**:
+   - **Personal (default):** `%LOCALAPPDATA%\Programs\icmclab studio\Fortiva Personal\`
+   - **Enterprise / Admin:** `C:\Program Files\icmclab studio\...`
 5. Choose a Start Menu folder (default: `Fortiva (icmclab studio)`) and click **Next**.
 6. Optionally tick **"Create a desktop icon"** then click **Install**.
 7. Wait for the progress bar to complete (~30 seconds). If WebView2 or the Visual C++ runtime is not already on your PC, setup installs them silently first.
@@ -89,13 +91,15 @@ FortivaPersonal-1.0.0-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES
 
 | What | Where |
 |---|---|
-| Application files | `C:\Program Files\icmclab studio\Fortiva Personal\` |
+| Application files (Personal) | `%LOCALAPPDATA%\Programs\icmclab studio\Fortiva Personal\` |
+| Application files (Enterprise) | `C:\Program Files\icmclab studio\Fortiva Enterprise\` |
 | Start Menu shortcuts | `%ProgramData%\Microsoft\Windows\Start Menu\Programs\Fortiva (icmclab studio)\` |
 | Desktop shortcut | `%UserProfile%\Desktop\` (if selected) |
-| Uninstaller | `C:\Program Files\icmclab studio\Fortiva Personal\unins000.exe` |
-| Vault data (created on first run) | `%AppData%\Fortiva\Personal\` |
+| Uninstaller (Personal) | `%LOCALAPPDATA%\Programs\icmclab studio\Fortiva Personal\unins000.exe` |
+| Vault data (Personal, first run) | `%AppData%\Fortiva\vault.fva` |
+| Vault data (Enterprise) | `%ProgramData%\Fortiva\vault.fva` |
 
-> **Note:** Vault data is stored in your user profile, not in Program Files. It is **not** deleted by the uninstaller unless you explicitly choose to remove it.
+> **Note:** Personal vault data lives in your user profile, not in the install folder. Uninstalling Fortiva Personal **permanently deletes** your vault, Windows Hello credential, settings, and crash logs.
 
 ---
 
@@ -469,13 +473,32 @@ Open the **Audit** tab to view recent audit events. Click **Export log** to save
 3. Click **Uninstall**.
 
 ### What happens during uninstall
-1. The app is closed if it is running.
-2. All application files in `Program Files` are removed.
-3. Start Menu and Desktop shortcuts are removed.
-4. The entry is removed from Add/Remove Programs.
-5. A dialog asks: **"Do you also want to permanently delete your vault and all saved passwords?"**
-   - Click **No** (default) — your vault data in `%AppData%\Fortiva\` is kept. You can reinstall later and pick up where you left off.
-   - Click **Yes** — your vault and all passwords are permanently deleted. **This cannot be undone.**
+
+**Fortiva Personal**
+1. Fortiva and the browser bridge are closed if running.
+2. Application files in `%LOCALAPPDATA%\Programs\icmclab studio\Fortiva Personal\` are removed.
+3. **All user data is permanently deleted:**
+   - `%AppData%\Fortiva\` — vault, snapshots, Windows Hello, settings
+   - `%AppData%\Fortiva\Personal\` — legacy path (if present)
+   - `%LocalAppData%\FortivaPersonal\` — crash logs, appearance, bridge session
+   - `%LocalAppData%\Fortiva\` — legacy bridge path (if present)
+   - Downloaded update installers in `%TEMP%\FortivaPersonal-*-Setup.exe`
+4. Start Menu / Desktop shortcuts and Add/Remove Programs entry are removed.
+5. An informational dialog explains that your vault will be deleted before uninstall proceeds.
+
+**Fortiva Enterprise**
+1. Application files in Program Files are removed.
+2. `%LocalAppData%\FortivaEnterprise\` (crash logs, Hello) is always removed.
+3. You are prompted whether to delete the enterprise vault in `%ProgramData%\Fortiva\`.
+4. If you delete the vault, you may also delete audit logs in `%ProgramData%\Fortiva\audit\`.
+5. Policies and license files are kept unless removed separately via Admin Console uninstall.
+
+**Fortiva Admin Console**
+1. Application files in Program Files are removed.
+2. `%LocalAppData%\FortivaAdmin\` is always removed.
+3. You are prompted whether to delete admin config (`policies.json`, `license.dat`, `shared-vaults.json`).
+4. If you delete admin config, you may also delete audit logs in `%ProgramData%\Fortiva\audit\`.
+5. Enterprise vault files are never deleted by the Admin uninstaller.
 
 ---
 
@@ -490,7 +513,7 @@ Re-run the Fortiva installer — it bundles .NET 8 and the Windows App SDK, and 
 If the problem persists after reinstalling, export a **Security audit** HTML report (see [Section 7](#7-security-audit)) and check Settings for clipboard/auto-lock issues.
 
 ### "Invalid or expired license" (Enterprise)
-- Confirm `license.dat` is in `%AppData%\Fortiva\Enterprise\`
+- Confirm `license.dat` is in `%ProgramData%\Fortiva\license.dat`
 - Check the expiry date with: `Fortiva.LicenseTool.exe verify license.dat`
 - Contact your IT administrator for a renewed license.
 

@@ -27,3 +27,15 @@ Fetch before compile:
 - **Enterprise / Admin** — machine-wide install under Program Files; IT can use `/VERYSILENT`.
 
 See `packaging/intune/README.md` for Intune Win32 deployment.
+
+## Uninstall data removal
+
+Path contracts live in `src/Fortiva.Core/Platform/FortivaPaths.cs` and matching scripts:
+
+| Edition | Always removed | Prompted |
+|---------|----------------|----------|
+| Personal | `%AppData%\Fortiva\`, legacy paths, `%LocalAppData%\FortivaPersonal\`, `%TEMP%\FortivaPersonal-*-Setup.exe` | — (vault always deleted) |
+| Enterprise | App files, `%LocalAppData%\FortivaEnterprise\` | Vault in `%ProgramData%\Fortiva\`, audit logs |
+| Admin | App files, `%LocalAppData%\FortivaAdmin\` | Admin config files, audit logs |
+
+QA scripts: `scripts/reset-fortiva-personal.ps1`, `scripts/FortivaPersonalPaths.ps1`, `scripts/FortivaEnterprisePaths.ps1`.

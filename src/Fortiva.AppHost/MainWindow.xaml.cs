@@ -46,7 +46,7 @@ public sealed partial class MainWindow : Window
         _vm.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(ShellViewModel.StatusMessage) or nameof(ShellViewModel.IsUnlocked))
-                StatusText.Text = _vm.StatusMessage;
+                DispatcherQueue.TryEnqueue(() => StatusText.Text = _vm.StatusMessage);
         };
 
         NavAudit.Visibility = _vm.IsEnterprise && !_vm.IsAdmin ? Visibility.Visible : Visibility.Collapsed;

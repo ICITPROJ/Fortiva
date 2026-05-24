@@ -106,9 +106,7 @@ public sealed class UpdateService
                 UseShellExecute = true
             });
 
-            if (silent)
-                Environment.Exit(0);
-
+            // Never force-quit during launch — user may be mid-setup or have an unlocked vault.
             return true;
         }
         catch (Exception ex)

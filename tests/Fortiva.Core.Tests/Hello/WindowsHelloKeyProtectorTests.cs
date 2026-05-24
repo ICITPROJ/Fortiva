@@ -58,9 +58,11 @@ public sealed class WindowsHelloKeyProtectorTests : IDisposable
         var mk = RandomNumberGenerator.GetBytes(32);
         protector.StoreHelloBundle(mk, helloVerified: true);
         Assert.True(protector.IsConfigured);
+        Assert.True(File.Exists(Path.Combine(_dir, "hello.binding")));
 
         protector.Clear();
         Assert.False(protector.IsConfigured);
+        Assert.False(File.Exists(Path.Combine(_dir, "hello.binding")));
         Assert.Null(protector.TryLoadMasterKey(helloVerified: true));
     }
 

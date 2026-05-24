@@ -79,6 +79,13 @@ begin
   if FileExists(Path) then DeleteFile(Path);
 end;
 
+procedure DeleteAuditLogs;
+var AuditDir: String;
+begin
+  AuditDir := ExpandConstant('{commonappdata}\Fortiva\audit');
+  if DirExists(AuditDir) then DelTree(AuditDir, True, True, True);
+end;
+
 procedure DeleteAdminConfig(const Dir: String);
 begin
   DeleteFileIfExists(Dir + '\policies.json');
@@ -98,6 +105,7 @@ var ResultCode: Integer;
 begin
   Exec('taskkill.exe', '/F /IM Fortiva.Admin.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec('taskkill.exe', '/F /IM Fortiva.Enterprise.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('taskkill.exe', '/F /IM Fortiva.BrowserBridge.Host.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(1500);
 end;
 
@@ -126,7 +134,11 @@ begin
              'Click NO to keep configuration.';
       Answer := MsgBox(Msg, mbConfirmation, MB_YESNO or MB_DEFBUTTON2);
       if Answer = IDYES then
+      begin
         DeleteAdminConfig(ConfigDir);
+        if MsgBox('Also delete enterprise audit logs in ' + ConfigDir + '\audit?', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+          DeleteAuditLogs;
+      end;
     end;
   end;
 end;

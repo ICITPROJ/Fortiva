@@ -172,73 +172,89 @@ public sealed class ShellViewModel : ViewModelBase
     {
         EnsureSession();
         await Task.Run(() => _session!.CreateVault(masterPassword, level)).ConfigureAwait(false);
-        VaultExists = true;
-        StatusMessage = "Vault created.";
-        RunOnUi(() => OnPropertyChanged(nameof(VaultExists)));
+        RunOnUi(() =>
+        {
+            VaultExists = true;
+            StatusMessage = "Vault created.";
+        });
     }
 
     public async Task<(bool ok, string? error)> UnlockAsync(
         string masterPassword, bool paranoiaMode = false, bool confirmRollback = false)
     {
         EnterpriseGate.RequireValidLicense(IsEnterprise, IsAdmin, IsLicenseValid);
-        IsBusy = true;
+        RunOnUi(() => IsBusy = true);
         try
         {
             EnsureSession();
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            await Task.Run(() => _session!.Unlock(masterPassword, paranoiaMode, confirmRollback));
+            await Task.Run(() => _session!.Unlock(masterPassword, paranoiaMode, confirmRollback))
+                .ConfigureAwait(false);
             sw.Stop();
-            ApplyPersonalAutoLockTimeout();
-            RefreshEntries();
-            StatusMessage = $"Unlocked in {sw.ElapsedMilliseconds} ms";
-            if (IsReadOnly) StatusMessage += " [READ-ONLY — rollback detected]";
-            OnPropertyChanged(nameof(IsUnlocked));
-            OnPropertyChanged(nameof(IsReadOnly));
-            UnlockOccurred?.Invoke();
-            return (true, _session!.RollbackWarning);
+
+            string? rollbackWarning = null;
+            RunOnUi(() =>
+            {
+                ApplyPersonalAutoLockTimeout();
+                RefreshEntries();
+                StatusMessage = $"Unlocked in {sw.ElapsedMilliseconds} ms";
+                if (IsReadOnly) StatusMessage += " [READ-ONLY — rollback detected]";
+                OnPropertyChanged(nameof(IsUnlocked));
+                OnPropertyChanged(nameof(IsReadOnly));
+                rollbackWarning = _session!.RollbackWarning;
+                UnlockOccurred?.Invoke();
+            });
+            return (true, rollbackWarning);
         }
         catch (System.Security.Cryptography.CryptographicException)
         {
-            StatusMessage = "Unlock failed.";
+            RunOnUi(() => StatusMessage = "Unlock failed.");
             return (false, "Incorrect master password.");
         }
         catch (Exception ex)
         {
-            StatusMessage = "Unlock failed.";
-            return (false, ex.Message);
+            RunOnUi(() => StatusMessage = "Unlock failed.");
+            return (false, FormatError(ex));
         }
-        finally { IsBusy = false; }
+        finally { RunOnUi(() => IsBusy = false); }
     }
 
     public async Task<(bool ok, string? error)> UnlockWithMasterKeyAsync(
         byte[] masterKey, bool paranoiaMode = false, bool confirmRollback = false)
     {
         EnterpriseGate.RequireValidLicense(IsEnterprise, IsAdmin, IsLicenseValid);
-        IsBusy = true;
+        RunOnUi(() => IsBusy = true);
         try
         {
             EnsureSession();
-            await Task.Run(() => _session!.UnlockWithMasterKey(masterKey, paranoiaMode, confirmRollback));
-            ApplyPersonalAutoLockTimeout();
-            RefreshEntries();
-            StatusMessage = "Unlocked with Windows Hello";
-            if (IsReadOnly) StatusMessage += " [READ-ONLY — rollback detected]";
-            OnPropertyChanged(nameof(IsUnlocked));
-            OnPropertyChanged(nameof(IsReadOnly));
-            UnlockOccurred?.Invoke();
-            return (true, _session!.RollbackWarning);
+            await Task.Run(() => _session!.UnlockWithMasterKey(masterKey, paranoiaMode, confirmRollback))
+                .ConfigureAwait(false);
+
+            string? rollbackWarning = null;
+            RunOnUi(() =>
+            {
+                ApplyPersonalAutoLockTimeout();
+                RefreshEntries();
+                StatusMessage = "Unlocked with Windows Hello";
+                if (IsReadOnly) StatusMessage += " [READ-ONLY — rollback detected]";
+                OnPropertyChanged(nameof(IsUnlocked));
+                OnPropertyChanged(nameof(IsReadOnly));
+                rollbackWarning = _session!.RollbackWarning;
+                UnlockOccurred?.Invoke();
+            });
+            return (true, rollbackWarning);
         }
         catch (System.Security.Cryptography.CryptographicException)
         {
-            StatusMessage = "Unlock failed.";
+            RunOnUi(() => StatusMessage = "Unlock failed.");
             return (false, "Windows Hello credential is invalid for this vault.");
         }
         catch (Exception ex)
         {
-            StatusMessage = "Unlock failed.";
-            return (false, ex.Message);
+            RunOnUi(() => StatusMessage = "Unlock failed.");
+            return (false, FormatError(ex));
         }
-        finally { IsBusy = false; }
+        finally { RunOnUi(() => IsBusy = false); }
     }
 
     public void Lock() => RunOnUi(LockCore);
@@ -281,6 +297,9 @@ public sealed class ShellViewModel : ViewModelBase
         _uiInvoker(action);
     }
 
+    private static string FormatError(Exception ex) =>
+        string.IsNullOrWhiteSpace(ex.Message) ? ex.GetType().Name : ex.Message;
+
     private void ApplyPersonalAutoLockTimeout()
     {
         if (IsEnterprise) return;
@@ -320,6 +339,13 @@ public sealed class ShellViewModel : ViewModelBase
 
     public void ChangeMasterPassword(string newPassword)
         => RequireSession().ChangeMasterPassword(newPassword);
+
+    public async Task ChangeMasterPasswordAsync(string newPassword)
+    {
+        EnsureSession();
+        await Task.Run(() => _session!.ChangeMasterPassword(newPassword)).ConfigureAwait(false);
+        RunOnUi(RefreshEntries);
+    }
 
     public IEnumerable<VaultEntryViewModel> Search(string query)
         => _session?.Search(query).Select(e => new VaultEntryViewModel(e)) ?? [];
