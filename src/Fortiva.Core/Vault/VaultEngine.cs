@@ -59,14 +59,18 @@ public sealed class VaultEngine
         return UnlockFromBytes(fileBytes, masterPassword, paranoiaMode, confirmRollback);
     }
 
-    public VaultUnlockContext UnlockFromSnapshot(int snapshotIndex, string masterPassword)
+    public VaultUnlockContext UnlockFromSnapshot(
+        int snapshotIndex,
+        string masterPassword,
+        bool paranoiaMode = true,
+        bool confirmRollback = false)
     {
         var path = Path.Combine(
             Path.GetDirectoryName(_snapshots.VaultPath)!,
             VaultConstants.SnapshotFileName(snapshotIndex));
         if (!File.Exists(path))
             throw new FileNotFoundException($"Snapshot {snapshotIndex} not found.", path);
-        return UnlockFromBytes(File.ReadAllBytes(path), masterPassword, false, true);
+        return UnlockFromBytes(File.ReadAllBytes(path), masterPassword, paranoiaMode, confirmRollback);
     }
 
     private VaultUnlockContext UnlockFromBytes(byte[] fileBytes, string masterPassword, bool paranoiaMode, bool confirmRollback)

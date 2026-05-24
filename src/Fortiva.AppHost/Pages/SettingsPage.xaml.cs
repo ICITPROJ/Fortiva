@@ -65,8 +65,10 @@ public sealed partial class SettingsPage : Page
         AutoLockLabel.Text = FormatSeconds(_autoLockSeconds);
         ClipboardLabel.Text = $"Clipboard clears after {_clipboardSeconds} seconds";
         LoadThemeCombo();
+        ParanoiaModeSwitch.Toggled -= ParanoiaMode_Toggled;
         ParanoiaModeSwitch.IsOn = policy?.MandatoryParanoiaMode == true || _vm.PersonalSettings.ParanoiaMode;
         ParanoiaModeSwitch.IsEnabled = policy?.MandatoryParanoiaMode != true;
+        ParanoiaModeSwitch.Toggled += ParanoiaMode_Toggled;
 
         if (policy is not null)
         {

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Security.Principal;
+using Fortiva.Core.Platform;
 
 namespace Fortiva.Core.Audit;
 
@@ -15,7 +16,8 @@ public enum AuditEventType
     SnapshotRestore,
     ConfigurationChange,
     ExportAuditLog,
-    SharedVaultAccess
+    SharedVaultAccess,
+    BrowserBridgeAccess
 }
 
 public sealed class AuditEvent
@@ -36,6 +38,11 @@ public sealed class AuditLogger
     private readonly byte[] _hmacKey;
 
     public static AuditLogger Default { get; } = new();
+
+    public static AuditLogger ForPersonal() =>
+        new(FortivaPaths.PersonalAuditDirectory);
+
+    public static AuditLogger ForEnterprise() => Default;
 
     public AuditLogger(string? logDirectory = null)
     {

@@ -51,7 +51,7 @@ public class LicenseTests
     }
 
     [Fact]
-    public void TryImportFromFile_ReadsPortableJson()
+    public void TryImportFromFile_RejectsJsonSignedWithUnknownKey()
     {
         using var rsa = RSA.Create(2048);
         var doc = new LicenseDocument
@@ -67,8 +67,30 @@ public class LicenseTests
         var path = Path.Combine(Path.GetTempPath(), $"fortiva-lic-{Guid.NewGuid():N}.json");
         File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(signed));
 
-        var imported = LicenseStore.TryImportFromFile(path);
-        Assert.NotNull(imported);
-        Assert.Equal("Import Test", imported!.Document.CompanyName);
+        try
+        {
+            Assert.Null(LicenseStore.TryImportFromFile(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void TryImportFromFile_RejectsUnsignedDevLicense()
+    {
+        var signed = LicenseVerifier.CreateDevLicense("Import Test", DateTimeOffset.UtcNow.AddDays(30));
+        var path = Path.Combine(Path.GetTempPath(), $"fortiva-lic-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(signed));
+
+        try
+        {
+            Assert.Null(LicenseStore.TryImportFromFile(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 }

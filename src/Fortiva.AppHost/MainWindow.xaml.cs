@@ -49,7 +49,7 @@ public sealed partial class MainWindow : Window
                 DispatcherQueue.TryEnqueue(() => StatusText.Text = _vm.StatusMessage);
         };
 
-        NavAudit.Visibility = _vm.IsEnterprise && !_vm.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
+        NavAudit.Visibility = _vm.IsAdmin ? Visibility.Collapsed : Visibility.Visible;
         NavAdmin.Visibility = _vm.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
 
         if (_vm.IsAdmin)
@@ -193,7 +193,7 @@ public sealed partial class MainWindow : Window
             NavGenerator.Visibility = licensed ? Visibility.Visible : Visibility.Collapsed;
             NavHealth.Visibility = licensed ? Visibility.Visible : Visibility.Collapsed;
             NavImport.Visibility = licensed ? Visibility.Visible : Visibility.Collapsed;
-            NavAudit.Visibility = _vm.IsEnterprise && licensed ? Visibility.Visible : Visibility.Collapsed;
+            NavAudit.Visibility = _vm.IsAdmin ? Visibility.Collapsed : Visibility.Visible;
             NavLock.Visibility = licensed ? Visibility.Visible : Visibility.Collapsed;
 
             if (licensed && ContentFrame.Content is LicenseRequiredPage)

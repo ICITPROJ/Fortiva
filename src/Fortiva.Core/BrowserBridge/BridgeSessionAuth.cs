@@ -12,7 +12,7 @@ public static class BridgeSessionAuth
     private static ReadOnlySpan<byte> DpapiEntropy => "Fortiva.Bridge.Session.v1"u8;
     private static string? _tokenDirectoryOverride;
 
-    public static void ConfigureTokenDirectory(string directory)
+    public static void ConfigureTokenDirectory(string? directory)
         => _tokenDirectoryOverride = directory;
 
     public static string TokenDirectory =>
@@ -74,9 +74,8 @@ public static class BridgeSessionAuth
 
     internal static bool FixedTimeEqualsUtf8(string a, string b)
     {
-        var ba = Encoding.UTF8.GetBytes(a);
-        var bb = Encoding.UTF8.GetBytes(b);
-        if (ba.Length != bb.Length) return false;
+        var ba = SHA256.HashData(Encoding.UTF8.GetBytes(a));
+        var bb = SHA256.HashData(Encoding.UTF8.GetBytes(b));
         return CryptographicOperations.FixedTimeEquals(ba, bb);
     }
 }

@@ -94,6 +94,15 @@ if (-not (Test-Path $extManifest)) {
 
 }
 
+& powershell -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\ensure-extension-key.ps1') | Out-Null
+$extensionId = & powershell -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\compute-extension-id.ps1')
+if ($extensionId -match 'REPLACE|NOT_SET' -or $extensionId.Length -ne 32) {
+    Write-Error "Invalid extension ID computed from manifest.json: '$extensionId'"
+    exit 1
+}
+Write-Host "Browser extension ID: $extensionId" -ForegroundColor Cyan
+& powershell -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\write-browser-bridge-manifests.ps1') -ExtensionId $extensionId | Out-Null
+
 
 
 $outDir = Join-Path $root "dist\installers"
@@ -131,6 +140,7 @@ foreach ($entry in $scripts) {
     $isccArgs = @()
 
     if ($Version) { $isccArgs += "/DAppVersion=$Version" }
+    $isccArgs += "/DExtensionId=$extensionId"
 
 
 

@@ -369,14 +369,13 @@ The Fortiva browser extension connects to the desktop app via a local named pipe
 1. Open Edge or Chrome and go to `chrome://extensions` (or `edge://extensions`).
 2. Enable **Developer mode** (top-right toggle).
 3. Click **Load unpacked** and select the `extension/` folder from the Fortiva installation directory.
-4. Note the extension's ID (shown under the extension name).
+4. Verify the extension ID is **`llkpcnbhmhpenahlcdnbbfmkdfkgnpnj`** (stable — baked into `manifest.json` via public key).
 
-### Registering the Native Messaging Host
-Run the provided PowerShell script from the `dist/` folder:
-```powershell
-.\Launch-FortivaPersonal.ps1 -RegisterBrowserBridge
-```
-When prompted, replace `REPLACE_WITH_YOUR_EXT_ID` in the JSON file with your actual extension ID.
+### Native Messaging Host
+The Fortiva installer registers the native messaging host automatically and embeds the correct extension ID in:
+`{app}\extension\com.fortiva.browserbridge.personal.json` (or `.enterprise.json`).
+
+No manual ID replacement is required when you install via the official setup EXE.
 
 ### Using the Extension
 1. Navigate to a website login page.
@@ -409,7 +408,14 @@ Your IT administrator can configure policies that restrict certain features. Whe
 - Blocked plaintext export
 
 ### 12.3 Audit Log
-The **Audit Log** screen (footer of the left menu, Enterprise only) shows a timestamped record of all vault events: unlocks, entry changes, failed unlock attempts, policy violations, and exports. Logs can be exported to a `.jsonl` file for compliance purposes.
+The **Audit Log** screen in the left menu shows a timestamped record of vault events: unlocks, locks, failed unlock attempts, configuration changes, and browser-bridge credential access.
+
+| Edition | Log location |
+|---|---|
+| Personal | `%LocalAppData%\FortivaPersonal\audit\` |
+| Enterprise | `%ProgramData%\Fortiva\audit\` |
+
+Logs are HMAC-signed and can be exported to `.jsonl` for compliance or review. Personal audit logs are removed when Fortiva Personal is uninstalled.
 
 ---
 
@@ -536,7 +542,7 @@ Windows Hello must be configured in **Windows Settings → Accounts → Sign-in 
 - **Zero-knowledge**: icmclab studio has no access to your vault data. No data ever leaves your machine.
 - **No telemetry**: Fortiva contains no analytics, error reporting, or usage tracking code.
 - **No background service**: Fortiva only runs when you open it. Nothing runs at startup or in the background.
-- **Vault format**: AES-256-GCM encrypted with a per-vault key. Key wrapped with Argon2id-derived master key. All cryptography uses Windows CNG — the same primitives trusted by Windows itself.
+- **Vault format**: AES-256-GCM (Windows CNG) for encryption at rest. Master key derived with Argon2id (memory-hard KDF). DPAPI protects local rollback state and bridge session tokens.
 - **Memory safety**: Sensitive key material is zeroed from memory immediately after use using `CryptographicOperations.ZeroMemory`.
 - **Integrity log**: Every vault mutation is recorded in a tamper-evident integrity log stored inside the encrypted vault.
 - **Snapshots**: Up to 5 rolling backup snapshots are kept alongside the vault. If the vault file is corrupted, the most recent clean snapshot is automatically restored.

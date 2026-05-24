@@ -22,6 +22,11 @@ public sealed partial class ImportExportPage : Page
 
     private async void Import_Click(object sender, RoutedEventArgs e)
     {
+        if (!_vm.IsUnlocked)
+        {
+            Show("Unlock the vault before importing.", InfoBarSeverity.Warning);
+            return;
+        }
         if (_vm.IsReadOnly) { Show("Vault is read-only.", InfoBarSeverity.Warning); return; }
 
         var picker = new FileOpenPicker();

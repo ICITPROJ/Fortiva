@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text;
 using Fortiva.AppHost.Services;
+using Fortiva.Core.Audit;
 using Fortiva.Core.Crypto;
 using Fortiva.Core.Hello;
 using Fortiva.Core.Licensing;
@@ -333,8 +334,20 @@ public sealed class ShellViewModel : ViewModelBase
     public void BulkImport(IEnumerable<VaultEntry> entries)
     {
         EnterpriseGate.RequireValidLicense(IsEnterprise, IsAdmin, IsLicenseValid);
-        RequireSession().BulkImport(entries);
-        RefreshEntries();
+        if (!IsUnlocked)
+            throw new InvalidOperationException("Unlock the vault before importing entries.");
+
+        var session = RequireSession();
+        session.SuppressAutoLock();
+        try
+        {
+            session.BulkImport(entries);
+            RefreshEntries();
+        }
+        finally
+        {
+            session.ResumeAutoLock();
+        }
     }
 
     public void ChangeMasterPassword(string newPassword)
@@ -343,8 +356,18 @@ public sealed class ShellViewModel : ViewModelBase
     public async Task ChangeMasterPasswordAsync(string newPassword)
     {
         EnsureSession();
-        await Task.Run(() => _session!.ChangeMasterPassword(newPassword)).ConfigureAwait(false);
-        RunOnUi(RefreshEntries);
+        RunOnUi(() => IsBusy = true);
+        _session!.SuppressAutoLock();
+        try
+        {
+            await Task.Run(() => _session.ChangeMasterPassword(newPassword)).ConfigureAwait(false);
+            RunOnUi(RefreshEntries);
+        }
+        finally
+        {
+            _session?.ResumeAutoLock();
+            RunOnUi(() => IsBusy = false);
+        }
     }
 
     public IEnumerable<VaultEntryViewModel> Search(string query)
@@ -540,6 +563,19 @@ public sealed class ShellViewModel : ViewModelBase
             IsEnterprise).Clear();
     }
 
+    public AuditLogger GetAuditLogger() =>
+        IsEnterprise ? AuditLogger.ForEnterprise() : AuditLogger.ForPersonal();
+
+    /// <summary>Test hook — reset session state between automated tests.</summary>
+    internal void ResetForTesting()
+    {
+        _session?.Dispose();
+        _session = null;
+        Entries.Clear();
+        VaultExists = false;
+        StatusMessage = "Welcome to Fortiva";
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private void EnsureSession()
@@ -549,10 +585,15 @@ public sealed class ShellViewModel : ViewModelBase
             VaultDirectory,
             IsEnterprise ? DpapiScope.LocalMachine : DpapiScope.CurrentUser,
             Policy,
-            enableAudit: IsEnterprise,
+            enableAudit: true,
+            auditDirectory: IsEnterprise ? null : FortivaPaths.PersonalAuditDirectory,
             requireEnterpriseLicense: IsEnterprise && !IsAdmin,
             enterpriseClient: Edition == "Enterprise");
-        _session.AutoLockRequested += () => RunOnUi(LockCore);
+        _session.AutoLockRequested += () =>
+        {
+            if (IsBusy) return;
+            RunOnUi(LockCore);
+        };
     }
 
     private VaultSession RequireSession()

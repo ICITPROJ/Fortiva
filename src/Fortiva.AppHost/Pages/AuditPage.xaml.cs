@@ -1,3 +1,4 @@
+using Fortiva.AppHost.ViewModels;
 using Fortiva.Core.Audit;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
@@ -10,7 +11,7 @@ namespace Fortiva.AppHost.Pages;
 
 public sealed partial class AuditPage : Page
 {
-    private readonly AuditLogger _logger = AuditLogger.Default;
+    private readonly ShellViewModel _vm = ShellViewModel.Current;
 
     public AuditPage() => InitializeComponent();
 
@@ -22,7 +23,7 @@ public sealed partial class AuditPage : Page
 
     private void Refresh()
     {
-        var events = _logger.ReadRecent(500);
+        var events = _vm.GetAuditLogger().ReadRecent(500);
         AuditList.Items.Clear();
 
         foreach (var ev in events)
@@ -96,6 +97,6 @@ public sealed partial class AuditPage : Page
         picker.FileTypeChoices.Add("JSONL", [".jsonl"]);
         var file = await picker.PickSaveFileAsync();
         if (file is null) return;
-        _logger.ExportTo(file.Path);
+        _vm.GetAuditLogger().ExportTo(file.Path);
     }
 }

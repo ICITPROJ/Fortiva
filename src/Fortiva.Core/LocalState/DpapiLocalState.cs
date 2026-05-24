@@ -57,7 +57,20 @@ public sealed class DpapiLocalStateStore
     {
         var stored = Load();
         if (stored is null)
+        {
+            if (header.RevisionCounter > 1)
+            {
+                return new RollbackCheckResult
+                {
+                    IsSuspicious = true,
+                    Warnings = ["Local rollback state (local.state) is missing for an established vault."],
+                    RequiresConfirmation = true,
+                    ForceReadOnly = paranoiaMode
+                };
+            }
+
             return RollbackCheckResult.Ok();
+        }
 
         var warnings = new List<string>();
 

@@ -35,7 +35,7 @@
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="10">
                                         <FontIcon Glyph="&#xE9D5;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                                        <TextBlock Text="AES-256-GCM + Argon2id via Windows CNG" FontWeight="SemiBold"/>
+                                        <TextBlock Text="AES-256-GCM (Windows CNG) + Argon2id key derivation" FontWeight="SemiBold"/>
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="10">
                                         <FontIcon Glyph="&#xE895;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>

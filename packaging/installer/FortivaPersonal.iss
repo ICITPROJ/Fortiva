@@ -7,6 +7,9 @@
 #define AppName        "Fortiva Personal"
 
 #define AppVersion     "1.0.0"
+#ifndef ExtensionId
+  #define ExtensionId "BUILD_EXTENSION_ID_NOT_SET"
+#endif
 
 #define AppPublisher   "icmclab studio"
 
@@ -326,7 +329,7 @@ begin
 
     '  "allowed_origins": [' + #13#10 +
 
-    '    "chrome-extension://REPLACE_WITH_EXTENSION_ID/"' + #13#10 +
+    '    "chrome-extension://{#ExtensionId}/"' + #13#10 +
 
     '  ]' + #13#10 +
 

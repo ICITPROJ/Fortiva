@@ -86,12 +86,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
             {
                 SubtitleText.Text = available
                     ? "Windows Hello is required by policy. Unlock with your master password once, then configure Hello in Settings."
-                    : "Windows Hello is required by policy but unavailable on this device. Contact your IT administrator.";
-                if (!available)
-                {
-                    PasswordField.IsEnabled = false;
-                    UnlockBtn.IsEnabled = false;
-                }
+                    : "Windows Hello is required by policy but unavailable on this device. Unlock with your master password and contact IT if Hello cannot be enabled.";
             }
             else if (available && !configured)
             {
@@ -146,7 +141,12 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
             _helloProtector.Clear();
             HelloBtn.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
             SetBusy(false);
-            ShowError("Your Windows Hello credential is outdated. Contact your administrator to re-configure Hello in Settings.");
+            if (HelloMandatory)
+            {
+                SubtitleText.Text = "Windows Hello credential was reset. Unlock with your master password, then re-configure Hello in Settings.";
+                ApplyUnlockControls();
+            }
+            ShowError("Your Windows Hello credential is outdated. Unlock with your master password, then re-configure Hello in Settings.");
             return;
         }
 
@@ -162,6 +162,11 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
             {
                 _helloProtector.Clear();
                 HelloBtn.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+                if (HelloMandatory)
+                {
+                    SubtitleText.Text = "Windows Hello unlock failed. Unlock with your master password, then re-configure Hello in Settings.";
+                    ApplyUnlockControls();
+                }
                 ShowError(error ?? "Windows Hello unlock failed. Re-configure Hello in Settings.");
             }
             else if (error is not null)

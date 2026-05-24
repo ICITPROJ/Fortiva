@@ -13,6 +13,15 @@ Set-Location $root
 $failures = @()
 $passes = 0
 
+function Get-IsccArgs {
+    & powershell -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\ensure-extension-key.ps1') | Out-Null
+    $extensionId = & powershell -ExecutionPolicy Bypass -File (Join-Path $root 'scripts\compute-extension-id.ps1')
+    if ($extensionId -match 'REPLACE|NOT_SET' -or $extensionId.Length -ne 32) {
+        throw "Invalid extension ID: '$extensionId'"
+    }
+    return @("/DExtensionId=$extensionId")
+}
+
 function Pass($msg) { Write-Host "  PASS: $msg" -ForegroundColor Green; $script:passes++ }
 function Fail($msg) { Write-Host "  FAIL: $msg" -ForegroundColor Red; $script:failures += $msg }
 
@@ -49,7 +58,7 @@ Step "Personal installer compile" {
     if ($LASTEXITCODE -ne 0) { throw "fetch-installer-prerequisites failed" }
     $iscc = "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
     if (-not (Test-Path $iscc)) { throw "ISCC not installed" }
-    & $iscc (Join-Path $root 'packaging\installer\FortivaPersonal.iss') | Out-Null
+    & $iscc @(Get-IsccArgs) (Join-Path $root 'packaging\installer\FortivaPersonal.iss') | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
     if (-not (Test-Path $installer)) { throw "Installer missing" }
 }
@@ -59,7 +68,7 @@ Step "Enterprise + Admin installer compile" {
     $iscc = "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
     if (-not (Test-Path $iscc)) { throw "ISCC not installed" }
     foreach ($iss in @('FortivaEnterprise.iss', 'FortivaAdmin.iss')) {
-        & $iscc (Join-Path $root "packaging\installer\$iss") | Out-Null
+        & $iscc @(Get-IsccArgs) (Join-Path $root "packaging\installer\$iss") | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "ISCC failed for $iss" }
     }
     $ent = Join-Path $root 'dist\installers\FortivaEnterprise-1.0.0-Setup.exe'

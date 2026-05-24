@@ -2,6 +2,9 @@
 
 #define AppName        "Fortiva Enterprise"
 #define AppVersion     "1.0.0"
+#ifndef ExtensionId
+  #define ExtensionId "BUILD_EXTENSION_ID_NOT_SET"
+#endif
 #define AppPublisher   "icmclab studio"
 #define AppURL         "https://studio.icmclab.cloud"
 #define AppExeName     "Fortiva.Enterprise.exe"
@@ -127,7 +130,7 @@ end;
 procedure KillFortivaProcesses();
 var ResultCode: Integer;
 begin
-  Exec('taskkill.exe', '/F /IM Fortiva.Personal.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('taskkill.exe', '/F /IM Fortiva.Enterprise.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec('taskkill.exe', '/F /IM Fortiva.BrowserBridge.Host.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(1500);
 end;
@@ -188,7 +191,7 @@ begin
     '  "path": "' + BridgeExe + '",' + #13#10 +
     '  "type": "stdio",' + #13#10 +
     '  "allowed_origins": [' + #13#10 +
-    '    "chrome-extension://REPLACE_WITH_EXTENSION_ID/"' + #13#10 +
+    '    "chrome-extension://{#ExtensionId}/"' + #13#10 +
     '  ]' + #13#10 +
     '}';
 

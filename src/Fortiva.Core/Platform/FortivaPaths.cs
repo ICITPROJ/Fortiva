@@ -15,6 +15,9 @@ public static class FortivaPaths
     public static string PersonalCrashLogDirectory =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FortivaPersonal");
 
+    public static string PersonalAuditDirectory =>
+        Path.Combine(PersonalCrashLogDirectory, "audit");
+
     /// <summary>Legacy/alternate local folder — cleaned on uninstall.</summary>
     public static string PersonalLegacyLocalRoot =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fortiva");

@@ -243,8 +243,17 @@ public sealed partial class OnboardingPage : Page
                 return;
             }
 
-            if (_helloEnrollmentPending)
-                _vm.SyncHelloCredentialFromSession();
+            if (_helloEnrollmentPending && _vm.IsUnlocked)
+            {
+                try
+                {
+                    _vm.SyncHelloCredentialFromSession();
+                }
+                catch (Exception helloEx)
+                {
+                    App.LogException("OnboardingPage.SyncHello", helloEx);
+                }
+            }
 
             SetBusyOverlay(false);
             _vm.RequestNavigationTab("Vault");

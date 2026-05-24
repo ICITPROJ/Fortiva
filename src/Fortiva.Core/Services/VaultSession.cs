@@ -6,6 +6,7 @@ using Fortiva.Core.LocalState;
 using Fortiva.Core.Platform;
 using Fortiva.Core.Policy;
 using Fortiva.Core.Vault;
+using System.Threading;
 
 namespace Fortiva.Core.Services;
 
@@ -21,12 +22,14 @@ public sealed class VaultSession : IDisposable
     private VaultUnlockContext? _context;
     private string? _bridgeSessionToken;
     private readonly object _payloadLock = new();
+    private int _autoLockSuppressCount;
 
     public VaultSession(
         string vaultDirectory,
         DpapiScope scope,
         FortivaPolicy? policy = null,
         bool enableAudit = false,
+        string? auditDirectory = null,
         bool requireEnterpriseLicense = false,
         bool enterpriseClient = false)
     {
@@ -35,7 +38,9 @@ public sealed class VaultSession : IDisposable
         _requireEnterpriseLicense = requireEnterpriseLicense;
         _enterpriseClient = enterpriseClient;
         if (enableAudit)
-            _audit = AuditLogger.Default;
+            _audit = auditDirectory is null
+                ? AuditLogger.ForEnterprise()
+                : new AuditLogger(auditDirectory);
     }
 
     public bool IsUnlocked => _context is not null;
@@ -105,11 +110,15 @@ public sealed class VaultSession : IDisposable
         StateChanged?.Invoke();
     }
 
-    public VaultUnlockContext UnlockFromSnapshot(int snapshotIndex, string masterPassword)
+    public VaultUnlockContext UnlockFromSnapshot(
+        int snapshotIndex,
+        string masterPassword,
+        bool paranoiaMode = true,
+        bool confirmRollback = false)
     {
         EnsureEnterpriseLicense();
         DisposeSession();
-        _context = _engine.UnlockFromSnapshot(snapshotIndex, masterPassword);
+        _context = _engine.UnlockFromSnapshot(snapshotIndex, masterPassword, paranoiaMode, confirmRollback);
         _audit?.Log(AuditEventType.SnapshotRestore, $"Restored from snapshot {snapshotIndex}");
         StartInfrastructure();
         StateChanged?.Invoke();
@@ -218,7 +227,7 @@ public sealed class VaultSession : IDisposable
                 .FirstOrDefault(e => EntryHostMatches(e.Url, requestHost));
             if (match is null) return new CredentialResponse();
 
-            _audit?.Log(AuditEventType.SharedVaultAccess,
+            _audit?.Log(AuditEventType.BrowserBridgeAccess,
                 $"Browser bridge credential served for host {requestHost} (entry {match.Id})");
 
             return new CredentialResponse
@@ -262,6 +271,12 @@ public sealed class VaultSession : IDisposable
 
     public void ResetAutoLock() => _autoLock?.ResetActivity();
 
+    public void SuppressAutoLock() => Interlocked.Increment(ref _autoLockSuppressCount);
+
+    public void ResumeAutoLock() => Interlocked.Decrement(ref _autoLockSuppressCount);
+
+    public bool IsAutoLockSuppressed => Volatile.Read(ref _autoLockSuppressCount) > 0;
+
     public void SetAutoLockTimeout(int seconds)
     {
         if (_autoLock is not null) _autoLock.TimeoutSeconds = seconds;
@@ -299,13 +314,18 @@ public sealed class VaultSession : IDisposable
         BridgeSessionAuth.ConfigureTokenDirectory(FortivaPaths.GetBridgeSessionDirectory(_enterpriseClient));
         BridgeSessionAuth.ClearSessionToken();
         _bridgeSessionToken = BridgeSessionAuth.CreateSessionToken();
+        BridgeClientValidator.ConfigureAllowedInstallRoots(AppContext.BaseDirectory);
         _bridge = new BrowserBridgeServer(ResolveForDomain, _bridgeSessionToken);
         _bridge.Start();
 
         _autoLock?.Dispose();
         var timeout = PolicyEnforcer.EnforceAutoLock(300, _policy ?? new FortivaPolicy());
         _autoLock = new AutoLockTimer(timeout);
-        _autoLock.LockRequested += () => AutoLockRequested?.Invoke();
+        _autoLock.LockRequested += () =>
+        {
+            if (IsAutoLockSuppressed) return;
+            AutoLockRequested?.Invoke();
+        };
     }
 
     private void DisposeSession()

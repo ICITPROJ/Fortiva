@@ -89,7 +89,7 @@ public sealed partial class AdminMainWindow : Page
             if (lic.Document.ExpiresAt <= DateTimeOffset.UtcNow)
                 throw new Exception("License has expired.");
             LicenseStore.Save(lic);
-            _vm.ReloadPolicies();
+            _vm.ReloadEnterpriseConfig();
             LoadLicenseStatus();
             ShowLicenseInfo("License imported and saved.", InfoBarSeverity.Success);
         }

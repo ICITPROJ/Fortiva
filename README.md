@@ -2,9 +2,9 @@
 
 > Zero-knowledge · Local-first · Living-off-the-land · No background services
 
-Fortiva is a Windows-native password manager built entirely on the Windows stack.
-All cryptographic operations use Windows CNG. There is no cloud sync, no telemetry,
-and no Electron runtime.
+Fortiva is a Windows-native password manager built on the Windows stack.
+Symmetric encryption uses Windows CNG (AES-256-GCM). Master-password key derivation
+uses memory-hard Argon2id. There is no cloud sync, no telemetry, and no Electron runtime.
 
 ## Components
 
@@ -23,8 +23,8 @@ and no Electron runtime.
 ```
 Master Password
     │
-    ▼ Argon2id (CNG: ≥64 MB, ≥3 iter, ≥1 thread)
-Master Key (MK)  ──AES-256-GCM──►  Wrapped Vault Key (VK)
+    ▼ Argon2id (memory-hard KDF, ≥64 MB / ≥3 iter personal default)
+Master Key (MK)  ──AES-256-GCM (Windows CNG)──►  Wrapped Vault Key (VK)
                                           │
                                           ▼ AES-256-GCM
                                     Vault Payload (entries + integrity log)
@@ -53,7 +53,8 @@ Master Key (MK)  ──AES-256-GCM──►  Wrapped Vault Key (VK)
 
 ```powershell
 dotnet build src/Fortiva.Core/Fortiva.Core.csproj -c Release
-dotnet test  tests/Fortiva.Core.Tests/                        # 119+ tests
+dotnet test  tests/Fortiva.Core.Tests/                        # 128+ tests
+dotnet test  tests/Fortiva.AppHost.Tests/ -p:Platform=x64     # ViewModel + Hello tests
 ```
 
 ### Release build + installers

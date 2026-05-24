@@ -65,7 +65,7 @@ jobs:
 
       - name: Build release (dist/)
         shell: pwsh
-        run: ./build-release.ps1
+        run: ./build-release.ps1 -Version ${{ steps.version.outputs.value }}
 
       - name: Build installers
         shell: pwsh

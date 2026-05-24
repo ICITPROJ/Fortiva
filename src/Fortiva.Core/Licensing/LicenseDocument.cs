@@ -51,7 +51,9 @@ public static class LicenseStore
             return LoadProtectedBytes(File.ReadAllBytes(filePath));
 
         var json = File.ReadAllText(filePath);
-        return JsonSerializer.Deserialize<SignedLicense>(json);
+        var license = JsonSerializer.Deserialize<SignedLicense>(json);
+        if (license is null) return null;
+        return LicenseVerifier.Verify(license) ? license : null;
     }
 
     private static SignedLicense? LoadProtectedBytes(byte[] protectedBytes)
