@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Fortiva.Core.Crypto;
+using Fortiva.Core.Vault;
 using Microsoft.Win32;
 
 namespace Fortiva.Core.Policy;
@@ -102,6 +103,19 @@ public static class PolicyEnforcer
         if (policy?.TotpEnabled == false)
             return false;
         return isEnterpriseClient || (policy?.TotpEnabled ?? false);
+    }
+
+    public static SecurityLevel EnforceMinimumSecurityLevel(SecurityLevel requested, FortivaPolicy? policy)
+    {
+        if (policy?.MandatoryParanoiaMode == true && requested < SecurityLevel.Paranoia)
+            return SecurityLevel.Paranoia;
+        return requested;
+    }
+
+    public static void EnsureWritableSecurityLevel(SecurityLevel level, FortivaPolicy? policy)
+    {
+        if (policy?.MandatoryParanoiaMode == true && level < SecurityLevel.Paranoia)
+            throw new InvalidOperationException("Paranoia Mode is required by policy.");
     }
 }
 

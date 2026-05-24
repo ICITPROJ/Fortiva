@@ -154,7 +154,7 @@ public static class PasswordHealthAnalyzer
             {
                 Id = "old",
                 Title = $"Rotate {old} password{(old == 1 ? "" : "s")} older than a year",
-                Detail = "Start with banking, email, and work accounts — then update the rest over time.",
+                Detail = "Start with banking, email, and work accounts - then update the rest over time.",
                 Priority = 3,
                 AffectedCount = old
             });

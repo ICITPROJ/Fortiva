@@ -20,7 +20,7 @@
                 <ComboBox x:Name="ImportFormatBox" Header="Source format" Width="280" SelectedIndex="0">
                     <ComboBoxItem>Generic CSV (name, username, password, url, notes)</ComboBoxItem>
                     <ComboBoxItem>KeePass CSV export</ComboBoxItem>
-                    <ComboBoxItem>Browser CSV (Chrome / Edge / Firefox — same columns)</ComboBoxItem>
+                    <ComboBoxItem>Browser CSV (Chrome / Edge / Firefox - same columns)</ComboBoxItem>
                 </ComboBox>
                 <Button x:Name="ImportBtn" Click="Import_Click">
                     <StackPanel Orientation="Horizontal" Spacing="8">
@@ -40,7 +40,7 @@
                     Encrypted export is always available. Plaintext CSV export requires explicit confirmation
                     and is blocked by strict enterprise policies.
                 </TextBlock>
-                <Button Style="{StaticResource FortivaAccentButton}" Click="ExportEncrypted_Click">
+                <Button x:Name="ExportEncryptedBtn" Style="{StaticResource FortivaAccentButton}" Click="ExportEncrypted_Click">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE72E;" FontSize="14"/>
                         <TextBlock Text="Export encrypted (.fva backup)"/>

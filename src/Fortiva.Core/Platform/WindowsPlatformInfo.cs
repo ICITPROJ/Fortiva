@@ -31,7 +31,7 @@ public static class WindowsPlatformInfo
         if (build > maxBuildTested)
             return PlatformCompatibility.Untested(
                 $"Windows build {build} is newer than Fortiva {maxBuildTested} was tested on. " +
-                "Enable automatic updates — a compatible build is usually available without waiting for support.");
+                "Enable automatic updates - a compatible build is usually available without waiting for support.");
 
         return PlatformCompatibility.Supported();
     }

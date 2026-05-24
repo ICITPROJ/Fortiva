@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using Fortiva.Core.BrowserBridge;
 
 namespace Fortiva.Core.Tests.BrowserBridge;
@@ -17,16 +15,18 @@ public sealed class BridgeSessionAuthTests : IDisposable
 
     public void Dispose()
     {
+        BridgeSessionAuth.ClearSessionToken();
         BridgeSessionAuth.ConfigureTokenDirectory(null!);
         try { Directory.Delete(_dir, recursive: true); } catch { }
     }
 
     [Fact]
-    public void CreateSessionToken_RoundTripsViaTryRead()
+    public void CreateSessionToken_StoredInMemoryOnly()
     {
         var token = BridgeSessionAuth.CreateSessionToken();
         Assert.True(BridgeSessionAuth.TryReadExpectedToken(out var read));
         Assert.True(BridgeSessionAuth.ValidateToken(token, read));
+        Assert.False(File.Exists(BridgeSessionAuth.TokenPath));
     }
 
     [Fact]
@@ -39,11 +39,11 @@ public sealed class BridgeSessionAuthTests : IDisposable
     }
 
     [Fact]
-    public void ClearSessionToken_RemovesStoredFile()
+    public void ClearSessionToken_RemovesInMemoryToken()
     {
         BridgeSessionAuth.CreateSessionToken();
-        Assert.True(File.Exists(BridgeSessionAuth.TokenPath));
         BridgeSessionAuth.ClearSessionToken();
+        Assert.False(BridgeSessionAuth.TryReadExpectedToken(out _));
         Assert.False(File.Exists(BridgeSessionAuth.TokenPath));
     }
 }

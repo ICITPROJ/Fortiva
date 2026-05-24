@@ -5,7 +5,8 @@ using Fortiva.Core.Crypto;
 namespace Fortiva.Core.Hello;
 
 /// <summary>
-/// Protects a Hello unlock bundle with DPAPI. Never stores the master password.
+/// Protects a Hello unlock bundle with DPAPI. UserConsentVerifier must succeed before storing (helloVerified).
+/// The master key remains extractable by same-user malware — TPM-gated wrap is a future enhancement.
 /// Format v3 (plaintext before DPAPI):
 ///   [FTWH magic][0x03][32-byte unlock key][wrapped master key blob]
 /// </summary>
@@ -31,7 +32,7 @@ public sealed class WindowsHelloKeyProtector
     public bool IsConfigured => File.Exists(_protectorPath);
 
     /// <summary>Store Hello unlock material derived from the current session master key.</summary>
-    public void StoreHelloBundle(ReadOnlySpan<byte> masterKey, bool helloVerified = false)
+    public void StoreHelloBundle(ReadOnlySpan<byte> masterKey, bool helloVerified = true)
     {
         var unlockKey = RandomNumberGenerator.GetBytes(32);
         byte[]? wrappedMk = null;
@@ -53,7 +54,7 @@ public sealed class WindowsHelloKeyProtector
     }
 
     /// <summary>Returns a copy of the master key for vault unlock, or null if missing/legacy/invalid.</summary>
-    public byte[]? TryLoadMasterKey(bool helloVerified = false)
+    public byte[]? TryLoadMasterKey(bool helloVerified = true)
     {
         if (!File.Exists(_protectorPath)) return null;
         try

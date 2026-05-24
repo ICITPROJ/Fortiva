@@ -79,27 +79,17 @@ public static class ReleaseManifestUrls
     /// <summary>Override manifest URL (HTTPS) or local JSON path for QA via environment variables.</summary>
 
     public static string ResolvePersonalLatest(string? defaultUrl = null)
-
     {
-
+#if DEBUG
         var fileOverride = Environment.GetEnvironmentVariable("FORTIVA_UPDATE_MANIFEST_FILE");
-
         if (!string.IsNullOrWhiteSpace(fileOverride))
-
             return Path.GetFullPath(fileOverride.Trim());
 
-
-
         var urlOverride = Environment.GetEnvironmentVariable("FORTIVA_UPDATE_MANIFEST_URL");
-
         if (!string.IsNullOrWhiteSpace(urlOverride))
-
             return urlOverride.Trim();
-
-
-
+#endif
         return defaultUrl ?? PersonalLatest;
-
     }
 
 

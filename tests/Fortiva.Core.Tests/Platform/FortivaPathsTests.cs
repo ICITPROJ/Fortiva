@@ -33,4 +33,13 @@ public sealed class FortivaPathsTests
         Assert.Contains("license.dat", names);
         Assert.Contains("shared-vaults.json", names);
     }
+
+    [Fact]
+    public void PersonalKnownDataFileNames_IncludesVaultAndPrefs()
+    {
+        var names = FortivaPaths.PersonalKnownDataFileNames;
+        Assert.Contains("vault.fva", names);
+        Assert.Contains("user.prefs.json", names);
+        Assert.Contains("hello.binding", names);
+    }
 }

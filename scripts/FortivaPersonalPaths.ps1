@@ -59,11 +59,22 @@ function Start-FortivaSmokeProcess {
 }
 
 function Remove-FortivaPersonalUserData {
-    foreach ($p in Get-FortivaPersonalDataPaths) {
-        if (Test-Path -LiteralPath $p) {
-            Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction Stop
-            Write-Host "   Deleted: $p"
+    Stop-FortivaProcesses
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        foreach ($p in Get-FortivaPersonalDataPaths) {
+            if (Test-Path -LiteralPath $p) {
+                Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction SilentlyContinue
+                if (Test-Path -LiteralPath $p) {
+                    Write-Host "   Retry delete: $p (attempt $attempt)"
+                }
+                else {
+                    Write-Host "   Deleted: $p"
+                }
+            }
         }
+        if (-not (Test-FortivaPersonalVaultExists)) { break }
+        Start-Sleep -Seconds 2
+        Stop-FortivaProcesses
     }
     Get-ChildItem -LiteralPath $env:TEMP -Filter 'FortivaPersonal-*-Setup.exe' -ErrorAction SilentlyContinue |
         Remove-Item -Force -ErrorAction SilentlyContinue

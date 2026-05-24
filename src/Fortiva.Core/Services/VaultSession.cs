@@ -18,6 +18,7 @@ public sealed class VaultSession : IDisposable
     private readonly bool _requireEnterpriseLicense;
     private readonly bool _enterpriseClient;
     private BrowserBridgeServer? _bridge;
+    private BridgeTokenBroker? _tokenBroker;
     private AutoLockTimer? _autoLock;
     private VaultUnlockContext? _context;
     private string? _bridgeSessionToken;
@@ -55,11 +56,13 @@ public sealed class VaultSession : IDisposable
     public void Unlock(string masterPassword, bool paranoiaMode = false, bool confirmRollback = false)
     {
         EnsureEnterpriseLicense();
+        EnsureEnterpriseSeat();
         _audit?.Log(AuditEventType.UnlockAttempt, "Unlock attempted");
         try
         {
             DisposeSession();
             _context = _engine.Unlock(masterPassword, paranoiaMode, confirmRollback);
+            RegisterEnterpriseSeat();
             _audit?.Log(AuditEventType.UnlockSuccess, "Unlock succeeded");
             StartInfrastructure();
             StateChanged?.Invoke();
@@ -74,6 +77,7 @@ public sealed class VaultSession : IDisposable
     public void UnlockWithMasterKey(byte[] masterKey, bool paranoiaMode = false, bool confirmRollback = false)
     {
         EnsureEnterpriseLicense();
+        EnsureEnterpriseSeat();
         _audit?.Log(AuditEventType.UnlockAttempt, "Hello unlock attempted");
         byte[]? mkCopy = null;
         try
@@ -81,6 +85,7 @@ public sealed class VaultSession : IDisposable
             mkCopy = masterKey.ToArray();
             DisposeSession();
             _context = _engine.UnlockWithMasterKey(mkCopy, paranoiaMode, confirmRollback);
+            RegisterEnterpriseSeat();
             _audit?.Log(AuditEventType.UnlockSuccess, "Hello unlock succeeded");
             StartInfrastructure();
             StateChanged?.Invoke();
@@ -302,6 +307,23 @@ public sealed class VaultSession : IDisposable
             throw new InvalidOperationException("A valid enterprise license is required.");
     }
 
+    private void EnsureEnterpriseSeat()
+    {
+        if (!_requireEnterpriseLicense) return;
+        var license = LicenseStore.Load();
+        if (license is null)
+            throw new InvalidOperationException("A valid enterprise license is required.");
+        LicenseSeatRegistry.EnsureSeatAvailable(license);
+    }
+
+    private void RegisterEnterpriseSeat()
+    {
+        if (!_requireEnterpriseLicense) return;
+        var license = LicenseStore.Load();
+        if (license is null) return;
+        LicenseSeatRegistry.RegisterCurrentSeat(license);
+    }
+
     private void EnsureWritable()
     {
         if (_context is null) throw new InvalidOperationException("Vault not unlocked.");
@@ -311,9 +333,12 @@ public sealed class VaultSession : IDisposable
     private void StartInfrastructure()
     {
         _bridge?.Dispose();
+        _tokenBroker?.Dispose();
         BridgeSessionAuth.ConfigureTokenDirectory(FortivaPaths.GetBridgeSessionDirectory(_enterpriseClient));
         BridgeSessionAuth.ClearSessionToken();
         _bridgeSessionToken = BridgeSessionAuth.CreateSessionToken();
+        _tokenBroker = new BridgeTokenBroker(_bridgeSessionToken);
+        _tokenBroker.Start();
         BridgeClientValidator.ConfigureAllowedInstallRoots(AppContext.BaseDirectory);
         _bridge = new BrowserBridgeServer(ResolveForDomain, _bridgeSessionToken);
         _bridge.Start();
@@ -332,6 +357,8 @@ public sealed class VaultSession : IDisposable
     {
         _bridge?.Dispose();
         _bridge = null;
+        _tokenBroker?.Dispose();
+        _tokenBroker = null;
         BridgeSessionAuth.ClearSessionToken();
         _bridgeSessionToken = null;
         _autoLock?.Dispose();

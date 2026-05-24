@@ -41,10 +41,24 @@ public sealed partial class OnboardingPage : Page
 
         _vm.RefreshVaultExists();
         if (_vm.VaultExists && !_vm.IsUnlocked)
+            RedirectToUnlockIfVaultExists();
+
+        ApplyEnterprisePolicyConstraints();
+    }
+
+    private void ApplyEnterprisePolicyConstraints()
+    {
+        var policy = _vm.Policy;
+        if (!_vm.IsEnterprise || policy is null)
+            return;
+
+        if (policy.MandatoryWindowsHello)
+            SkipHelloBtn.Visibility = Visibility.Collapsed;
+
+        if (policy.MandatoryParanoiaMode)
         {
-            NavigationService.Current.ResetCurrent();
-            NavigationService.Current.Navigate<UnlockPage>();
-            NavigationService.Current.ClearHistory();
+            ParanoiaToggle.IsOn = true;
+            ParanoiaToggle.IsEnabled = false;
         }
     }
 
@@ -174,7 +188,7 @@ public sealed partial class OnboardingPage : Page
             return;
         }
 
-        var result = await HelloService.VerifyAsync("Fortiva — enable Windows Hello unlock");
+        var result = await HelloService.VerifyAsync("Fortiva - enable Windows Hello unlock");
         if (result.Verified)
         {
             _helloEnrollmentPending = true;
@@ -191,18 +205,63 @@ public sealed partial class OnboardingPage : Page
         }
     }
 
+    private void RedirectToUnlockIfVaultExists()
+    {
+        _vm.RefreshVaultExists();
+        if (!_vm.VaultExists) return;
+
+        NavigationService.Current.ResetCurrent();
+        NavigationService.Current.Navigate<UnlockPage>();
+        NavigationService.Current.ClearHistory();
+    }
+
+    private bool TryBlockWhenLeftoverVaultExists()
+    {
+        _vm.RefreshVaultExists();
+        if (_vm.VaultExists)
+        {
+            RedirectToUnlockIfVaultExists();
+            return true;
+        }
+
+        if (_vm.IsEnterprise)
+        {
+            var enterpriseVault = Path.Combine(FortivaPaths.EnterpriseProgramData, VaultConstants.VaultFileName);
+            if (File.Exists(enterpriseVault))
+            {
+                ShowFinishError(
+                    "An enterprise vault already exists on this PC. Contact your IT administrator " +
+                    "or unlock the existing vault instead of creating a new one.");
+                return true;
+            }
+            return false;
+        }
+
+        if (!FortivaPaths.PersonalVaultFileExists())
+            return false;
+
+        var paths = string.Join(", ", FortivaPaths.FindPersonalVaultFilePaths());
+        ShowFinishError(
+            "Fortiva password data from a previous install is still on this PC " +
+            $"(for example: {paths}). " +
+            "Close Fortiva, delete the Fortiva folder under AppData\\Roaming, then try again - " +
+            "or restart the installer and choose to remove the old vault.");
+        return true;
+    }
+
     private async void FinishOnboarding_Click(object sender, RoutedEventArgs e)
     {
         FinishErrorBar.IsOpen = false;
 
         if (_isFinishing) return;
 
+        if (TryBlockWhenLeftoverVaultExists())
+            return;
+
         _vm.RefreshVaultExists();
         if (_vm.VaultExists)
         {
-            NavigationService.Current.ResetCurrent();
-            NavigationService.Current.Navigate<UnlockPage>();
-            NavigationService.Current.ClearHistory();
+            RedirectToUnlockIfVaultExists();
             return;
         }
 
@@ -212,23 +271,36 @@ public sealed partial class OnboardingPage : Page
             return;
         }
 
+        if (_vm.IsEnterprise && _vm.Policy?.MandatoryWindowsHello == true &&
+            _helloEnrollmentPending == false && !_helloProtector.IsConfigured)
+        {
+            var helloAvailable = await HelloService.IsAvailableAsync().ConfigureAwait(true);
+            if (helloAvailable)
+            {
+                ShowFinishError("Your organization requires Windows Hello. Go back to step 2 and enable it before creating the vault.");
+                return;
+            }
+        }
+
         var password = NewPasswordBox.Password;
         if (string.IsNullOrWhiteSpace(password))
         {
-            ShowFinishError("Master password was lost — go back to step 2 and re-enter it.");
+            ShowFinishError("Master password was lost - go back to step 2 and re-enter it.");
             return;
         }
 
         _isFinishing = true;
         FinishBtn.IsEnabled = false;
-        SetBusyOverlay(true, "Creating your encrypted vault…", "Deriving keys with Argon2id — this may take a few seconds.");
+        SetBusyOverlay(true, "Creating your encrypted vault…", "Deriving keys with Argon2id - this may take a few seconds.");
 
         try
         {
             var paranoia = ParanoiaToggle.IsOn;
             _vm.SetParanoiaMode(paranoia);
 
-            var level = paranoia ? SecurityLevel.Paranoia : SecurityLevel.Standard;
+            var level = (_vm.Policy?.MandatoryParanoiaMode == true || ParanoiaToggle.IsOn)
+                ? SecurityLevel.Paranoia
+                : SecurityLevel.Standard;
             await _vm.CreateVaultAsync(password, level).ConfigureAwait(true);
 
             DispatcherQueue.TryEnqueue(() => BusyDetail.Text = "Unlocking vault…");
@@ -262,8 +334,16 @@ public sealed partial class OnboardingPage : Page
         {
             SetBusyOverlay(false);
             App.LogException("OnboardingPage.FinishOnboarding", ex);
-            var detail = string.IsNullOrWhiteSpace(ex.Message) ? ex.GetType().Name : ex.Message;
-            ShowFinishError($"Failed to create vault: {detail}");
+            _vm.RefreshVaultExists();
+            if (_vm.VaultExists)
+            {
+                ShowFinishError(
+                    "Your vault was created. Use the unlock screen with your master password to continue.");
+                RedirectToUnlockIfVaultExists();
+                return;
+            }
+
+            ShowFinishError($"Failed to create vault: {App.DescribeException(ex)}");
         }
         finally
         {

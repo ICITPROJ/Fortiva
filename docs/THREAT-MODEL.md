@@ -8,7 +8,8 @@
 | Local metadata | DPAPI (user) | DPAPI (machine) |
 | Policy / license | N/A | `%PROGRAMDATA%\Fortiva` |
 | Browser bridge | Named pipe + native host | Same, policy-gated clipboard |
-| Network | None by design | None by design |
+| Bridge session token | In-memory + secured token pipe while unlocked | Same |
+| Network | Optional update check (HTTPS, user-initiated or startup) | None by design |
 
 ## Assets
 
@@ -25,11 +26,13 @@
 
 ## Mitigations
 
-- **Rollback / downgrade**: monotonic counters + DPAPI local state; Paranoia Mode forces read-only on downgrade.
+- **Rollback / downgrade**: monotonic counters + DPAPI local state; suspicious rollback forces read-only until user confirms.
 - **Corruption**: header MAC, sample decrypt checks, encrypted snapshots (`vault.fva.snapshot1..N`).
 - **Memory**: `CryptographicOperations.ZeroMemory` / `RtlSecureZeroMemory`; panic lock wipes session keys.
 - **Clipboard**: explicit copy, auto-clear, policy disable.
 - **Export**: encrypted default; plaintext requires explicit confirmation (Personal) or blocked (Enterprise policy).
+- **Enterprise seats**: `MaxSeats` enforced via `%PROGRAMDATA%\Fortiva\seats.dat` on unlock.
+- **Shared vaults**: Admin configures paths; Enterprise client selects active vault in Settings.
 - **Security audit export**: JSON/HTML reports contain findings and counts only — no secrets.
 
 ## Out of scope (explicit non-goals)

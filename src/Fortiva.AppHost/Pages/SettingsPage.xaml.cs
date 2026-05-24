@@ -120,12 +120,77 @@ public sealed partial class SettingsPage : Page
               $"Entries:  {ctx.Payload.Entries.Count}";
 
         RefreshPortableUi();
+        RefreshSharedVaultUi();
+    }
+
+    private void RefreshSharedVaultUi()
+    {
+        var showShared = _vm.IsEnterprise && !_vm.IsAdmin;
+        SharedVaultSection.Visibility = showShared ? Visibility.Visible : Visibility.Collapsed;
+        SharedVaultSectionDivider.Visibility = showShared ? Visibility.Visible : Visibility.Collapsed;
+        if (!showShared)
+            return;
+
+        _vm.ReloadSharedVaults();
+        SharedVaultBox.SelectionChanged -= SharedVault_Changed;
+
+        var items = new List<ComboBoxItem>
+        {
+            new() { Content = "Default organization vault", Tag = FortivaPaths.EnterpriseProgramData }
+        };
+        foreach (var vault in _vm.SharedVaults)
+        {
+            items.Add(new ComboBoxItem
+            {
+                Content = string.IsNullOrWhiteSpace(vault.Name) ? vault.StoragePath : vault.Name,
+                Tag = vault.StoragePath
+            });
+        }
+
+        SharedVaultBox.ItemsSource = items;
+        var selectedPath = _vm.VaultDirectory;
+        var match = items.FirstOrDefault(i =>
+            string.Equals(i.Tag?.ToString(), selectedPath, StringComparison.OrdinalIgnoreCase));
+        SharedVaultBox.SelectedItem = match ?? items[0];
+        SharedVaultBox.SelectionChanged += SharedVault_Changed;
+        SharedVaultStatusText.Text = _vm.VaultLocationLabel;
+    }
+
+    private void SharedVault_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (SharedVaultBox.SelectedItem is not ComboBoxItem item)
+            return;
+        var path = item.Tag?.ToString();
+        if (string.IsNullOrWhiteSpace(path))
+            return;
+        if (string.Equals(path, _vm.VaultDirectory, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        try
+        {
+            if (_vm.IsUnlocked)
+            {
+                ShowInfo("Lock the vault before switching shared vault locations.", InfoBarSeverity.Warning);
+                RefreshSharedVaultUi();
+                return;
+            }
+
+            _vm.SwitchEnterpriseVault(path);
+            SharedVaultStatusText.Text = _vm.VaultLocationLabel;
+            ShowInfo($"Active vault: {_vm.VaultLocationLabel}", InfoBarSeverity.Success);
+        }
+        catch (Exception ex)
+        {
+            ShowInfo(App.DescribeException(ex), InfoBarSeverity.Error);
+            RefreshSharedVaultUi();
+        }
     }
 
     private void RefreshPortableUi()
     {
         var showPortable = !_vm.IsEnterprise && !_vm.IsAdmin;
         PortableSection.Visibility = showPortable ? Visibility.Visible : Visibility.Collapsed;
+        PortableSectionDivider.Visibility = showPortable ? Visibility.Visible : Visibility.Collapsed;
         if (!showPortable)
             return;
 
@@ -294,7 +359,7 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
-        var helloResult = await HelloService.VerifyAsync("Fortiva — set up Windows Hello");
+        var helloResult = await HelloService.VerifyAsync("Fortiva - set up Windows Hello");
         if (!helloResult.Verified)
         {
             ShowInfo(helloResult.ErrorMessage ?? "Windows Hello verification failed.", InfoBarSeverity.Error);
@@ -309,6 +374,12 @@ public sealed partial class SettingsPage : Page
 
     private void RemoveHello_Click(object sender, RoutedEventArgs e)
     {
+        if (_vm.IsEnterprise && _vm.Policy?.MandatoryWindowsHello == true)
+        {
+            ShowInfo("Your organization requires Windows Hello. Removing Hello is not allowed.", InfoBarSeverity.Warning);
+            return;
+        }
+
         _vm.ClearHelloCredential();
         HelloStatus.Text = "Windows Hello not configured.";
         RemoveHelloBtn.IsEnabled = false;

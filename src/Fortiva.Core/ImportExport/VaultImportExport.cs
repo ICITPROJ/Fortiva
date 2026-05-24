@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Fortiva.Core.Crypto;
+using Fortiva.Core.Policy;
 using Fortiva.Core.Vault;
 
 namespace Fortiva.Core.ImportExport;
@@ -95,8 +96,11 @@ public static class VaultExporter
         return JsonSerializer.SerializeToUtf8Bytes(wrapper);
     }
 
-    public static string ExportPlaintextCsv(VaultUnlockContext ctx)
+    public static string ExportPlaintextCsv(VaultUnlockContext ctx, FortivaPolicy? policy = null)
     {
+        if (!PolicyEnforcer.CanExportPlaintext(policy))
+            throw new InvalidOperationException("Plaintext export is disabled by policy.");
+
         var sb = new StringBuilder();
         sb.AppendLine("title,username,password,url,notes");
         foreach (var e in ctx.Payload.Entries)

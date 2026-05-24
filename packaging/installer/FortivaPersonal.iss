@@ -178,7 +178,97 @@ begin
 
   Exec('taskkill.exe', '/F /IM Fortiva.BrowserBridge.Host.exe /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
-  Sleep(1500);
+  Sleep(2000);
+
+end;
+
+
+
+function PersonalVaultExists(): Boolean;
+
+var
+
+  VaultFile: String;
+
+begin
+
+  VaultFile := ExpandConstant('{userappdata}\Fortiva\vault.fva');
+
+  if FileExists(VaultFile) then
+
+  begin
+
+    Result := True;
+
+    Exit;
+
+  end;
+
+  VaultFile := ExpandConstant('{userappdata}\Fortiva\Personal\vault.fva');
+
+  Result := FileExists(VaultFile);
+
+end;
+
+
+
+procedure TryDeleteFile(const Path: String);
+
+var
+
+  I: Integer;
+
+begin
+
+  if not FileExists(Path) then
+
+    Exit;
+
+  for I := 1 to 5 do
+
+  begin
+
+    if DeleteFile(Path) then
+
+      Exit;
+
+    if not FileExists(Path) then
+
+      Exit;
+
+    Sleep(400);
+
+  end;
+
+end;
+
+
+
+procedure DeletePersonalVaultFilesInDir(const Dir: String);
+
+var
+
+  I: Integer;
+
+begin
+
+  if not DirExists(Dir) then
+
+    Exit;
+
+  TryDeleteFile(Dir + '\vault.fva');
+
+  TryDeleteFile(Dir + '\local.state');
+
+  TryDeleteFile(Dir + '\hello.keyprotect');
+
+  TryDeleteFile(Dir + '\hello.binding');
+
+  TryDeleteFile(Dir + '\user.prefs.json');
+
+  for I := 0 to 4 do
+
+    TryDeleteFile(Dir + '\vault.fva.snapshot' + IntToStr(I));
 
 end;
 
@@ -198,17 +288,49 @@ end;
 
 procedure ForceDeletePersonalUserData();
 
+var
+
+  Attempt: Integer;
+
+  AppData, Legacy, LocalPersonal, LocalLegacy: String;
+
 begin
 
-  KillFortivaProcesses();
+  AppData := ExpandConstant('{userappdata}\Fortiva');
 
-  DeletePath(ExpandConstant('{userappdata}\Fortiva\Personal'));
+  Legacy := ExpandConstant('{userappdata}\Fortiva\Personal');
 
-  DeletePath(ExpandConstant('{userappdata}\Fortiva'));
+  LocalPersonal := ExpandConstant('{localappdata}\FortivaPersonal');
 
-  DeletePath(ExpandConstant('{localappdata}\FortivaPersonal'));
+  LocalLegacy := ExpandConstant('{localappdata}\Fortiva');
 
-  DeletePath(ExpandConstant('{localappdata}\Fortiva'));
+
+
+  for Attempt := 1 to 3 do
+
+  begin
+
+    KillFortivaProcesses();
+
+    DeletePersonalVaultFilesInDir(AppData);
+
+    DeletePersonalVaultFilesInDir(Legacy);
+
+    DeletePath(Legacy);
+
+    DeletePath(AppData);
+
+    DeletePath(LocalPersonal);
+
+    DeletePath(LocalLegacy);
+
+    if not PersonalVaultExists() then
+
+      Exit;
+
+    Sleep(1500);
+
+  end;
 
 end;
 
@@ -224,27 +346,49 @@ begin
     Exit;
   end;
 
-  VaultFile := ExpandConstant('{userappdata}\Fortiva\vault.fva');
-  if not FileExists(VaultFile) then
-    VaultFile := ExpandConstant('{userappdata}\Fortiva\Personal\vault.fva');
-
-  if FileExists(VaultFile) then
+  if PersonalVaultExists() then
 
   begin
 
+    VaultFile := ExpandConstant('{userappdata}\Fortiva\vault.fva');
+
+    if not FileExists(VaultFile) then
+
+      VaultFile := ExpandConstant('{userappdata}\Fortiva\Personal\vault.fva');
+
+
+
     if MsgBox(
 
-      'Existing Fortiva vault data was found on this PC.' + #13#10#13#10 +
+      'Fortiva password data was found on this PC from a previous install:' + #13#10 +
 
-      'Yes — delete the old vault and create a new master password on first launch.' + #13#10 +
+      VaultFile + #13#10#13#10 +
 
-      'No  — keep your existing vault (you will see the unlock screen).',
+      'This usually means the last uninstall left files behind (often because Fortiva was still running), ' +
 
-      mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+      'or you previously chose to keep your vault.' + #13#10#13#10 +
+
+      'Yes — remove the old vault and start fresh (new master password).' + #13#10 +
+
+      'No  — keep the existing vault (you will see the unlock screen).',
+
+      mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDYES then
 
     begin
 
       ForceDeletePersonalUserData();
+
+      if PersonalVaultExists() then
+
+        MsgBox(
+
+          'Could not delete the existing vault — files may be in use.' + #13#10 +
+
+          'Close Fortiva and Fortiva.BrowserBridge.Host, then run the installer again, ' +
+
+          'or delete this folder manually:' + #13#10 + VaultFile,
+
+          mbError, MB_OK);
 
     end;
 
@@ -258,6 +402,10 @@ end;
 
 function InitializeUninstall(): Boolean;
 
+var
+
+  VaultFile: String;
+
 begin
 
   MsgBox(
@@ -270,7 +418,9 @@ begin
 
     '  - Local settings and crash logs' + #13#10#13#10 +
 
-    'After reinstall you will need to create a new master password.',
+    'Close Fortiva before continuing. If the app or browser bridge is still running, ' +
+
+    'some files may survive uninstall.',
 
     mbInformation, MB_OK);
 
@@ -282,6 +432,10 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 
+var
+
+  VaultFile: String;
+
 begin
 
   { Delete at start (after CloseApplications) and again at end in case files were locked }
@@ -289,6 +443,36 @@ begin
   if (CurUninstallStep = usUninstall) or (CurUninstallStep = usPostUninstall) then
 
     ForceDeletePersonalUserData();
+
+
+
+  if CurUninstallStep = usPostUninstall then
+
+  begin
+
+    if PersonalVaultExists() then
+
+    begin
+
+      VaultFile := ExpandConstant('{userappdata}\Fortiva\vault.fva');
+
+      if not FileExists(VaultFile) then
+
+        VaultFile := ExpandConstant('{userappdata}\Fortiva\Personal\vault.fva');
+
+      MsgBox(
+
+        'Some Fortiva data could not be removed (files were in use or locked).' + #13#10#13#10 +
+
+        'Before reinstalling, delete this folder manually or restart Windows and run uninstall again:' + #13#10 +
+
+        VaultFile,
+
+        mbError, MB_OK);
+
+    end;
+
+  end;
 
 end;
 

@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using Fortiva.AppHost.Services;
 using Fortiva.AppHost.ViewModels;
 using Fortiva.Core.Licensing;
@@ -51,6 +52,25 @@ public partial class App : Application
             File.AppendAllText(logPath, $"[{DateTime.Now:O}] {context}\n{ex}\n\n");
         }
         catch { }
+    }
+
+    internal static string DescribeException(Exception ex)
+    {
+        if (ex is AggregateException aggregate)
+        {
+            ex = aggregate.Flatten().InnerException ?? aggregate;
+        }
+
+        if (!string.IsNullOrWhiteSpace(ex.Message))
+            return ex.Message.Trim();
+
+        if (ex is COMException com && com.HResult != 0)
+            return $"COM error 0x{com.HResult:X8}";
+
+        if (ex.InnerException is not null)
+            return DescribeException(ex.InnerException);
+
+        return ex.GetType().Name;
     }
 
     private static string ResolveEdition()

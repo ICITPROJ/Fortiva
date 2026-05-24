@@ -15,11 +15,13 @@ public sealed class ClipboardService : IDisposable
     private readonly DispatcherQueue _ui;
     private CancellationTokenSource? _clearCts;
 
-    public ClipboardService(FortivaPolicy? policy = null, int personalClearSeconds = 30)
+    private readonly Action<string>? _onPolicyViolation;
+
+    public ClipboardService(FortivaPolicy? policy = null, int personalClearSeconds = 30, Action<string>? onPolicyViolation = null)
     {
         _policy = policy;
         _personalClearSeconds = personalClearSeconds;
-        // Capture the UI dispatcher on construction (always called from UI thread)
+        _onPolicyViolation = onPolicyViolation;
         _ui = DispatcherQueue.GetForCurrentThread()
               ?? throw new InvalidOperationException("ClipboardService must be created on the UI thread.");
     }
@@ -34,7 +36,11 @@ public sealed class ClipboardService : IDisposable
 
     public void CopyText(string text)
     {
-        if (!IsAllowed) throw new InvalidOperationException("Clipboard is disabled by policy.");
+        if (!IsAllowed)
+        {
+            _onPolicyViolation?.Invoke("Clipboard copy blocked by policy");
+            throw new InvalidOperationException("Clipboard is disabled by policy.");
+        }
         var dp = new DataPackage();
         dp.SetText(text);
         Clipboard.SetContent(dp);

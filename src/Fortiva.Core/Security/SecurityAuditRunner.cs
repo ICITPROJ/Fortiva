@@ -442,7 +442,7 @@ public static class SecurityAuditRunner
             {
                 Category = "Vault",
                 Id = "empty-vault",
-                Title = "Vault is empty — add logins to begin",
+                Title = "Vault is empty - add logins to begin",
                 Detail = "Import from Chrome/Edge CSV or add entries manually, then run this audit again.",
                 Severity = AuditSeverity.Info,
                 Priority = 95,

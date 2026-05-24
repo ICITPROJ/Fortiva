@@ -72,10 +72,11 @@ public class VaultEngineTests : IDisposable
         engine.Save(ctx);
         ctx.Keys.Dispose();
 
-        var ctx2 = engine.Unlock("password-rollback-test!", paranoiaMode: true);
+        var ctx2 = engine.Unlock("password-rollback-test!", paranoiaMode: false, confirmRollback: false);
         try
         {
-            Assert.True(ctx2.ReadOnly || ctx2.RollbackWarning is not null);
+            Assert.True(ctx2.ReadOnly);
+            Assert.NotNull(ctx2.RollbackWarning);
         }
         finally
         {
@@ -84,11 +85,14 @@ public class VaultEngineTests : IDisposable
     }
 
     [Fact]
-    public void AtomicWrite_SurvivesPowerLossSimulation()
+    public void CreateVault_ThrowsWhenVaultAlreadyExists()
     {
         var engine = new VaultEngine(_dir, DpapiScope.CurrentUser);
-        engine.CreateVault("atomic-write-test!", SecurityLevel.Standard);
-        var temp = Path.Combine(_dir, VaultConstants.VaultFileName + VaultConstants.TempSuffix);
-        Assert.False(File.Exists(temp));
+        engine.CreateVault("first-password-123!", SecurityLevel.Standard);
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            engine.CreateVault("second-password-456!", SecurityLevel.Standard));
+
+        Assert.Contains("already exists", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 }

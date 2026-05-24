@@ -27,7 +27,17 @@ public sealed class VaultEngine
 
     public void CreateVault(string masterPassword, SecurityLevel securityLevel, Argon2Parameters? kdfOverride = null)
     {
+        if (VaultExists)
+        {
+            throw new InvalidOperationException(
+                $"A vault already exists at {VaultPath}. " +
+                "Remove the existing vault or unlock it instead of creating a new one.");
+        }
+
+        securityLevel = PolicyEnforcer.EnforceMinimumSecurityLevel(securityLevel, _policy);
+        PolicyEnforcer.EnsureWritableSecurityLevel(securityLevel, _policy);
         var kdf = ResolveKdf(kdfOverride ?? Argon2Parameters.PersonalDefault, securityLevel);
+
         var (keys, wrappedVk, salt) = KeyHierarchy.CreateNew(masterPassword, kdf);
 
         var header = new VaultHeader
@@ -120,10 +130,8 @@ public sealed class VaultEngine
             if (rollback.IsSuspicious)
             {
                 warning = string.Join(" ", rollback.Warnings);
-                if (rollback.ForceReadOnly && !confirmRollback)
+                if (!confirmRollback)
                     readOnly = true;
-                else if (rollback.RequiresConfirmation && !confirmRollback)
-                    readOnly = paranoiaMode;
             }
 
             if (!readOnly)
@@ -151,6 +159,7 @@ public sealed class VaultEngine
     {
         if (ctx.ReadOnly)
             throw new InvalidOperationException("Vault is read-only.");
+        PolicyEnforcer.EnsureWritableSecurityLevel(ctx.Header.SecurityLevel, _policy);
         ctx.Header.LastModifiedAt = DateTimeOffset.UtcNow;
         ctx.Header.RevisionCounter++;
         SaveInternal(ctx.Keys, ctx.Header, ctx.Payload, updateLocalState: true);
@@ -237,6 +246,7 @@ public sealed class VaultEngine
     {
         if (ctx.ReadOnly)
             throw new InvalidOperationException("Vault is read-only.");
+        PolicyEnforcer.EnsureWritableSecurityLevel(ctx.Header.SecurityLevel, _policy);
         var kdf = ResolveKdf(kdfOverride ?? ctx.Header.KdfParameters, ctx.Header.SecurityLevel);
         var (newKeys, wrappedVk, salt) = KeyHierarchy.CreateNew(newPassword, kdf);
         ctx.Header.KdfParameters = kdf;

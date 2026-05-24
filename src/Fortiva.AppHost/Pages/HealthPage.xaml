@@ -44,7 +44,7 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Spacing="4">
                     <TextBlock Text="Security audit" Style="{StaticResource FortivaPageTitle}"/>
-                    <TextBlock Text="Full vault scan — passwords, settings, vault hygiene, and activity."
+                    <TextBlock Text="Full vault scan - passwords, settings, vault hygiene, and activity."
                                Opacity="0.7" TextWrapping="WrapWholeWords"/>
                     <TextBlock x:Name="LastRunLabel" FontSize="12" Opacity="0.55"/>
                 </StackPanel>

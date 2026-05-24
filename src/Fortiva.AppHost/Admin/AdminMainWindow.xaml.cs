@@ -1,3 +1,4 @@
+using Fortiva.AppHost.Services;
 using Fortiva.AppHost.ViewModels;
 using Fortiva.Core.Admin;
 using Fortiva.Core.Audit;
@@ -58,7 +59,7 @@ public sealed partial class AdminMainWindow : Page
             return;
         }
         var valid = LicenseVerifier.IsValidAndNotExpired(lic);
-        LicenseStatus.Text = valid ? $"Active — {lic.Document.CompanyName}" : "Invalid or expired";
+        LicenseStatus.Text = valid ? $"Active - {lic.Document.CompanyName}" : "Invalid or expired";
         LicenseStatusBanner.Background = valid
             ? new SolidColorBrush(Color.FromArgb(30, 0, 180, 80))
             : new SolidColorBrush(Color.FromArgb(30, 200, 50, 50));
@@ -66,7 +67,7 @@ public sealed partial class AdminMainWindow : Page
             $"Edition:  {lic.Document.Edition}\n" +
             $"Company:  {lic.Document.CompanyName}\n" +
             $"Expires:  {lic.Document.ExpiresAt:yyyy-MM-dd}\n" +
-            $"Seats:    {lic.Document.MaxSeats}\n" +
+            $"Seats:    {LicenseSeatRegistry.CountActiveSeats()} / {lic.Document.MaxSeats} in use\n" +
             $"Features: {string.Join(", ", lic.Document.FeatureFlags)}";
     }
 
@@ -81,9 +82,8 @@ public sealed partial class AdminMainWindow : Page
 
         try
         {
-            var json = await Windows.Storage.FileIO.ReadTextAsync(file);
-            var lic = System.Text.Json.JsonSerializer.Deserialize<SignedLicense>(json);
-            if (lic is null) throw new Exception("Could not parse license file.");
+            var lic = LicenseStore.TryImportFromFile(file.Path);
+            if (lic is null) throw new Exception("Could not parse or verify license file.");
             if (!LicenseVerifier.Verify(lic))
                 throw new Exception("License signature is invalid.");
             if (lic.Document.ExpiresAt <= DateTimeOffset.UtcNow)
@@ -95,7 +95,7 @@ public sealed partial class AdminMainWindow : Page
         }
         catch (Exception ex)
         {
-            ShowLicenseInfo($"Import failed: {ex.Message}", InfoBarSeverity.Error);
+            ShowLicenseInfo($"Import failed: {App.DescribeException(ex)}", InfoBarSeverity.Error);
         }
     }
 
@@ -112,7 +112,7 @@ public sealed partial class AdminMainWindow : Page
         LicenseStore.Save(lic);
         _vm.ReloadEnterpriseConfig();
         LoadLicenseStatus();
-        ShowLicenseInfo("Dev trial license created (signature invalid — for testing only).", InfoBarSeverity.Warning);
+        ShowLicenseInfo("Dev trial license created (signature invalid - for testing only).", InfoBarSeverity.Warning);
     }
 
     private void ShowLicenseInfo(string msg, InfoBarSeverity severity = InfoBarSeverity.Informational)

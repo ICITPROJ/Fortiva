@@ -1,5 +1,7 @@
 namespace Fortiva.Core.Platform;
 
+using System.Threading;
+
 /// <summary>Canonical on-disk locations for Fortiva data (must match installer uninstall scripts).</summary>
 public static class FortivaPaths
 {
@@ -209,14 +211,66 @@ public static class FortivaPaths
     public static string PersonalUpdateInstallerTempPattern =>
         "FortivaPersonal-*-Setup.exe";
 
+    /// <summary>Known Personal vault/metadata file names under PersonalDataRoot (installer uninstall must remove these).</summary>
+    public static IReadOnlyList<string> PersonalKnownDataFileNames =>
+    [
+        Vault.VaultConstants.VaultFileName,
+        "local.state",
+        "hello.keyprotect",
+        "hello.binding",
+        "user.prefs.json"
+    ];
+
+    /// <summary>True if a vault file exists in any canonical Personal location.</summary>
+    public static bool PersonalVaultFileExists()
+    {
+        foreach (var path in FindPersonalVaultFilePaths())
+        {
+            if (File.Exists(path))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>All Personal vault.fva paths (canonical + legacy).</summary>
+    public static IReadOnlyList<string> FindPersonalVaultFilePaths()
+    {
+        var paths = new List<string>();
+        foreach (var dir in new[] { PersonalDataRoot, PersonalLegacyDataRoot })
+        {
+            var vault = Path.Combine(dir, Vault.VaultConstants.VaultFileName);
+            if (File.Exists(vault))
+                paths.Add(vault);
+        }
+        return paths;
+    }
+
     /// <summary>Delete all Personal user data (same paths as uninstall). Used by QA scripts only.</summary>
     public static void DeletePersonalUserData()
     {
         foreach (var dir in PersonalUninstallDirectories.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             if (!Directory.Exists(dir)) continue;
-            try { Directory.Delete(dir, recursive: true); }
-            catch { /* caller may retry */ }
+            TryDeleteDirectoryWithRetry(dir, attempts: 3);
+        }
+    }
+
+    private static void TryDeleteDirectoryWithRetry(string directory, int attempts)
+    {
+        for (var attempt = 0; attempt < attempts; attempt++)
+        {
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+                if (!Directory.Exists(directory))
+                    return;
+            }
+            catch
+            {
+                /* file may be locked — retry after brief delay */
+            }
+
+            Thread.Sleep(750 * (attempt + 1));
         }
     }
 }

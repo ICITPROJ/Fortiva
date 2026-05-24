@@ -115,9 +115,8 @@
                 <StackPanel Margin="24" Spacing="16">
                     <TextBlock Text="Shared Vault Configuration" FontSize="22" FontWeight="SemiBold"/>
                     <TextBlock TextWrapping="WrapWholeWords" Opacity="0.7" FontSize="13">
-                        Shared vault paths are deployed via policy.
-                        Each vault uses the same Argon2id / AES-256-GCM encryption as personal vaults.
-                        All access is local or SMB — no cloud API.
+                        Configure shared vault paths for the Enterprise client.
+                        Users can switch to these vaults in Fortiva Enterprise Settings.
                     </TextBlock>
                     <ListView x:Name="SharedVaultList" Height="200" SelectionMode="Single"/>
                     <StackPanel Orientation="Horizontal" Spacing="8">

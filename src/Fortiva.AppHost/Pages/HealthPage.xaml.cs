@@ -239,31 +239,31 @@ public sealed partial class HealthPage : Page
         var (heading, detail, grade, ringColor, bannerColor) = score switch
         {
             >= 90 when !hasCritical => (
-                "Excellent — your vault passes the full audit",
+                "Excellent - your vault passes the full audit",
                 $"{audit.PassCount} checks passed. Keep unique passwords and export encrypted backups regularly.",
                 "A",
                 Color.FromArgb(255, 16, 160, 90),
                 Color.FromArgb(36, 16, 160, 90)),
             >= 75 => (
-                "Good — minor issues to address",
+                "Good - minor issues to address",
                 $"{audit.WarningCount + audit.InfoCount} recommendation(s) below will raise your score further.",
                 "B",
                 Color.FromArgb(255, 40, 150, 70),
                 Color.FromArgb(36, 40, 150, 70)),
             >= 55 => (
-                "Fair — security gaps need attention",
+                "Fair - security gaps need attention",
                 "Review critical and warning findings. Start with reused and weak passwords.",
                 "C",
                 Color.FromArgb(255, 210, 130, 0),
                 Color.FromArgb(36, 210, 130, 0)),
             >= 35 => (
-                "Needs work — multiple risks detected",
+                "Needs work - multiple risks detected",
                 $"{audit.CriticalCount} critical and {audit.WarningCount} warning finding(s) in this audit.",
                 "D",
                 Color.FromArgb(255, 220, 110, 20),
                 Color.FromArgb(36, 220, 110, 20)),
             _ => (
-                "Critical — immediate action required",
+                "Critical - immediate action required",
                 "This audit found serious issues across passwords and/or settings.",
                 "F",
                 Color.FromArgb(255, 220, 60, 60),

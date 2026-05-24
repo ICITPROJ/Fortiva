@@ -39,7 +39,9 @@ public static class LicenseStore
     public static SignedLicense? Load()
     {
         if (!File.Exists(LicensePaths.LicenseFilePath)) return null;
-        return LoadProtectedBytes(File.ReadAllBytes(LicensePaths.LicenseFilePath));
+        var license = LoadProtectedBytes(File.ReadAllBytes(LicensePaths.LicenseFilePath));
+        if (license is null) return null;
+        return LicenseVerifier.Verify(license) ? license : null;
     }
 
     /// <summary>Import from portable .json or DPAPI-protected .dat (same format as license.dat).</summary>

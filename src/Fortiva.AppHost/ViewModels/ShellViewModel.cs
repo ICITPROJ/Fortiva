@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text;
 using Fortiva.AppHost.Services;
+using Fortiva.Core.Admin;
 using Fortiva.Core.Audit;
 using Fortiva.Core.Crypto;
 using Fortiva.Core.Hello;
@@ -29,6 +30,7 @@ public sealed class ShellViewModel : ViewModelBase
     private bool _isLocking;
     private Action<Action>? _uiInvoker;
     private PersonalUserSettings _personalSettings = PersonalUserSettings.Load();
+    private EnterpriseUserSettings _enterpriseSettings = EnterpriseUserSettings.Load();
     private AppearanceSettings _appearance = AppearanceSettings.Load();
 
     public bool PreferParanoiaMode =>
@@ -65,10 +67,16 @@ public sealed class ShellViewModel : ViewModelBase
 
     public string VaultDirectory { get; private set; } = FortivaPaths.PersonalVaultDirectory;
     public bool IsPortableMode { get; private set; }
+    public bool PortableVaultUnavailable { get; private set; }
+    public string? UnavailablePortablePath { get; private set; }
+    public bool IsSharedVaultMode { get; private set; }
+    public IReadOnlyList<SharedVaultDefinition> SharedVaults { get; private set; } = [];
 
     /// <summary>Human-readable vault location for settings UI.</summary>
     public string VaultLocationLabel =>
-        IsPortableMode ? $"Portable: {VaultDirectory}" : $"Local: {VaultDirectory}";
+        IsPortableMode ? $"Portable: {VaultDirectory}"
+        : IsSharedVaultMode ? $"Shared: {VaultDirectory}"
+        : $"Local: {VaultDirectory}";
 
     public ObservableCollection<VaultEntryViewModel> Entries { get; } = [];
 
@@ -88,7 +96,8 @@ public sealed class ShellViewModel : ViewModelBase
         {
             License = LicenseStore.Load();
             Policy = TryLoadPolicy();
-            VaultDirectory = FortivaPaths.EnterpriseProgramData;
+            SharedVaults = SharedVaultStore.Load().Vaults;
+            VaultDirectory = ResolveEnterpriseVaultDirectory();
         }
         else
         {
@@ -162,6 +171,7 @@ public sealed class ShellViewModel : ViewModelBase
 
     public void CreateVault(string masterPassword, SecurityLevel level)
     {
+        EnterpriseGate.RequireValidLicense(IsEnterprise, IsAdmin, IsLicenseValid);
         EnsureSession();
         _session!.CreateVault(masterPassword, level);
         VaultExists = true;
@@ -171,13 +181,24 @@ public sealed class ShellViewModel : ViewModelBase
 
     public async Task CreateVaultAsync(string masterPassword, SecurityLevel level)
     {
+        EnterpriseGate.RequireValidLicense(IsEnterprise, IsAdmin, IsLicenseValid);
         EnsureSession();
         await Task.Run(() => _session!.CreateVault(masterPassword, level)).ConfigureAwait(false);
-        RunOnUi(() =>
+        try
         {
-            VaultExists = true;
-            StatusMessage = "Vault created.";
-        });
+            RunOnUi(() =>
+            {
+                VaultExists = true;
+                StatusMessage = "Vault created.";
+                OnPropertyChanged(nameof(VaultExists));
+            });
+        }
+        catch (Exception ex)
+        {
+            // Vault file may already be on disk even if UI bookkeeping failed.
+            App.LogException("CreateVaultAsync.RunOnUi", ex);
+            RunOnUi(RefreshVaultExists);
+        }
     }
 
     public async Task<(bool ok, string? error)> UnlockAsync(
@@ -199,7 +220,7 @@ public sealed class ShellViewModel : ViewModelBase
                 ApplyPersonalAutoLockTimeout();
                 RefreshEntries();
                 StatusMessage = $"Unlocked in {sw.ElapsedMilliseconds} ms";
-                if (IsReadOnly) StatusMessage += " [READ-ONLY — rollback detected]";
+                if (IsReadOnly) StatusMessage += " [READ-ONLY - rollback detected]";
                 OnPropertyChanged(nameof(IsUnlocked));
                 OnPropertyChanged(nameof(IsReadOnly));
                 rollbackWarning = _session!.RollbackWarning;
@@ -237,7 +258,7 @@ public sealed class ShellViewModel : ViewModelBase
                 ApplyPersonalAutoLockTimeout();
                 RefreshEntries();
                 StatusMessage = "Unlocked with Windows Hello";
-                if (IsReadOnly) StatusMessage += " [READ-ONLY — rollback detected]";
+                if (IsReadOnly) StatusMessage += " [READ-ONLY - rollback detected]";
                 OnPropertyChanged(nameof(IsUnlocked));
                 OnPropertyChanged(nameof(IsReadOnly));
                 rollbackWarning = _session!.RollbackWarning;
@@ -291,6 +312,8 @@ public sealed class ShellViewModel : ViewModelBase
         }
         finally { _isLocking = false; }
     }
+
+    internal void InvokeOnUi(Action action) => RunOnUi(action);
 
     private void RunOnUi(Action action)
     {
@@ -497,11 +520,84 @@ public sealed class ShellViewModel : ViewModelBase
         saved = Path.GetFullPath(saved);
         if (!Directory.Exists(saved))
         {
-            StatusMessage = "Portable vault drive not connected — using local vault.";
+            PortableVaultUnavailable = true;
+            UnavailablePortablePath = saved;
+            StatusMessage = "Portable vault drive not connected - using local vault.";
             return;
         }
 
         ApplyVaultDirectory(saved, portable: true, notify: false);
+    }
+
+    public void DismissPortableVaultUnavailable()
+    {
+        PortableVaultUnavailable = false;
+        OnPropertyChanged(nameof(PortableVaultUnavailable));
+    }
+
+    public bool RetryPortableVaultConnection()
+    {
+        if (string.IsNullOrWhiteSpace(UnavailablePortablePath))
+            return false;
+        var saved = Path.GetFullPath(UnavailablePortablePath);
+        if (!Directory.Exists(saved))
+            return false;
+
+        PortableVaultUnavailable = false;
+        UnavailablePortablePath = null;
+        ApplyVaultDirectory(saved, portable: true);
+        OnPropertyChanged(nameof(PortableVaultUnavailable));
+        return true;
+    }
+
+    private string ResolveEnterpriseVaultDirectory()
+    {
+        var selected = _enterpriseSettings.SelectedVaultDirectory;
+        if (!string.IsNullOrWhiteSpace(selected))
+        {
+            selected = Path.GetFullPath(selected);
+            if (Directory.Exists(selected))
+            {
+                IsSharedVaultMode = !string.Equals(
+                    selected,
+                    Path.GetFullPath(FortivaPaths.EnterpriseProgramData),
+                    StringComparison.OrdinalIgnoreCase);
+                return selected;
+            }
+        }
+
+        IsSharedVaultMode = false;
+        return FortivaPaths.EnterpriseProgramData;
+    }
+
+    public void SwitchEnterpriseVault(string? vaultDirectory)
+    {
+        if (!IsEnterprise || IsAdmin)
+            throw new InvalidOperationException("Shared vault selection is only available in Fortiva Enterprise.");
+
+        vaultDirectory = string.IsNullOrWhiteSpace(vaultDirectory)
+            ? FortivaPaths.EnterpriseProgramData
+            : Path.GetFullPath(vaultDirectory);
+
+        if (!Directory.Exists(vaultDirectory))
+            throw new DirectoryNotFoundException($"Vault directory not found: {vaultDirectory}");
+
+        _enterpriseSettings.SelectedVaultDirectory =
+            string.Equals(vaultDirectory, FortivaPaths.EnterpriseProgramData, StringComparison.OrdinalIgnoreCase)
+                ? null
+                : vaultDirectory;
+        _enterpriseSettings.Save();
+
+        ApplyVaultDirectory(vaultDirectory, portable: false);
+        IsSharedVaultMode = _enterpriseSettings.SelectedVaultDirectory is not null;
+        OnPropertyChanged(nameof(IsSharedVaultMode));
+    }
+
+    public void ReloadSharedVaults()
+    {
+        if (!IsEnterprise) return;
+        SharedVaults = SharedVaultStore.Load().Vaults;
+        OnPropertyChanged(nameof(SharedVaults));
     }
 
     private void ApplyVaultDirectory(string directory, bool portable, bool notify = true)
@@ -512,6 +608,8 @@ public sealed class ShellViewModel : ViewModelBase
         _session = null;
         VaultDirectory = directory;
         IsPortableMode = portable;
+        IsSharedVaultMode = IsEnterprise && !portable &&
+            !string.Equals(directory, FortivaPaths.EnterpriseProgramData, StringComparison.OrdinalIgnoreCase);
         if (!IsEnterprise)
         {
             _personalSettings.PortableVaultDirectory = portable ? directory : null;
@@ -520,6 +618,7 @@ public sealed class ShellViewModel : ViewModelBase
         RefreshVaultExists();
         OnPropertyChanged(nameof(VaultDirectory));
         OnPropertyChanged(nameof(IsPortableMode));
+        OnPropertyChanged(nameof(IsSharedVaultMode));
         OnPropertyChanged(nameof(VaultLocationLabel));
         StatusMessage = portable
             ? $"Using portable vault at {directory}"
@@ -565,6 +664,18 @@ public sealed class ShellViewModel : ViewModelBase
 
     public AuditLogger GetAuditLogger() =>
         IsEnterprise ? AuditLogger.ForEnterprise() : AuditLogger.ForPersonal();
+
+    public void LogPolicyViolation(string message)
+    {
+        try
+        {
+            GetAuditLogger().Log(AuditEventType.PolicyViolation, message, success: false);
+        }
+        catch
+        {
+            /* audit dir may be unavailable */
+        }
+    }
 
     /// <summary>Test hook — reset session state between automated tests.</summary>
     internal void ResetForTesting()
@@ -656,7 +767,8 @@ public sealed class VaultEntryViewModel : ViewModelBase
         var token = _revealCts.Token;
         _ = Task.Delay(TimeSpan.FromSeconds(seconds), token).ContinueWith(t =>
         {
-            if (!t.IsCanceled) PasswordVisible = false;
+            if (!t.IsCanceled)
+                ShellViewModel.Current.InvokeOnUi(() => PasswordVisible = false);
         }, TaskScheduler.Default);
     }
 

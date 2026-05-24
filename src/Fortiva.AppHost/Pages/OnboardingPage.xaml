@@ -1,6 +1,6 @@
 <Page
     x:Class="Fortiva.AppHost.Pages.OnboardingPage"
-    NavigationCacheMode="Enabled"
+    NavigationCacheMode="Disabled"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="Transparent">
@@ -16,14 +16,14 @@
 
                 <Border Style="{StaticResource FortivaGlassPanelGlow}" Padding="28">
                     <StackPanel Spacing="4">
-                        <!-- Step 0 — Welcome -->
+                        <!-- Step 0 - Welcome -->
                         <StackPanel x:Name="Step0" Spacing="18">
                             <FontIcon Glyph="&#xE8D7;" FontSize="56" HorizontalAlignment="Center"
                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
                             <TextBlock Text="Welcome to Fortiva" Style="{StaticResource FortivaHeroTitle}"
                                        HorizontalAlignment="Center"/>
                             <TextBlock TextWrapping="WrapWholeWords" TextAlignment="Center" Opacity="0.8" FontSize="14" LineHeight="22">
-                                Zero-knowledge password management for Windows. Your master password never leaves this device — it derives the key that encrypts your vault locally.
+                                Zero-knowledge password management for Windows. Your master password never leaves this device - it derives the key that encrypts your vault locally.
                             </TextBlock>
                             <Border CornerRadius="12" Padding="16"
                                     Background="{ThemeResource FortivaAccentGlowBrush}"
@@ -50,11 +50,11 @@
                                     Style="{StaticResource FortivaAccentButton}" Click="NextStep_Click"/>
                         </StackPanel>
 
-                        <!-- Step 1 — Master password -->
+                        <!-- Step 1 - Master password -->
                         <StackPanel x:Name="Step1" Visibility="Collapsed" Spacing="16">
                             <TextBlock Text="Create your master password" FontSize="24" FontWeight="SemiBold"/>
                             <TextBlock TextWrapping="WrapWholeWords" Opacity="0.8" FontSize="13" LineHeight="20">
-                                Choose a strong passphrase — at least 16 characters. You will need this every time you unlock Fortiva.
+                                Choose a strong passphrase - at least 16 characters. You will need this every time you unlock Fortiva.
                             </TextBlock>
                             <Border CornerRadius="12" Padding="14"
                                     Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
@@ -66,7 +66,7 @@
                                         <TextBlock Text="Write it down offline" FontWeight="SemiBold" FontSize="14"/>
                                     </StackPanel>
                                     <TextBlock TextWrapping="WrapWholeWords" FontSize="13" Opacity="0.9" LineHeight="20">
-                                        Fortiva cannot reset or recover your master password. Record it on paper and store it somewhere safe — not in email, cloud notes, or another password manager.
+                                        Fortiva cannot reset or recover your master password. Record it on paper and store it somewhere safe - not in email, cloud notes, or another password manager.
                                     </TextBlock>
                                 </StackPanel>
                             </Border>
@@ -94,13 +94,13 @@
                             </Grid>
                         </StackPanel>
 
-                        <!-- Step 2 — Windows Hello -->
+                        <!-- Step 2 - Windows Hello -->
                         <StackPanel x:Name="Step2" Visibility="Collapsed" Spacing="16">
                             <FontIcon Glyph="&#xE77B;" FontSize="48" HorizontalAlignment="Center"
                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
                             <TextBlock Text="Enable Windows Hello" FontSize="24" FontWeight="SemiBold"/>
                             <TextBlock TextWrapping="WrapWholeWords" Opacity="0.8" FontSize="13" LineHeight="20">
-                                Face, fingerprint, or PIN unlock adds convenience. Your master password remains the root key — Hello never replaces it.
+                                Face, fingerprint, or PIN unlock adds convenience. Your master password remains the root key - Hello never replaces it.
                             </TextBlock>
                             <InfoBar x:Name="HelloInfoBar" IsOpen="False" Severity="Informational" IsClosable="False"/>
                             <Button x:Name="EnableHelloBtn" Content="Enable Windows Hello"
@@ -119,7 +119,7 @@
                             </Grid>
                         </StackPanel>
 
-                        <!-- Step 3 — Paranoia + offline confirmation -->
+                        <!-- Step 3 - Paranoia + offline confirmation -->
                         <StackPanel x:Name="Step3" Visibility="Collapsed" Spacing="16">
                             <FontIcon Glyph="&#xEA8A;" FontSize="48" HorizontalAlignment="Center"
                                       Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
@@ -132,9 +132,9 @@
                                     BorderBrush="{ThemeResource SystemFillColorCriticalBrush}" BorderThickness="1"
                                     Background="{ThemeResource FortivaAccentGlowBrush}">
                                 <StackPanel Spacing="10">
-                                    <TextBlock Text="Offline password backup — required" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Offline password backup - required" FontWeight="SemiBold"/>
                                     <TextBlock TextWrapping="WrapWholeWords" FontSize="13" Opacity="0.85" LineHeight="20">
-                                        If you lose this password, your vault cannot be opened — even by icmclab studio. Keep a written copy in a safe place (home safe, locked drawer). Consider exporting an encrypted .fvab backup after setup.
+                                        If you lose this password, your vault cannot be opened - even by icmclab studio. Keep a written copy in a safe place (home safe, locked drawer). Consider exporting an encrypted .fvab backup after setup.
                                     </TextBlock>
                                     <CheckBox x:Name="OfflineAckCheck" Content="I have recorded my master password offline in a secure place"
                                               Checked="OfflineAck_Changed" Unchecked="OfflineAck_Changed"/>
@@ -178,7 +178,7 @@
                     <ProgressRing x:Name="BusyRing" IsActive="True" Width="48" Height="48"/>
                     <TextBlock x:Name="BusyTitle" Text="Creating your encrypted vault…"
                                FontSize="18" FontWeight="SemiBold" TextAlignment="Center"/>
-                    <TextBlock x:Name="BusyDetail" Text="Deriving keys with Argon2id — this may take a few seconds."
+                    <TextBlock x:Name="BusyDetail" Text="Deriving keys with Argon2id - this may take a few seconds."
                                TextWrapping="WrapWholeWords" TextAlignment="Center" Opacity="0.75" FontSize="13"/>
                 </StackPanel>
             </Border>

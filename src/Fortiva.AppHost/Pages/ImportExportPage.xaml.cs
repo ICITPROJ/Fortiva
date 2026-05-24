@@ -1,3 +1,4 @@
+using Fortiva.AppHost.Services;
 using Fortiva.AppHost.ViewModels;
 using Fortiva.Core.ImportExport;
 using Fortiva.Core.Policy;
@@ -17,7 +18,23 @@ public sealed partial class ImportExportPage : Page
     {
         base.OnNavigatedTo(e);
         var canPlaintext = PolicyEnforcer.CanExportPlaintext(_vm.Policy);
-        ExportCsvBtn.IsEnabled = canPlaintext;
+        ExportCsvBtn.IsEnabled = canPlaintext && _vm.IsUnlocked && !_vm.IsReadOnly;
+        ExportEncryptedBtn.IsEnabled = _vm.IsUnlocked && !_vm.IsReadOnly;
+    }
+
+    private bool GuardExport()
+    {
+        if (!_vm.IsUnlocked)
+        {
+            Show("Unlock the vault before exporting.", InfoBarSeverity.Warning);
+            return false;
+        }
+        if (_vm.IsReadOnly)
+        {
+            Show("Vault is read-only.", InfoBarSeverity.Warning);
+            return false;
+        }
+        return true;
     }
 
     private async void Import_Click(object sender, RoutedEventArgs e)
@@ -61,6 +78,7 @@ public sealed partial class ImportExportPage : Page
 
     private async void ExportEncrypted_Click(object sender, RoutedEventArgs e)
     {
+        if (!GuardExport()) return;
         var pwdBox = new PasswordBox { PlaceholderText = "Export password (to protect the backup file)" };
         var dlg = new ContentDialog
         {
@@ -90,14 +108,17 @@ public sealed partial class ImportExportPage : Page
         }
         catch (Exception ex)
         {
-            Show($"Export failed: {ex.Message}", InfoBarSeverity.Error);
+            Show($"Export failed: {App.DescribeException(ex)}", InfoBarSeverity.Error);
         }
     }
 
     private async void ExportCsv_Click(object sender, RoutedEventArgs e)
     {
+        if (!GuardExport()) return;
+
         if (!PolicyEnforcer.CanExportPlaintext(_vm.Policy))
         {
+            _vm.LogPolicyViolation("Plaintext CSV export blocked by policy");
             Show("Plaintext export is disabled by policy.", InfoBarSeverity.Error);
             return;
         }
@@ -129,13 +150,13 @@ public sealed partial class ImportExportPage : Page
         try
         {
             if (_vm.Context is null) { Show("Vault not unlocked.", InfoBarSeverity.Error); return; }
-            var csv = VaultExporter.ExportPlaintextCsv(_vm.Context);
+            var csv = VaultExporter.ExportPlaintextCsv(_vm.Context, _vm.Policy);
             await Windows.Storage.FileIO.WriteTextAsync(file, csv);
             Show($"Plaintext CSV saved to {file.Name}. Delete this file when done.", InfoBarSeverity.Warning);
         }
         catch (Exception ex)
         {
-            Show($"Export failed: {ex.Message}", InfoBarSeverity.Error);
+            Show($"Export failed: {App.DescribeException(ex)}", InfoBarSeverity.Error);
         }
     }
 

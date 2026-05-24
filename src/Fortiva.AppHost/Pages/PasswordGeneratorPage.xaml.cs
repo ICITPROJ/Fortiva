@@ -14,7 +14,7 @@ public sealed partial class PasswordGeneratorPage : Page
     public PasswordGeneratorPage()
     {
         InitializeComponent();
-        _clipboard = new ClipboardService(_vm.Policy, _vm.PersonalSettings.ClipboardClearSeconds);
+        _clipboard = new ClipboardService(_vm.Policy, _vm.PersonalSettings.ClipboardClearSeconds, _vm.LogPolicyViolation);
         _vm.ThemeChanged += OnThemeChanged;
     }
 

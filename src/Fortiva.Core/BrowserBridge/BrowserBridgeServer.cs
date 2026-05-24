@@ -35,6 +35,11 @@ public sealed class BrowserBridgeServer : IDisposable
 {
     public const string PipeName = "Fortiva.BrowserBridge";
 
+    private static readonly JsonSerializerOptions BridgeJson = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly Func<CredentialRequest, CredentialResponse> _credentialResolver;
     private readonly string _sessionToken;
     private CancellationTokenSource? _cts;
@@ -97,7 +102,7 @@ public sealed class BrowserBridgeServer : IDisposable
         var line = await reader.ReadLineAsync(ct);
         if (line is null) return;
 
-        var msg = JsonSerializer.Deserialize<BrowserBridgeMessage>(line);
+        var msg = JsonSerializer.Deserialize<BrowserBridgeMessage>(line, BridgeJson);
         if (msg is null || !IsAuthorized(msg))
         {
             await writer.WriteLineAsync(JsonSerializer.Serialize(new CredentialResponse()).AsMemory(), ct);
@@ -106,7 +111,7 @@ public sealed class BrowserBridgeServer : IDisposable
 
         if (msg.Command == "get_credentials" && msg.Payload.HasValue)
         {
-            var req = JsonSerializer.Deserialize<CredentialRequest>(msg.Payload.Value.GetRawText());
+            var req = JsonSerializer.Deserialize<CredentialRequest>(msg.Payload.Value.GetRawText(), BridgeJson);
             if (req is not null)
             {
                 var resp = _credentialResolver(req);

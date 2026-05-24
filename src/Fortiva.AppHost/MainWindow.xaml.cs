@@ -50,7 +50,7 @@ public sealed partial class MainWindow : Window
         };
 
         NavAudit.Visibility = _vm.IsAdmin ? Visibility.Collapsed : Visibility.Visible;
-        NavAdmin.Visibility = _vm.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
+        NavAdmin.Visibility = Visibility.Collapsed;
 
         if (_vm.IsAdmin)
         {
@@ -72,6 +72,64 @@ public sealed partial class MainWindow : Window
             NavigationService.Current.Navigate<UnlockPage>();
 
         StatusText.Text = _vm.StatusMessage;
+
+        if (_vm.PortableVaultUnavailable)
+            Activated += MainWindow_ActivatedForPortablePrompt;
+    }
+
+    private bool _portablePromptShown;
+
+    private void MainWindow_ActivatedForPortablePrompt(object sender, WindowActivatedEventArgs args)
+    {
+        if (_portablePromptShown || !_vm.PortableVaultUnavailable)
+            return;
+        _portablePromptShown = true;
+        Activated -= MainWindow_ActivatedForPortablePrompt;
+        _ = ShowPortableVaultUnavailableDialogAsync();
+    }
+
+    private async Task ShowPortableVaultUnavailableDialogAsync()
+    {
+        var path = _vm.UnavailablePortablePath ?? "your USB drive";
+        var dialog = new ContentDialog
+        {
+            Title = "Portable vault unavailable",
+            Content = $"Fortiva could not find your portable vault at:\n{path}\n\n" +
+                      "The drive may be unplugged. Fortiva is using your local vault until you reconnect the drive or change location in Settings.",
+            PrimaryButtonText = "Use local vault",
+            SecondaryButtonText = "Retry",
+            CloseButtonText = "Open Settings",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Content.XamlRoot
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Secondary)
+        {
+            if (_vm.RetryPortableVaultConnection())
+            {
+                OnVaultLocationChanged();
+                return;
+            }
+
+            var retryDialog = new ContentDialog
+            {
+                Title = "Drive still unavailable",
+                Content = "Connect your USB drive and try again, or continue with your local vault.",
+                CloseButtonText = "OK",
+                XamlRoot = Content.XamlRoot
+            };
+            await retryDialog.ShowAsync();
+        }
+        else if (result == ContentDialogResult.None)
+        {
+            _suppressNav = true;
+            try { NavView.SelectedItem = NavSettings; }
+            finally { _suppressNav = false; }
+            NavigationService.Current.Navigate<SettingsPage>();
+        }
+
+        _vm.DismissPortableVaultUnavailable();
     }
 
     private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -135,7 +193,7 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             App.LogException($"NavView_SelectionChanged({item.Tag})", ex);
-            StatusText.Text = "Navigation error — see crash log.";
+            StatusText.Text = "Navigation error - see crash log.";
         }
     }
 
