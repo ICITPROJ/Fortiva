@@ -9,7 +9,7 @@ param(
     [string]$Version = ""
 )
 
-Set-StrictMode -Version Latest
+Set-StrictMode -Off
 $ErrorActionPreference = "Stop"
 
 $root = $PSScriptRoot
@@ -44,14 +44,20 @@ if (-not $makepri)              { throw "makepri.exe not found in NuGet cache af
 Write-Host "==> MSBuild : $msbuild" -ForegroundColor Cyan
 Write-Host "==> makepri : $makepri"  -ForegroundColor Cyan
 
-$versionProps = @()
+$msbuildVersionArgs = @()
+$dotnetVersionArgs = @()
 if ($Version) {
     if ($Version -notmatch '^\d+\.\d+\.\d+') { throw "Invalid version: $Version (expected major.minor.patch)" }
-    $assemblyVersion = "$Version.0"
-    $versionProps = @(
+    $assemblyVersion = '{0}.0' -f $Version
+    $msbuildVersionArgs = @(
         "/p:Version=$Version",
         "/p:AssemblyVersion=$assemblyVersion",
         "/p:FileVersion=$assemblyVersion"
+    )
+    $dotnetVersionArgs = @(
+        "-p:Version=$Version",
+        "-p:AssemblyVersion=$assemblyVersion",
+        "-p:FileVersion=$assemblyVersion"
     )
     Write-Host "==> Version : $Version (assembly $assemblyVersion)" -ForegroundColor Cyan
 }
@@ -78,17 +84,28 @@ foreach ($app in $apps) {
 
     # ── Step 2: Build with VS MSBuild (generates .g.cs + .xbf via in-proc task) ──
     Write-Host "[2/4] Build (VS MSBuild)..."
-    & $msbuild $proj /t:Build `
-        /p:Configuration=Release /p:Platform=x64 /p:RuntimeIdentifier=win-x64 `
-        /p:SelfContained=true /p:WindowsAppSDKSelfContained=true `
-        @versionProps `
-        /m /nologo /verbosity:minimal
+    $buildArgs = @(
+        $proj, '/t:Build',
+        '/p:Configuration=Release', '/p:Platform=x64', '/p:RuntimeIdentifier=win-x64',
+        '/p:SelfContained=true', '/p:WindowsAppSDKSelfContained=true',
+        '/m', '/nologo', '/verbosity:minimal'
+    ) + $msbuildVersionArgs
+    & $msbuild @buildArgs
     if ($LASTEXITCODE -ne 0) { throw "MSBuild Build failed for $name" }
 
     # ── Step 3: Publish (copies EXE + DLLs + WinUI runtime) ─────────────────
     Write-Host "[3/4] Publish (dotnet)..."
-    & dotnet publish $proj -c Release -r win-x64 --self-contained `
-        -o $distDir -p:Platform=x64 --nologo --no-build @versionProps 2>&1 |
+    $publishArgs = @(
+        'publish', $proj,
+        '-c', 'Release',
+        '-r', 'win-x64',
+        '--self-contained',
+        '-o', $distDir,
+        '-p:Platform=x64',
+        '--nologo',
+        '--no-build'
+    ) + $dotnetVersionArgs
+    & dotnet @publishArgs 2>&1 |
         Where-Object { $_ -notmatch "^\s*$" } |
         ForEach-Object { Write-Host "  $_" }
     # --no-build skips re-building; just copies artifacts to PublishDir
@@ -174,8 +191,16 @@ Write-Host "========================================" -ForegroundColor Green
 $bridgeProj = Join-Path $root "src\Fortiva.BrowserBridge.Host\Fortiva.BrowserBridge.Host.csproj"
 $bridgeOut  = Join-Path $root "dist\BrowserBridge"
 
-& dotnet publish $bridgeProj -c Release -r win-x64 --self-contained -o $bridgeOut `
-    -p:Platform=x64 --nologo @versionProps
+$bridgePublishArgs = @(
+    'publish', $bridgeProj,
+    '-c', 'Release',
+    '-r', 'win-x64',
+    '--self-contained',
+    '-o', $bridgeOut,
+    '-p:Platform=x64',
+    '--nologo'
+) + $dotnetVersionArgs
+& dotnet @bridgePublishArgs
 if ($LASTEXITCODE -ne 0) { throw "BrowserBridge publish failed" }
 if (-not (Test-Path (Join-Path $bridgeOut "Fortiva.BrowserBridge.Host.exe"))) {
     throw "Fortiva.BrowserBridge.Host.exe missing after publish"
@@ -190,8 +215,16 @@ Write-Host "========================================" -ForegroundColor Green
 $licenseProj = Join-Path $root "src\Fortiva.LicenseTool\Fortiva.LicenseTool.csproj"
 $licenseOut  = Join-Path $root "dist\LicenseTool"
 
-& dotnet publish $licenseProj -c Release -r win-x64 --self-contained -o $licenseOut `
-    -p:Platform=x64 --nologo @versionProps
+$licensePublishArgs = @(
+    'publish', $licenseProj,
+    '-c', 'Release',
+    '-r', 'win-x64',
+    '--self-contained',
+    '-o', $licenseOut,
+    '-p:Platform=x64',
+    '--nologo'
+) + $dotnetVersionArgs
+& dotnet @licensePublishArgs
 if ($LASTEXITCODE -ne 0) { throw "LicenseTool publish failed" }
 if (-not (Test-Path (Join-Path $licenseOut "Fortiva.LicenseTool.exe"))) {
     throw "Fortiva.LicenseTool.exe missing after publish"
