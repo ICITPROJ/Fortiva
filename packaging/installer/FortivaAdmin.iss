@@ -1,7 +1,9 @@
 ; Fortiva Admin Console — Inno Setup installer script
 
 #define AppName        "Fortiva Admin Console"
+#ifndef AppVersion
 #define AppVersion     "1.0.0"
+#endif
 #define AppPublisher   "icmclab studio"
 #define AppURL         "https://studio.icmclab.cloud"
 #define AppExeName     "Fortiva.Admin.exe"

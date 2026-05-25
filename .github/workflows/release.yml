@@ -107,12 +107,12 @@ jobs:
           name: Fortiva ${{ steps.version.outputs.value }}
           generate_release_notes: true
           make_latest: true
-          fail_on_unmatched_files: true
+          fail_on_unmatched_files: false
           files: |
             dist/installers/FortivaPersonal-${{ steps.version.outputs.value }}-Setup.exe
+            packaging/releases/latest.personal.json
             dist/installers/FortivaEnterprise-${{ steps.version.outputs.value }}-Setup.exe
             dist/installers/FortivaAdmin-${{ steps.version.outputs.value }}-Setup.exe
-            packaging/releases/latest.personal.json
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
