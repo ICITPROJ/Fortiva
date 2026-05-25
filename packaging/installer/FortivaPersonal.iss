@@ -82,7 +82,7 @@ CloseApplications=yes
 
 CloseApplicationsFilter={#AppExeName}
 
-RestartApplications=yes
+RestartApplications=no
 
 ; Per-user vault lives in %APPDATA% — do not require admin (avoids wrong-profile deletes)
 
@@ -130,6 +130,8 @@ Name: "{userdesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: deskto
 [Run]
 #include "FortivaPrerequisitesRun.iss"
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+; In-app updates use /VERYSILENT — always relaunch when Setup is silent (skipifsilent blocks the line above).
+Filename: "{app}\{#AppExeName}"; Flags: nowait postinstall; Check: ShouldLaunchAfterSilentInstall
 
 
 
@@ -470,6 +472,11 @@ begin
 end;
 
 
+
+function ShouldLaunchAfterSilentInstall: Boolean;
+begin
+  Result := WizardSilent;
+end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
