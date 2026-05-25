@@ -36,9 +36,7 @@ git push origin main
 if ($LASTEXITCODE -ne 0) { throw "git push origin main failed (exit $LASTEXITCODE)" }
 Write-Host "  main pushed OK" -ForegroundColor Green
 
-$tagExists = $false
-git rev-parse $tag 2>$null | Out-Null
-if ($LASTEXITCODE -eq 0) { $tagExists = $true }
+$tagExists = [bool](git tag -l $tag)
 
 if ($tagExists) {
     Write-Host "Tag $tag exists locally - pushing tag..." -ForegroundColor Yellow
