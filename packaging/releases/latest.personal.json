@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "edition": "Personal",
   "version": "1.0.16",
-  "releasedAt": "2026-05-25T19:00:00.0000000Z",
+  "releasedAt": "2026-05-25T19:15:56.6560744Z",
   "minWindowsBuild": 19041,
-  "maxWindowsBuildTested": 26200,
+  "maxWindowsBuildTested": 26100,
   "installerUrl": "https://github.com/ICITPROJ/Fortiva/releases/download/v1.0.16/FortivaPersonal-1.0.16-Setup.exe",
-  "installerSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "installerSha256": "2facb7e4a92723c613caa37136559c09264c7884fa3fb2a4dfcfe6e8d8f712d4",
   "installerArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS",
-  "releaseNotes": "Fortiva Personal 1.0.16 — Hello Face ID fix, UI contrast, update check resilience"
+  "releaseNotes": "Fortiva Personal 1.0.16"
 }
