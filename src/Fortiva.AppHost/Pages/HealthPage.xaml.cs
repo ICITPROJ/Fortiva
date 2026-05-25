@@ -1,7 +1,6 @@
 using System.Reflection;
 using Fortiva.AppHost.Services;
 using Fortiva.AppHost.ViewModels;
-using Fortiva.Core.Hello;
 using Fortiva.Core.Password;
 using Fortiva.Core.Platform;
 using Fortiva.Core.Security;
@@ -19,7 +18,7 @@ namespace Fortiva.AppHost.Pages;
 public sealed partial class HealthPage : Page
 {
     private readonly ShellViewModel _vm = ShellViewModel.Current;
-    private readonly WindowsHelloKeyProtector _hello;
+    private readonly HelloUnlockManager _hello;
     private int _buildGeneration;
     private Dictionary<Guid, VaultEntry> _entryLookup = [];
     private SecurityAuditReport? _lastAuditReport;
@@ -27,7 +26,7 @@ public sealed partial class HealthPage : Page
     public HealthPage()
     {
         InitializeComponent();
-        _hello = new WindowsHelloKeyProtector(
+        _hello = new HelloUnlockManager(
             FortivaPaths.GetHelloDataDirectory(_vm.IsEnterprise),
             _vm.IsEnterprise);
         CatActivity.Visibility = _vm.IsEnterprise ? Visibility.Visible : Visibility.Collapsed;

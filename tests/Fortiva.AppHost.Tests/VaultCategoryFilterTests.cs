@@ -55,6 +55,29 @@ public sealed class VaultCategoryFilterTests
         Assert.Equal("A", filtered[0].Title);
     }
 
+    [Fact]
+    public void BuildCategories_IncludesSavedEmptyCategories()
+    {
+        var entries = new[]
+        {
+            CreateEntry("Only work", tags: ["Work"])
+        }.Select(e => new VaultEntryViewModel(e)).ToList();
+
+        var categories = VaultCategoryFilter.BuildCategories(entries, ["Finance", "Work"]);
+
+        Assert.Contains(categories, c => c.Label == "Finance" && c.Count == 0);
+        Assert.Contains(categories, c => c.Label == "Work" && c.Count == 1);
+    }
+
+    [Fact]
+    public void IsUserTag_DistinguishesSystemCategories()
+    {
+        Assert.False(VaultCategoryFilter.IsUserTag(VaultCategoryFilter.AllKey));
+        Assert.False(VaultCategoryFilter.IsUserTag(VaultCategoryFilter.FavoritesKey));
+        Assert.False(VaultCategoryFilter.IsUserTag(VaultCategoryFilter.UntaggedKey));
+        Assert.True(VaultCategoryFilter.IsUserTag("Work"));
+    }
+
     private static VaultEntry CreateEntry(string title, bool favorite = false, params string[] tags)
         => new()
         {

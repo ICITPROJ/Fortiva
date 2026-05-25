@@ -60,11 +60,11 @@ public static class BridgeClientValidator
             if (!IsUnderDirectory(fullPath, root))
                 continue;
 
+            if (!AuthenticodeVerifier.IsSigned(fullPath))
+                return false;
+
             if (fileName.Equals("Fortiva.BrowserBridge.Host.exe", StringComparison.OrdinalIgnoreCase))
             {
-                if (!AuthenticodeVerifier.IsSigned(fullPath))
-                    return false;
-
                 var bridgeDir = Path.Combine(root, "BrowserBridge");
                 if (IsUnderDirectory(fullPath, bridgeDir) || IsUnderDirectory(fullPath, root))
                     return true;

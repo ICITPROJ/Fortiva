@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Fortiva.Core.Tests" />
+    <InternalsVisibleTo Include="Fortiva.AppHost" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Isopoh.Cryptography.Argon2" Version="2.0.0" />

@@ -26,6 +26,7 @@ public sealed class VaultSession : IDisposable
     private int _autoLockSuppressCount;
     private int _autoLockTimeoutSeconds = 300;
     private readonly string _rollbackStateDirectory;
+    private BridgeFillNonce? _fillNonce;
 
     public VaultSession(
         string vaultDirectory,
@@ -59,6 +60,7 @@ public sealed class VaultSession : IDisposable
 
     public void Unlock(string masterPassword, bool paranoiaMode = false, bool confirmRollback = false)
     {
+        RuntimeIntegrity.EnsureSafeForSensitiveOperation();
         EnsureEnterpriseLicense();
         EnsureEnterpriseSeat();
         _audit?.Log(AuditEventType.UnlockAttempt, "Unlock attempted");
@@ -80,6 +82,7 @@ public sealed class VaultSession : IDisposable
 
     public void UnlockWithMasterKey(byte[] masterKey, bool paranoiaMode = false, bool confirmRollback = false)
     {
+        RuntimeIntegrity.EnsureSafeForSensitiveOperation();
         EnsureEnterpriseLicense();
         EnsureEnterpriseSeat();
         _audit?.Log(AuditEventType.UnlockAttempt, "Hello unlock attempted");
@@ -114,6 +117,8 @@ public sealed class VaultSession : IDisposable
 
     public void PanicLock()
     {
+        ScrubPayloadSecrets();
+        ForceGarbageCollectionBestEffort();
         DisposeSession();
         _audit?.Log(AuditEventType.Lock, "Panic lock");
         StateChanged?.Invoke();
@@ -229,9 +234,11 @@ public sealed class VaultSession : IDisposable
             if (_context is null)
                 return new CredentialResponse { Error = "locked" };
 
-            var requestHost = ResolveRequestHost(req);
-            if (string.IsNullOrEmpty(requestHost))
-                return new CredentialResponse { Error = "no_match" };
+            if (_fillNonce is null || !_fillNonce.TryConsume(req.FillNonce))
+                return new CredentialResponse { Error = "invalid_nonce" };
+
+            if (!TryNormalizeRequest(req, out var requestHost, out var hostError))
+                return hostError;
 
             var matches = ListMatchesForHost(requestHost);
             if (matches.Count == 0)
@@ -278,16 +285,17 @@ public sealed class VaultSession : IDisposable
         }
     }
 
-    public IReadOnlyList<CredentialMatchSummary> ListMatchesForDomain(CredentialRequest req)
+    public CredentialResponse ListMatchesForDomain(CredentialRequest req)
     {
         lock (_payloadLock)
         {
-            if (_context is null) return [];
+            if (_context is null)
+                return new CredentialResponse { Error = "locked" };
 
-            var requestHost = ResolveRequestHost(req);
-            if (string.IsNullOrEmpty(requestHost)) return [];
+            if (!TryNormalizeRequest(req, out var requestHost, out var hostError))
+                return hostError;
 
-            return ListMatchesForHost(requestHost)
+            var matches = ListMatchesForHost(requestHost)
                 .Select(m => new CredentialMatchSummary
                 {
                     Id = m.Entry.Id,
@@ -295,8 +303,23 @@ public sealed class VaultSession : IDisposable
                     Username = m.Entry.Username
                 })
                 .ToList();
+
+            _audit?.Log(AuditEventType.BrowserBridgeAccess,
+                $"Browser bridge listed {matches.Count} credential(s) for host {requestHost}");
+
+            return new CredentialResponse
+            {
+                Found = matches.Count > 0,
+                Matches = matches,
+                FillNonce = _fillNonce?.Issue(),
+                Error = matches.Count == 0 ? "no_match" : null
+            };
         }
     }
+
+    [Obsolete("Use ListMatchesForDomain returning CredentialResponse")]
+    public IReadOnlyList<CredentialMatchSummary> ListMatchSummariesForDomain(CredentialRequest req)
+        => ListMatchesForDomain(req).Matches ?? [];
 
     private List<(VaultEntry Entry, int Score)> ListMatchesForHost(string requestHost)
     {
@@ -315,11 +338,45 @@ public sealed class VaultSession : IDisposable
         return string.Equals(host, requestHost, StringComparison.OrdinalIgnoreCase) ? 2 : 0;
     }
 
+    private static bool TryNormalizeRequest(
+        CredentialRequest req,
+        out string requestHost,
+        out CredentialResponse errorResponse)
+    {
+        requestHost = "";
+        errorResponse = new CredentialResponse { Error = "no_match" };
+
+        var fromUrl = ExtractHost(req.Url);
+        var fromDomain = string.IsNullOrWhiteSpace(req.Domain)
+            ? ""
+            : req.Domain.Trim().ToLowerInvariant();
+
+        if (!string.IsNullOrEmpty(fromUrl) && !string.IsNullOrEmpty(fromDomain) &&
+            !string.Equals(fromUrl, fromDomain, StringComparison.OrdinalIgnoreCase))
+        {
+            errorResponse = new CredentialResponse { Error = "host_mismatch" };
+            return false;
+        }
+
+        requestHost = !string.IsNullOrEmpty(fromUrl) ? fromUrl : fromDomain;
+        if (string.IsNullOrEmpty(requestHost))
+            return false;
+
+        if (DomainSafety.ContainsSuspiciousCharacters(requestHost))
+        {
+            errorResponse = new CredentialResponse { Error = "invalid_host" };
+            return false;
+        }
+
+        requestHost = DomainSafety.NormalizeHost(requestHost);
+        return true;
+    }
+
     private static string ResolveRequestHost(CredentialRequest req)
     {
-        var fromUrl = ExtractHost(req.Url);
-        if (!string.IsNullOrEmpty(fromUrl)) return fromUrl;
-        return req.Domain.Trim().ToLowerInvariant();
+        if (TryNormalizeRequest(req, out var host, out _))
+            return host;
+        return "";
     }
 
     private static bool EntryHostMatches(string entryUrl, string requestHost)
@@ -416,6 +473,7 @@ public sealed class VaultSession : IDisposable
         _bridgeSessionToken = BridgeSessionAuth.CreateSessionToken();
         _tokenBroker = new BridgeTokenBroker(_bridgeSessionToken);
         _tokenBroker.Start();
+        _fillNonce = new BridgeFillNonce();
         BridgeClientValidator.ConfigureAllowedInstallRoots(AppContext.BaseDirectory);
         _bridge = new BrowserBridgeServer(ResolveForDomain, ListMatchesForDomain, _bridgeSessionToken);
         _bridge.Start();
@@ -438,11 +496,41 @@ public sealed class VaultSession : IDisposable
         _tokenBroker = null;
         BridgeSessionAuth.ClearSessionToken();
         _bridgeSessionToken = null;
+        _fillNonce?.Reset();
+        _fillNonce = null;
         _autoLock?.Dispose();
         _autoLock = null;
         _context?.Keys.Lock();
         _context?.Keys.Dispose();
         _context = null;
+    }
+
+    private void ScrubPayloadSecrets()
+    {
+        lock (_payloadLock)
+        {
+            if (_context?.Payload.Entries is null)
+                return;
+
+            foreach (var entry in _context.Payload.Entries)
+            {
+                entry.Password = "";
+                entry.TotpSecret = null;
+            }
+        }
+    }
+
+    private static void ForceGarbageCollectionBestEffort()
+    {
+        try
+        {
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+        }
+        catch
+        {
+            /* best effort */
+        }
     }
 
     public void Dispose() => DisposeSession();

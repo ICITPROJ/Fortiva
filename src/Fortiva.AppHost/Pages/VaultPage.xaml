@@ -52,6 +52,7 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <AutoSuggestBox x:Name="SearchBox"
+                                    Style="{StaticResource FortivaSearchBox}"
                                     PlaceholderText="Search by title, username, URL, or tag…"
                                     QueryIcon="Find"
                                     TextChanged="SearchBox_TextChanged"/>
@@ -102,16 +103,7 @@
                       IsItemClickEnabled="True"
                       ItemClick="EntryGrid_ItemClick">
                 <GridView.ItemContainerStyle>
-                    <Style TargetType="GridViewItem">
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                        <Setter Property="VerticalContentAlignment" Value="Stretch"/>
-                        <Setter Property="Margin" Value="0,0,12,12"/>
-                        <Setter Property="Padding" Value="0"/>
-                        <Setter Property="Background" Value="Transparent"/>
-                        <Setter Property="BorderThickness" Value="0"/>
-                        <Setter Property="MinWidth" Value="320"/>
-                        <Setter Property="MaxWidth" Value="520"/>
-                    </Style>
+                    <Style TargetType="GridViewItem" BasedOn="{StaticResource FortivaVaultGridItem}"/>
                 </GridView.ItemContainerStyle>
                 <GridView.ItemsPanel>
                     <ItemsPanelTemplate>
@@ -274,11 +266,7 @@
                               IsItemClickEnabled="True"
                               SelectionChanged="CategoryList_SelectionChanged">
                         <ListView.ItemContainerStyle>
-                            <Style TargetType="ListViewItem">
-                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                <Setter Property="Padding" Value="4,2"/>
-                                <Setter Property="MinHeight" Value="40"/>
-                            </Style>
+                            <Style TargetType="ListViewItem" BasedOn="{StaticResource FortivaCategoryListItem}"/>
                         </ListView.ItemContainerStyle>
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="services:VaultCategoryItem">
@@ -306,8 +294,15 @@
                             </DataTemplate>
                         </ListView.ItemTemplate>
                     </ListView>
-                    <TextBlock Grid.Row="2" Text="Add tags when editing an entry to organize passwords here."
-                               Style="{StaticResource FortivaMutedText}" TextWrapping="WrapWholeWords"/>
+                    <Button x:Name="NewCategoryBtn" Grid.Row="2" Click="NewCategory_Click"
+                            Style="{StaticResource FortivaSecondaryButton}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Margin="0,4,0,0">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE710;" FontSize="12"/>
+                            <TextBlock Text="New category"/>
+                        </StackPanel>
+                    </Button>
                 </Grid>
             </Border>
         </Grid>

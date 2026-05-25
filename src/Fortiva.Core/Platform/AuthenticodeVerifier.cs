@@ -7,24 +7,59 @@ namespace Fortiva.Core.Platform;
 public static class AuthenticodeVerifier
 {
     /// <summary>
-    /// Returns true when the file has an Authenticode signature, or when verification is skipped
-    /// (non-Windows, debug builds, or FORTIVA_ALLOW_UNSIGNED_BRIDGE=1 for local development).
+    /// Returns true when the file has a verifiable Authenticode signature chain,
+    /// or when verification is skipped (non-Windows or DEBUG builds).
     /// </summary>
     public static bool IsSigned(string filePath)
     {
         if (!OperatingSystem.IsWindows())
             return true;
 
-        if (string.Equals(Environment.GetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE"), "1", StringComparison.Ordinal))
-            return true;
-
 #if DEBUG
-        return true;
+        if (AllowUnsignedBridgeForDevelopment())
+            return true;
+        return VerifySignedFile(filePath);
 #else
+        if (AllowUnsignedBridgeForDevelopment())
+            return false;
+
+        return VerifySignedFile(filePath);
+#endif
+    }
+
+    /// <summary>DEBUG / test-only escape hatch — never honored in Release builds.</summary>
+    internal static bool AllowUnsignedBridgeForDevelopment()
+    {
+#if DEBUG
+        return string.Equals(
+            Environment.GetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE"),
+            "1",
+            StringComparison.Ordinal);
+#else
+        return false;
+#endif
+    }
+
+    private static bool VerifySignedFile(string filePath)
+    {
         try
         {
-            using var cert = X509Certificate2.CreateFromSignedFile(filePath);
-            return cert is not null;
+            var raw = X509Certificate.CreateFromSignedFile(filePath);
+            if (raw is null)
+                return false;
+
+            using var cert = raw as X509Certificate2 ?? new X509Certificate2(raw);
+            using var chain = new X509Chain();
+            chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+            chain.ChainPolicy.VerificationTime = DateTime.UtcNow;
+            if (!chain.Build(cert))
+                return false;
+
+#if !DEBUG
+            if (!PublisherMatchesExpected(cert))
+                return false;
+#endif
+            return true;
         }
         catch (CryptographicException)
         {
@@ -34,6 +69,11 @@ public static class AuthenticodeVerifier
         {
             return false;
         }
-#endif
+    }
+
+    private static bool PublisherMatchesExpected(X509Certificate2 cert)
+    {
+        var subject = cert.Subject ?? "";
+        return subject.Contains("icmclab", StringComparison.OrdinalIgnoreCase);
     }
 }

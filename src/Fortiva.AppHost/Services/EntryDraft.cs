@@ -7,4 +7,5 @@ public sealed class EntryDraft
     public string? Username { get; init; }
     public string? Password { get; init; }
     public string? Url { get; init; }
+    public IReadOnlyList<string>? Tags { get; init; }
 }

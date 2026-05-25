@@ -11,7 +11,7 @@
 | **C — External audit** | Hostile compliance reviewer | Fail anything undocumented, inconsistent, or unverifiable |
 | **D — Product review** | Senior dev + UX panel | Lockout paths, copy clarity, edition parity, accessibility of security controls |
 
-**Test baseline after Pass 3:** 137 Core + 4 AppHost = **141 tests passing**.
+**Test baseline after Pass 3:** 171 Core + 16 AppHost = **187 tests passing** (post pre-launch hardening pass).
 
 Related documents: [DEEP-AUDIT.md](DEEP-AUDIT.md), [SECURITY-PENTEST-REPORT.md](SECURITY-PENTEST-REPORT.md), [THREAT-MODEL.md](THREAT-MODEL.md).
 
@@ -77,7 +77,7 @@ Across three passes we **closed 28 findings** (Critical/High/Medium) and **docum
 
 | ID | Severity | Finding | Status |
 |----|----------|---------|--------|
-| P1-C1 | Critical | Hello stores MK in DPAPI-only blob (not TPM-gated) | **Accepted** — document; future TPM wrap |
+| P1-C1 | Critical | Hello stores MK in DPAPI-only blob (not TPM-gated) | **Fixed** — KeyCredential v4 + HelloVerificationGate on v3 fallback |
 | P1-H1 | High | Bridge session token on disk | **Accepted** — mitigated by lock + pipe ACL |
 | P1-H2 | High | Plaintext creds on named pipe | **Accepted** — local threat model |
 | P1-H6 | High | Policy not enforced in all Core mutations | **Partial** — export enforced; vault mutations UI-gated |
@@ -206,7 +206,7 @@ No new findings.
 
 | ID | Risk | Status |
 |----|------|--------|
-| C1 | Hello MK in DPAPI blob (not TPM-gated) | **Accepted** — UserConsentVerifier required; documented in `WindowsHelloKeyProtector`; TPM wrap is vNext |
+| C1 | Hello MK in DPAPI blob (not TPM-gated) | **Fixed** — KeyCredential v4 when available; v3 gated by HelloVerificationGate |
 | H1 | Bridge token on disk | **Closed** — in-memory token + `Fortiva.Bridge.Token` secured pipe |
 | H2 | Plaintext on pipe | **Accepted** — same-user local trust boundary (documented in THREAT-MODEL) |
 | H6 | Core mutation policy | **Closed** — `PolicyEnforcer` enforced in `VaultEngine` create/save/password change |

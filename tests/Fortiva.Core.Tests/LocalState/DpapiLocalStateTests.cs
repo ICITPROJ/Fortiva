@@ -24,6 +24,7 @@ public sealed class DpapiLocalStateTests
         {
             var result = store.CheckRollback(header, paranoiaMode: false);
             Assert.True(result.IsSuspicious);
+            Assert.True(result.ForceReadOnly);
             Assert.Contains(result.Warnings, w => w.Contains("local.state", StringComparison.OrdinalIgnoreCase));
             Assert.True(result.RequiresConfirmation);
         }

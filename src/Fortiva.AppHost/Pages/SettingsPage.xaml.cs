@@ -1,6 +1,5 @@
 using Fortiva.AppHost.Services;
 using Fortiva.AppHost.ViewModels;
-using Fortiva.Core.Hello;
 using Fortiva.Core.Password;
 using Fortiva.Core.Platform;
 using Fortiva.Core.Policy;
@@ -15,7 +14,7 @@ namespace Fortiva.AppHost.Pages;
 public sealed partial class SettingsPage : Page
 {
     private readonly ShellViewModel _vm = ShellViewModel.Current;
-    private readonly WindowsHelloKeyProtector _hello;
+    private readonly HelloUnlockManager _hello;
 
     private int _autoLockSeconds = 300;
     private int _clipboardSeconds = 30;
@@ -23,7 +22,7 @@ public sealed partial class SettingsPage : Page
     public SettingsPage()
     {
         InitializeComponent();
-        _hello = new WindowsHelloKeyProtector(
+        _hello = new HelloUnlockManager(
             FortivaPaths.GetHelloDataDirectory(_vm.IsEnterprise),
             _vm.IsEnterprise);
         LoadLogo();
@@ -375,7 +374,7 @@ public sealed partial class SettingsPage : Page
             await _vm.ChangeMasterPasswordAsync(NewPwd.Password);
 
             if (_hello.IsConfigured)
-                _vm.SyncHelloCredential(NewPwd.Password);
+                await _vm.SyncHelloCredentialAsync(NewPwd.Password);
 
             ShowInfo("Master password changed successfully.", InfoBarSeverity.Success);
             CurrentPwd.Password = NewPwd.Password = NewPwdConfirm.Password = "";
@@ -441,13 +440,13 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
-        _vm.SyncHelloCredential(pwdBox.Password);
+        await _vm.SyncHelloCredentialAsync(pwdBox.Password);
         HelloStatus.Text = "Windows Hello is configured.";
         RemoveHelloBtn.IsEnabled = true;
         ShowInfo("Windows Hello set up. You can unlock with face, fingerprint, or PIN.", InfoBarSeverity.Success);
     }
 
-    private void RemoveHello_Click(object sender, RoutedEventArgs e)
+    private async void RemoveHello_Click(object sender, RoutedEventArgs e)
     {
         if (_vm.IsEnterprise && _vm.Policy?.MandatoryWindowsHello == true)
         {
@@ -455,7 +454,7 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
-        _vm.ClearHelloCredential();
+        await _vm.ClearHelloCredentialAsync();
         HelloStatus.Text = "Windows Hello not configured.";
         RemoveHelloBtn.IsEnabled = false;
         ShowInfo("Windows Hello credential removed.");
@@ -481,7 +480,7 @@ public sealed partial class SettingsPage : Page
                     Title = "Install update?",
                     Content = new TextBlock
                     {
-                        Text = $"{result.Message}\n\nFortiva will close, install the update, and reopen automatically. Your vault is not affected.",
+                        Text = $"{result.Message}\n\nFortiva will close and install the update. Your vault stays in place, and an encrypted backup copy is saved locally before install (last {PreUpdateVaultBackup.MaxRetainedBackups} kept in %LocalAppData%\\FortivaPersonal\\pre-update-backups).",
                         TextWrapping = TextWrapping.WrapWholeWords
                     },
                     PrimaryButtonText = "Install now",

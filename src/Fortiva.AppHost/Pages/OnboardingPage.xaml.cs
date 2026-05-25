@@ -1,6 +1,5 @@
 using Fortiva.AppHost.Services;
 using Fortiva.AppHost.ViewModels;
-using Fortiva.Core.Hello;
 using Fortiva.Core.Password;
 using Fortiva.Core.Platform;
 using Fortiva.Core.Vault;
@@ -15,7 +14,7 @@ namespace Fortiva.AppHost.Pages;
 public sealed partial class OnboardingPage : Page
 {
     private readonly ShellViewModel _vm = ShellViewModel.Current;
-    private readonly WindowsHelloKeyProtector _helloProtector;
+    private readonly HelloUnlockManager _hello;
     private int _step;
     private readonly StackPanel[] _steps;
     private readonly Border[] _dots;
@@ -25,7 +24,7 @@ public sealed partial class OnboardingPage : Page
     public OnboardingPage()
     {
         InitializeComponent();
-        _helloProtector = new WindowsHelloKeyProtector(
+        _hello = new HelloUnlockManager(
             FortivaPaths.GetHelloDataDirectory(_vm.IsEnterprise),
             _vm.IsEnterprise);
         _steps = [Step0, Step1, Step2, Step3, Step4];
@@ -283,7 +282,7 @@ public sealed partial class OnboardingPage : Page
         }
 
         if (_vm.IsEnterprise && _vm.Policy?.MandatoryWindowsHello == true &&
-            _helloEnrollmentPending == false && !_helloProtector.IsConfigured)
+            _helloEnrollmentPending == false && !_hello.IsConfigured)
         {
             var helloAvailable = await HelloService.IsAvailableAsync().ConfigureAwait(true);
             if (helloAvailable)
@@ -331,7 +330,7 @@ public sealed partial class OnboardingPage : Page
             {
                 try
                 {
-                    _vm.SyncHelloCredentialFromSession();
+                    await _vm.SyncHelloCredentialFromSessionAsync();
                 }
                 catch (Exception helloEx)
                 {

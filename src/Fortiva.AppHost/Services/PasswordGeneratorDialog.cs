@@ -8,19 +8,28 @@ namespace Fortiva.AppHost.Services;
 /// <summary>Password generator dialog — same panel as the nav page, dialog action buttons.</summary>
 public static class PasswordGeneratorDialog
 {
-    public const int ContentMinWidth = 600;
+    public const int ContentMinWidth = 640;
 
-    public static async Task<string?> ShowAsync(
+    public sealed class Result
+    {
+        public required string Password { get; init; }
+        public IReadOnlyList<string> Tags { get; init; } = [];
+    }
+
+    public static async Task<Result?> ShowAsync(
         XamlRoot xamlRoot,
         ShellViewModel vm,
-        PasswordGeneratorOptions? initial = null)
+        PasswordGeneratorOptions? initial = null,
+        IEnumerable<string>? preselectedTags = null)
     {
-        var panel = new PasswordGeneratorPanel(vm, initial, PasswordGeneratorHostMode.Dialog);
+        var clipboard = new ClipboardService(vm.Policy, vm.PersonalSettings.ClipboardClearSeconds, vm.LogPolicyViolation);
+        var panel = new PasswordGeneratorPanel(vm, initial, PasswordGeneratorHostMode.Dialog, clipboard);
+        panel.SetSelectedTags(preselectedTags);
         var theme = FortivaControlTheme.ResolveAppTheme();
 
         var scroll = new ScrollViewer
         {
-            MaxHeight = 560,
+            MaxHeight = 620,
             MinWidth = ContentMinWidth,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -36,7 +45,6 @@ public static class PasswordGeneratorDialog
             Title = "Password generator",
             Content = shell,
             PrimaryButtonText = "Use password",
-            SecondaryButtonText = "Regenerate",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary
         };
@@ -50,20 +58,20 @@ public static class PasswordGeneratorDialog
         ContentDialogResult result;
         try
         {
-            do
-            {
-                result = await dlg.ShowAsync();
-                if (result == ContentDialogResult.Secondary) panel.Regenerate();
-            } while (result == ContentDialogResult.Secondary);
+            result = await dlg.ShowAsync();
         }
         finally
         {
             vm.ThemeChanged -= OnThemeChanged;
         }
 
-        return result == ContentDialogResult.Primary && !string.IsNullOrEmpty(panel.CurrentPassword)
-            ? panel.CurrentPassword
-            : null;
+        if (result != ContentDialogResult.Primary || string.IsNullOrEmpty(panel.CurrentPassword))
+            return null;
+
+        return new Result
+        {
+            Password = panel.CurrentPassword,
+            Tags = panel.GetSelectedTags()
+        };
     }
 }
-

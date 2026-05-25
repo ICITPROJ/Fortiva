@@ -65,7 +65,7 @@ public sealed class DpapiLocalStateStore
                     IsSuspicious = true,
                     Warnings = ["Local rollback state (local.state) is missing for an established vault."],
                     RequiresConfirmation = true,
-                    ForceReadOnly = paranoiaMode
+                    ForceReadOnly = true
                 };
             }
 

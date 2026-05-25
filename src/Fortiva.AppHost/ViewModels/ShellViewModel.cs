@@ -14,6 +14,7 @@ using Fortiva.Core.Platform;
 using Fortiva.Core.Policy;
 using Fortiva.Core.Services;
 using Fortiva.Core.Vault;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace Fortiva.AppHost.ViewModels;
 
@@ -258,6 +259,35 @@ public sealed class ShellViewModel : ViewModelBase
         BrandAppearanceChanged?.Invoke();
     }
 
+    /// <summary>All tags from entries plus user-saved empty categories.</summary>
+    public IReadOnlyList<string> GetKnownVaultTags()
+    {
+        var entryTags = Entries.SelectMany(e => e.Entry.Tags);
+        return VaultTagHelper.CollectKnownTags(entryTags, _personalSettings.VaultCategories);
+    }
+
+    /// <summary>Persist a sidebar category so it appears even with zero entries.</summary>
+    public void EnsureVaultCategory(string tag)
+    {
+        var normalized = VaultTagHelper.NormalizeTag(tag);
+        if (normalized is null)
+            return;
+
+        if (_personalSettings.VaultCategories.Any(c =>
+                string.Equals(c, normalized, StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        _personalSettings.VaultCategories.Add(normalized);
+        SavePersonalSettings();
+        StateChanged?.Invoke();
+    }
+
+    private void SyncVaultCategoriesFromTags(IEnumerable<string> tags)
+    {
+        foreach (var tag in tags)
+            EnsureVaultCategory(tag);
+    }
+
     public void SetThemePreference(AppThemePreference theme)
     {
         if (_appearance.Theme == theme)
@@ -413,6 +443,7 @@ public sealed class ShellViewModel : ViewModelBase
         _isLocking = true;
         try
         {
+            ClearClipboardOnLock();
             _session?.Lock();
             Entries.Clear();
             StatusMessage = "Locked";
@@ -430,6 +461,7 @@ public sealed class ShellViewModel : ViewModelBase
         _isLocking = true;
         try
         {
+            ClearClipboardOnLock();
             _session?.PanicLock();
             Entries.Clear();
             StatusMessage = "Locked";
@@ -442,6 +474,18 @@ public sealed class ShellViewModel : ViewModelBase
     }
 
     internal void InvokeOnUi(Action action) => RunOnUi(action);
+
+    private static void ClearClipboardOnLock()
+    {
+        try
+        {
+            Clipboard.Clear();
+        }
+        catch
+        {
+            /* best effort */
+        }
+    }
 
     private void RunOnUi(Action action)
     {
@@ -468,12 +512,14 @@ public sealed class ShellViewModel : ViewModelBase
 
     public void AddEntry(VaultEntry entry)
     {
+        SyncVaultCategoriesFromTags(entry.Tags);
         RequireSession().AddEntry(entry);
         RefreshEntries();
     }
 
     public void UpdateEntry(VaultEntry entry)
     {
+        SyncVaultCategoriesFromTags(entry.Tags);
         RequireSession().UpdateEntry(entry);
         RefreshEntries();
     }
@@ -770,23 +816,24 @@ public sealed class ShellViewModel : ViewModelBase
         => _session?.VerifyMasterPassword(candidatePassword) ?? false;
 
     /// <summary>Re-bind Windows Hello after master password verification.</summary>
-    public void SyncHelloCredential(string masterPassword)
+    public async Task SyncHelloCredentialAsync(string masterPassword)
     {
         if (!VerifyMasterPassword(masterPassword))
             throw new InvalidOperationException("Master password verification failed.");
-        SyncHelloCredentialFromSession();
+        await SyncHelloCredentialFromSessionAsync().ConfigureAwait(false);
     }
 
-    public void SyncHelloCredentialFromSession()
+    public async Task SyncHelloCredentialFromSessionAsync()
     {
+        RuntimeIntegrity.EnsureSafeForSensitiveOperation();
         var session = RequireSession();
         var mk = session.CopyMasterKeyForHelloSetup();
-        var hello = new WindowsHelloKeyProtector(
+        var manager = new HelloUnlockManager(
             FortivaPaths.GetHelloDataDirectory(IsEnterprise),
             IsEnterprise);
         try
         {
-            hello.StoreHelloBundle(mk, helloVerified: true);
+            await manager.StoreFromMasterKeyAsync(mk).ConfigureAwait(false);
         }
         finally
         {
@@ -794,12 +841,24 @@ public sealed class ShellViewModel : ViewModelBase
         }
     }
 
-    public void ClearHelloCredential()
+    public async Task ClearHelloCredentialAsync()
     {
-        new WindowsHelloKeyProtector(
+        await new HelloUnlockManager(
             FortivaPaths.GetHelloDataDirectory(IsEnterprise),
-            IsEnterprise).Clear();
+            IsEnterprise).ClearAsync().ConfigureAwait(false);
     }
+
+    [Obsolete("Use SyncHelloCredentialAsync")]
+    public void SyncHelloCredential(string masterPassword)
+        => SyncHelloCredentialAsync(masterPassword).GetAwaiter().GetResult();
+
+    [Obsolete("Use SyncHelloCredentialFromSessionAsync")]
+    public void SyncHelloCredentialFromSession()
+        => SyncHelloCredentialFromSessionAsync().GetAwaiter().GetResult();
+
+    [Obsolete("Use ClearHelloCredentialAsync")]
+    public void ClearHelloCredential()
+        => ClearHelloCredentialAsync().GetAwaiter().GetResult();
 
     public AuditLogger GetAuditLogger() =>
         IsEnterprise ? AuditLogger.ForEnterprise() : AuditLogger.ForPersonal();

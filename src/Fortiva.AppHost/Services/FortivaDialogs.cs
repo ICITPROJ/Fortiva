@@ -39,14 +39,15 @@ public static class FortivaDialogs
         theme ??= FortivaControlTheme.ResolveAppTheme();
         var shell = new Border
         {
-            Padding = new Thickness(8, 4, 8, 4),
+            Padding = new Thickness(20, 16, 20, 20),
             Background = FortivaControlTheme.GetBrush("FortivaSurfaceBrush", theme),
             BorderBrush = FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", theme),
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(12),
+            CornerRadius = new CornerRadius(16),
             Child = inner
         };
         FortivaThemeResources.MergeOnto(shell, theme);
+        FortivaSurfaceEffects.ApplyDialogElevation(shell);
         return shell;
     }
 

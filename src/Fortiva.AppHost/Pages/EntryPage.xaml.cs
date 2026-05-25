@@ -16,6 +16,7 @@ public sealed partial class EntryPage : Page
 {
     private readonly ShellViewModel _vm = ShellViewModel.Current;
     private readonly ClipboardService _clipboard;
+    private readonly VaultTagPickerPanel _tagPicker;
     private VaultEntry? _existing;
     private bool _isNew;
     private CancellationTokenSource? _revealCts;
@@ -26,6 +27,8 @@ public sealed partial class EntryPage : Page
     {
         InitializeComponent();
         _clipboard = new ClipboardService(_vm.Policy, _vm.PersonalSettings.ClipboardClearSeconds, _vm.LogPolicyViolation);
+        _tagPicker = new VaultTagPickerPanel(_vm);
+        TagsPickerHost.Child = _tagPicker.Root;
     }
 
     private void Page_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -99,7 +102,8 @@ public sealed partial class EntryPage : Page
             UsernameBox.Text = entry.Username;
             PasswordBox.Password = entry.Password;
             UrlBox.Text = entry.Url;
-            TagsBox.Text = string.Join(", ", entry.Tags);
+            _tagPicker.ReloadKnownTags();
+            _tagPicker.SetSelectedTags(entry.Tags);
             NotesBox.Text = entry.Notes;
             FavoriteBtn.IsChecked = entry.IsFavorite;
             SecureNoteToggle.IsOn = entry.IsSecureNote;
@@ -120,6 +124,8 @@ public sealed partial class EntryPage : Page
                 PasswordBox.Password = draft.Password;
                 UpdateStrength(draft.Password);
             }
+            if (draft.Tags is { Count: > 0 })
+                _tagPicker.SetSelectedTags(draft.Tags);
             TitleBox.Focus(FocusState.Programmatic);
         }
         else
@@ -129,6 +135,7 @@ public sealed partial class EntryPage : Page
         }
 
         ApplyReadOnlyState();
+        _tagPicker.ApplyTheme(this);
         ConfigureOtpSection();
         ApplyResponsiveLayout(ActualWidth);
     }
@@ -233,7 +240,8 @@ public sealed partial class EntryPage : Page
         UsernameBox.Text = "";
         PasswordBox.Password = "";
         UrlBox.Text = "";
-        TagsBox.Text = "";
+        _tagPicker.ReloadKnownTags();
+        _tagPicker.SetSelectedTags([]);
         NotesBox.Text = "";
         FavoriteBtn.IsChecked = false;
         SecureNoteToggle.IsOn = false;
@@ -251,7 +259,7 @@ public sealed partial class EntryPage : Page
         UsernameBox.IsEnabled = !ro;
         PasswordBox.IsEnabled = !ro;
         UrlBox.IsEnabled = !ro;
-        TagsBox.IsEnabled = !ro;
+        _tagPicker.SetEnabled(!ro);
         NotesBox.IsEnabled = !ro;
         FavoriteBtn.IsEnabled = !ro;
         SecureNoteToggle.IsEnabled = !ro;
@@ -284,10 +292,12 @@ public sealed partial class EntryPage : Page
 
     private async void GeneratePassword_Click(object sender, RoutedEventArgs e)
     {
-        var password = await PasswordGeneratorDialog.ShowAsync(Content.XamlRoot, _vm);
-        if (password is null) return;
-        PasswordBox.Password = password;
-        UpdateStrength(password);
+        var generated = await PasswordGeneratorDialog.ShowAsync(Content.XamlRoot, _vm);
+        if (generated is null) return;
+        PasswordBox.Password = generated.Password;
+        UpdateStrength(generated.Password);
+        if (generated.Tags.Count > 0)
+            _tagPicker.SetSelectedTags(generated.Tags);
     }
 
     private void RevealPassword_Click(object sender, RoutedEventArgs e)
@@ -368,7 +378,7 @@ public sealed partial class EntryPage : Page
         entry.Notes = NotesBox.Text;
         entry.IsFavorite = FavoriteBtn.IsChecked ?? false;
         entry.IsSecureNote = SecureNoteToggle.IsOn;
-        entry.Tags = TagsBox.Text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        entry.Tags = _tagPicker.GetSelectedTags().Take(VaultTagHelper.MaxTagsPerEntry).ToList();
         if (_vm.CanUseTotp)
         {
             entry.TotpSecret = string.IsNullOrWhiteSpace(TotpSecretBox.Password)

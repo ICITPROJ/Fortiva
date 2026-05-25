@@ -13,10 +13,13 @@ namespace Fortiva.Core.BrowserBridge;
 public sealed class BridgeUnlockBroker : IDisposable
 {
     public const string PipeName = "Fortiva.Bridge.UnlockRequest";
+    private const int MaxUnlockRequestsPerWindow = 8;
+    private static readonly TimeSpan UnlockRateLimitWindow = TimeSpan.FromMinutes(5);
 
     private readonly Func<bool> _isUnlocked;
     private readonly Func<bool> _vaultExists;
     private readonly Func<CancellationToken, Task<bool>> _requestUnlock;
+    private readonly BridgeUnlockRateLimiter _rateLimiter = new();
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
 
@@ -69,6 +72,9 @@ public sealed class BridgeUnlockBroker : IDisposable
         if (requestLine is null || !string.Equals(requestLine.Trim(), "UNLOCK", StringComparison.OrdinalIgnoreCase))
             return "INVALID";
 
+        if (!_rateLimiter.TryAllow())
+            return "RATE_LIMITED";
+
         if (!_vaultExists())
             return "NO_VAULT";
 
@@ -106,5 +112,27 @@ public sealed class BridgeUnlockBroker : IDisposable
     {
         _cts?.Cancel();
         _cts?.Dispose();
+    }
+
+    internal sealed class BridgeUnlockRateLimiter
+    {
+        private readonly object _gate = new();
+        private readonly Queue<DateTimeOffset> _requests = new();
+
+        public bool TryAllow()
+        {
+            lock (_gate)
+            {
+                var now = DateTimeOffset.UtcNow;
+                while (_requests.Count > 0 && now - _requests.Peek() > UnlockRateLimitWindow)
+                    _requests.Dequeue();
+
+                if (_requests.Count >= MaxUnlockRequestsPerWindow)
+                    return false;
+
+                _requests.Enqueue(now);
+                return true;
+            }
+        }
     }
 }

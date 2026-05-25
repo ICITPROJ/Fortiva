@@ -28,6 +28,7 @@ public sealed class WindowsHelloKeyProtectorTests : IDisposable
         var masterKey = RandomNumberGenerator.GetBytes(32);
 
         protector.StoreHelloBundle(masterKey, helloVerified: true);
+        HelloVerificationGate.MarkVerified();
         var loaded = protector.TryLoadMasterKey(helloVerified: true);
 
         Assert.NotNull(loaded);
@@ -71,5 +72,20 @@ public sealed class WindowsHelloKeyProtectorTests : IDisposable
     {
         var protector = new WindowsHelloKeyProtector(_dir);
         Assert.Null(protector.TryLoadMasterKey(helloVerified: true));
+    }
+
+    [Fact]
+    public void TryLoad_RequiresVerificationGate()
+    {
+        var protector = new WindowsHelloKeyProtector(_dir);
+        var masterKey = RandomNumberGenerator.GetBytes(32);
+        protector.StoreHelloBundle(masterKey, helloVerified: true);
+
+        Assert.Null(protector.TryLoadMasterKey(helloVerified: true));
+
+        HelloVerificationGate.MarkVerified();
+        var loaded = protector.TryLoadMasterKey(helloVerified: true);
+        Assert.NotNull(loaded);
+        SecureMemory.Zero(loaded!);
     }
 }

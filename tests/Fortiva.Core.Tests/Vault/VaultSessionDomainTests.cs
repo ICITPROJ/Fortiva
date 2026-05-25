@@ -16,6 +16,13 @@ public class VaultSessionDomainTests : IDisposable
         Directory.CreateDirectory(_dir);
     }
 
+    private static CredentialResponse ResolveWithNonce(VaultSession session, CredentialRequest req)
+    {
+        var listed = session.ListMatchesForDomain(req);
+        req.FillNonce = listed.FillNonce;
+        return session.ResolveForDomain(req);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_dir))
@@ -45,7 +52,7 @@ public class VaultSessionDomainTests : IDisposable
             Url = "https://login.example.com"
         });
 
-        var hit = session.ResolveForDomain(new CredentialRequest
+        var hit = ResolveWithNonce(session, new CredentialRequest
         {
             Domain = "login.example.com",
             Url = "https://login.example.com/signin"
@@ -54,10 +61,10 @@ public class VaultSessionDomainTests : IDisposable
         Assert.Equal("user", hit.Username);
         Assert.Equal("secret", hit.Password);
 
-        var parentMiss = session.ResolveForDomain(new CredentialRequest { Domain = "example.com" });
+        var parentMiss = ResolveWithNonce(session, new CredentialRequest { Domain = "example.com" });
         Assert.False(parentMiss.Found);
 
-        var evilHit = session.ResolveForDomain(new CredentialRequest
+        var evilHit = ResolveWithNonce(session, new CredentialRequest
         {
             Domain = "notexample.com",
             Url = "https://notexample.com/login"
@@ -82,7 +89,7 @@ public class VaultSessionDomainTests : IDisposable
             Url = "https://app.example.com/signin"
         });
 
-        var exact = session.ResolveForDomain(new CredentialRequest
+        var exact = ResolveWithNonce(session, new CredentialRequest
         {
             Domain = "app.example.com",
             Url = "https://app.example.com/signin"
@@ -90,7 +97,7 @@ public class VaultSessionDomainTests : IDisposable
         Assert.True(exact.Found);
         Assert.Equal("alice", exact.Username);
 
-        var parent = session.ResolveForDomain(new CredentialRequest { Domain = "example.com" });
+        var parent = ResolveWithNonce(session, new CredentialRequest { Domain = "example.com" });
         Assert.False(parent.Found);
     }
 
@@ -117,7 +124,7 @@ public class VaultSessionDomainTests : IDisposable
             Url = "https://github.com/login"
         });
 
-        var multi = session.ResolveForDomain(new CredentialRequest
+        var multi = ResolveWithNonce(session, new CredentialRequest
         {
             Domain = "github.com",
             Url = "https://github.com/login"
@@ -127,7 +134,7 @@ public class VaultSessionDomainTests : IDisposable
         Assert.Equal(2, multi.Matches!.Count);
 
         var personal = multi.Matches!.First(m => m.Title == "Personal GitHub");
-        var picked = session.ResolveForDomain(new CredentialRequest
+        var picked = ResolveWithNonce(session, new CredentialRequest
         {
             Domain = "github.com",
             Url = "https://github.com/login",
@@ -136,5 +143,61 @@ public class VaultSessionDomainTests : IDisposable
         Assert.True(picked.Found);
         Assert.Equal("Personal GitHub", picked.Title);
         Assert.Equal("me@home.com", picked.Username);
+    }
+
+    [Fact]
+    public void ResolveForDomain_RejectsUrlDomainMismatch()
+    {
+        var engine = new VaultEngine(_dir, DpapiScope.CurrentUser);
+        engine.CreateVault("mismatch-test!", SecurityLevel.Standard);
+        var session = new VaultSession(_dir, DpapiScope.CurrentUser);
+        session.Unlock("mismatch-test!");
+
+        session.AddEntry(new VaultEntry
+        {
+            Title = "Site",
+            Username = "user",
+            Password = "secret",
+            Url = "https://login.example.com"
+        });
+
+        var listed = session.ListMatchesForDomain(new CredentialRequest
+        {
+            Domain = "evil.example.com",
+            Url = "https://login.example.com/signin"
+        });
+        Assert.Equal("host_mismatch", listed.Error);
+
+        var blocked = session.ResolveForDomain(new CredentialRequest
+        {
+            Domain = "evil.example.com",
+            Url = "https://login.example.com/signin",
+            FillNonce = "00"
+        });
+        Assert.Equal("invalid_nonce", blocked.Error);
+    }
+
+    [Fact]
+    public void ResolveForDomain_RequiresFillNonce()
+    {
+        var engine = new VaultEngine(_dir, DpapiScope.CurrentUser);
+        engine.CreateVault("nonce-test!", SecurityLevel.Standard);
+        var session = new VaultSession(_dir, DpapiScope.CurrentUser);
+        session.Unlock("nonce-test!");
+
+        session.AddEntry(new VaultEntry
+        {
+            Title = "Site",
+            Username = "user",
+            Password = "secret",
+            Url = "https://example.com"
+        });
+
+        var blocked = session.ResolveForDomain(new CredentialRequest
+        {
+            Domain = "example.com",
+            Url = "https://example.com/login"
+        });
+        Assert.Equal("invalid_nonce", blocked.Error);
     }
 }

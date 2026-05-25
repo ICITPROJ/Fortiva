@@ -104,6 +104,20 @@ public sealed class UpdateService
             if (!hash.Equals(manifest.InstallerSha256.ToLowerInvariant(), StringComparison.Ordinal))
                 throw new InvalidOperationException("Installer failed pre-launch integrity check.");
 
+            var backup = PreUpdateVaultBackup.TryCreate(_vm.VaultDirectory, manifest.Version);
+            if (!string.IsNullOrEmpty(backup.ErrorMessage))
+                App.LogException("PreUpdateVaultBackup", new InvalidOperationException(backup.ErrorMessage));
+
+            // Re-verify immediately before launch to narrow TOCTOU window on %TEMP%.
+            var launchHash = Convert.ToHexString(
+                System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(dest)))
+                .ToLowerInvariant();
+            if (!launchHash.Equals(manifest.InstallerSha256.ToLowerInvariant(), StringComparison.Ordinal))
+                throw new InvalidOperationException("Installer changed after verification.");
+
+            if (!AuthenticodeVerifier.IsSigned(dest))
+                throw new InvalidOperationException("Installer is not Authenticode-signed.");
+
             Process.Start(new ProcessStartInfo
             {
                 FileName = dest,

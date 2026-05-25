@@ -5,15 +5,15 @@ using Fortiva.Core.Crypto;
 namespace Fortiva.Core.Hello;
 
 /// <summary>
-/// Protects a Hello unlock bundle with DPAPI. UserConsentVerifier must succeed before storing (helloVerified).
-/// The master key remains extractable by same-user malware — TPM-gated wrap is a future enhancement.
-/// Format v3 (plaintext before DPAPI):
-///   [FTWH magic][0x03][32-byte unlock key][wrapped master key blob]
+/// Protects a Hello unlock bundle with DPAPI (format v3).
+/// UserConsentVerifier must succeed before storing; TryLoadMasterKey requires HelloVerificationGate.
+/// For TPM-backed storage use HelloCredentialStore (format v4) via HelloUnlockManager.
 /// </summary>
 public sealed class WindowsHelloKeyProtector
 {
-    private static readonly byte[] MagicV3 = [0x46, 0x54, 0x57, 0x48, 0x03]; // "FTWH" + 0x03
-    private static ReadOnlySpan<byte> MkWrapAssociatedData => "Fortiva.Hello.MK.v1"u8;
+    public static readonly byte[] MagicV3 = [0x46, 0x54, 0x57, 0x48, 0x03]; // "FTWH" + 0x03
+    public static readonly byte[] MagicV4 = [0x46, 0x54, 0x57, 0x48, 0x04]; // "FTWH" + 0x04
+    internal static ReadOnlySpan<byte> MkWrapAssociatedData => "Fortiva.Hello.MK.v1"u8;
 
     private readonly string _protectorPath;
     private readonly DataProtectionScope _scope;
@@ -23,17 +23,37 @@ public sealed class WindowsHelloKeyProtector
     {
         Directory.CreateDirectory(dataDirectory);
         _protectorPath = Path.Combine(dataDirectory, "hello.keyprotect");
-        // Hello material is always per-user; never use LocalMachine DPAPI (cross-user decrypt on shared PCs).
         _scope = DataProtectionScope.CurrentUser;
-        _ = machineScope; // retained for call-site compatibility
+        _ = machineScope;
         _bindingEntropy = LoadOrCreateBindingEntropy(dataDirectory);
     }
 
     public bool IsConfigured => File.Exists(_protectorPath);
 
+    public static bool IsHardwareBackedBundle(string dataDirectory)
+    {
+        var path = Path.Combine(dataDirectory, "hello.keyprotect");
+        if (!File.Exists(path))
+            return false;
+
+        try
+        {
+            var head = File.ReadAllBytes(path);
+            return head.Length >= MagicV4.Length &&
+                   head.AsSpan(0, MagicV4.Length).SequenceEqual(MagicV4);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     /// <summary>Store Hello unlock material derived from the current session master key.</summary>
     public void StoreHelloBundle(ReadOnlySpan<byte> masterKey, bool helloVerified = true)
     {
+        if (!helloVerified)
+            throw new InvalidOperationException("Windows Hello verification is required before storing Hello credentials.");
+
         var unlockKey = RandomNumberGenerator.GetBytes(32);
         byte[]? wrappedMk = null;
         try
@@ -43,8 +63,8 @@ public sealed class WindowsHelloKeyProtector
             MagicV3.CopyTo(payload, 0);
             unlockKey.CopyTo(payload.AsSpan(MagicV3.Length));
             wrappedMk.CopyTo(payload, MagicV3.Length + unlockKey.Length);
-            var protectedBytes = ProtectedData.Protect(payload, BuildEntropy(helloVerified), _scope);
-            File.WriteAllBytes(_protectorPath, protectedBytes);
+            var protectedBytes = ProtectedData.Protect(payload, BuildEntropy(helloVerified: true), _scope);
+            HelloFileSecurity.WriteRestrictedFile(_protectorPath, protectedBytes);
         }
         finally
         {
@@ -56,11 +76,20 @@ public sealed class WindowsHelloKeyProtector
     /// <summary>Returns a copy of the master key for vault unlock, or null if missing/legacy/invalid.</summary>
     public byte[]? TryLoadMasterKey(bool helloVerified = true)
     {
-        if (!File.Exists(_protectorPath)) return null;
+        if (!helloVerified || !HelloVerificationGate.TryConsumeVerification())
+            return null;
+
+        if (!File.Exists(_protectorPath))
+            return null;
+
         try
         {
             var protectedBytes = File.ReadAllBytes(_protectorPath);
-            var plain = ProtectedData.Unprotect(protectedBytes, BuildEntropy(helloVerified), _scope);
+            if (protectedBytes.Length >= MagicV4.Length &&
+                protectedBytes.AsSpan(0, MagicV4.Length).SequenceEqual(MagicV4))
+                return null;
+
+            var plain = ProtectedData.Unprotect(protectedBytes, BuildEntropy(helloVerified: true), _scope);
             try
             {
                 if (plain.Length <= MagicV3.Length + 32) return null;
@@ -71,8 +100,7 @@ public sealed class WindowsHelloKeyProtector
                 var wrappedMk = plain[(MagicV3.Length + 32)..];
                 try
                 {
-                    var mk = CngAesGcm.Open(unlockKey, wrappedMk, MkWrapAssociatedData);
-                    return mk;
+                    return CngAesGcm.Open(unlockKey, wrappedMk, MkWrapAssociatedData);
                 }
                 finally
                 {
@@ -92,10 +120,16 @@ public sealed class WindowsHelloKeyProtector
 
     public void Clear()
     {
-        if (File.Exists(_protectorPath)) File.Delete(_protectorPath);
+        HelloFileSecurity.SecureDelete(_protectorPath);
         var bindingPath = Path.Combine(Path.GetDirectoryName(_protectorPath)!, "hello.binding");
-        if (File.Exists(bindingPath)) File.Delete(bindingPath);
+        HelloFileSecurity.SecureDelete(bindingPath);
     }
+
+    internal byte[] LoadBindingEntropy() => _bindingEntropy.ToArray();
+
+    internal string ProtectorPath => _protectorPath;
+
+    internal string BindingPath => Path.Combine(Path.GetDirectoryName(_protectorPath)!, "hello.binding");
 
     private byte[] BuildEntropy(bool helloVerified)
     {
@@ -114,7 +148,7 @@ public sealed class WindowsHelloKeyProtector
             return File.ReadAllBytes(path);
 
         var entropy = RandomNumberGenerator.GetBytes(32);
-        File.WriteAllBytes(path, entropy);
+        HelloFileSecurity.WriteRestrictedFile(path, entropy);
         return entropy;
     }
 }

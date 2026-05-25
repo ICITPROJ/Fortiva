@@ -13,7 +13,7 @@
 
 ## Assets
 
-- **Master Key (MK)** — derived via Argon2id; never written to disk.
+- **Master Key (MK)** — derived via Argon2id; held in memory while unlocked. Hello may store a **hardware-wrapped** (v4, KeyCredential/TPM) or **DPAPI-wrapped** (v3, verification-gated) copy for Windows Hello unlock — never the master password.
 - **Vault Key (VK)** — AES-256-GCM wrapped by MK; stored in vault header.
 - **Entries & integrity log** — encrypted under VK.
 - **License & policy blobs** — DPAPI-protected at rest; license signature verified with CNG (RSA).
@@ -28,7 +28,9 @@
 
 - **Rollback / downgrade**: monotonic counters + DPAPI local state; suspicious rollback forces read-only until user confirms.
 - **Corruption**: header MAC, sample decrypt checks, encrypted snapshots (`vault.fva.snapshot1..N`).
-- **Memory**: `CryptographicOperations.ZeroMemory` / `RtlSecureZeroMemory`; panic lock wipes session keys.
+- **Memory**: `CryptographicOperations.ZeroMemory` / `RtlSecureZeroMemory`; panic lock scrubs entry secrets and session keys; process mitigations at startup.
+- **Hello unlock**: v4 uses `KeyCredentialManager` + `RequestSignAsync` (TPM when available); v3 requires recent UserConsentVerifier success via `HelloVerificationGate`.
+- **Browser autofill**: user-initiated Fill only; exact hostname match; single-use fill nonce; tab re-validated on Fill click.
 - **Clipboard**: explicit copy, auto-clear, policy disable.
 - **Export**: encrypted default; plaintext requires explicit confirmation (Personal) or blocked (Enterprise policy).
 - **Enterprise seats**: `MaxSeats` enforced via `%PROGRAMDATA%\Fortiva\seats.dat` on unlock.

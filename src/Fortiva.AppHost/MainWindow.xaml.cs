@@ -55,6 +55,7 @@ public sealed partial class MainWindow : Window
                 {
                     if (_clipboardTimer is null)
                         StatusText.Text = _vm.StatusMessage;
+                    RefreshStatusChrome();
                 });
         };
 
@@ -82,6 +83,7 @@ public sealed partial class MainWindow : Window
             NavigationService.Current.Navigate<UnlockPage>();
 
         StatusText.Text = _vm.StatusMessage;
+        RefreshStatusChrome();
 
         ClipboardService.ClipboardCopied += OnClipboardCopied;
         _vm.BridgeUnlockRequested += OnBridgeUnlockRequested;
@@ -331,6 +333,7 @@ public sealed partial class MainWindow : Window
                 NavigationService.Current.Navigate<UnlockPage>();
                 NavigationService.Current.ClearHistory();
                 StatusText.Text = "Locked";
+                RefreshStatusChrome();
             }
             finally { _suppressNav = false; }
         });
@@ -345,6 +348,7 @@ public sealed partial class MainWindow : Window
             NavigationService.Current.ClearHistory();
             NavigationService.Current.Navigate<VaultPage>();
             StatusText.Text = _vm.StatusMessage;
+            RefreshStatusChrome();
 
             _suppressNav = true;
             try { NavView.SelectedItem = NavVault; }
@@ -386,6 +390,7 @@ public sealed partial class MainWindow : Window
         _clipboardTimer?.Stop();
         _clipboardTimer = null;
         StatusText.Text = _vm.StatusMessage;
+        RefreshStatusChrome();
     }
 
     private void PanicBtn_Click(object sender, RoutedEventArgs e)
@@ -401,6 +406,7 @@ public sealed partial class MainWindow : Window
             ThemeService.Apply(this, _vm.ThemePreference);
             ThemeService.ApplySystemBackdrop(this);
             RefreshBrandAppearance();
+            RefreshStatusChrome();
         });
     }
 
@@ -442,6 +448,24 @@ public sealed partial class MainWindow : Window
             BrandAssets.ApplyLogo(TitleBarLogo, paranoia);
             BrandAssets.ApplyWindowIcon(AppWindow, paranoia);
         });
+    }
+
+    private void RefreshStatusChrome()
+    {
+        var theme = FortivaControlTheme.ResolveAppTheme();
+        FortivaSurfaceEffects.ApplyIconButton(PanicBtn, PanicBtn);
+        if (_vm.IsUnlocked)
+        {
+            StatusIcon.Glyph = "\uE73E";
+            StatusIcon.Foreground = FortivaControlTheme.GetBrush("FortivaAccentBrush", theme, StatusIcon);
+            PanicIcon.Foreground = FortivaControlTheme.GetBrush("FortivaMutedBrush", theme, PanicIcon);
+        }
+        else
+        {
+            StatusIcon.Glyph = "\uE72E";
+            StatusIcon.Foreground = FortivaControlTheme.GetBrush("FortivaMutedBrush", theme, StatusIcon);
+            PanicIcon.Foreground = FortivaControlTheme.GetBrush("SystemFillColorCriticalBrush", theme, PanicIcon);
+        }
     }
 
     private void UpdateTitleBarInsets()

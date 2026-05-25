@@ -135,9 +135,8 @@
 
                     <!-- Tags -->
                     <StackPanel x:Name="TagsPanel" Grid.Row="3" Grid.Column="0" Spacing="6">
-                        <TextBlock Text="Tags (comma-separated)" Style="{StaticResource FortivaFieldLabel}"/>
-                        <TextBox x:Name="TagsBox" Style="{StaticResource FortivaTextBox}"
-                                 PlaceholderText="work, personal, finance…"/>
+                        <TextBlock Text="Categories" Style="{StaticResource FortivaFieldLabel}"/>
+                        <Border x:Name="TagsPickerHost"/>
                     </StackPanel>
 
                     <!-- Secure note toggle -->

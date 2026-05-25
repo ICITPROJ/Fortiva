@@ -65,4 +65,19 @@ public class BridgeUnlockBrokerTests
 
         Assert.Equal("FAILED", response);
     }
+
+    [Fact]
+    public async Task ProcessUnlockRequest_RateLimited_ReturnsRateLimited()
+    {
+        var broker = new BridgeUnlockBroker(
+            () => false,
+            () => true,
+            _ => Task.FromResult(false));
+
+        string? last = null;
+        for (var i = 0; i < 9; i++)
+            last = await broker.ProcessUnlockRequestAsync("UNLOCK", CancellationToken.None);
+
+        Assert.Equal("RATE_LIMITED", last);
+    }
 }

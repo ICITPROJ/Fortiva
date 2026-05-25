@@ -3,6 +3,7 @@ using Fortiva.Core.Password;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Windows.UI;
 
 namespace Fortiva.AppHost.Services;
 
@@ -17,6 +18,7 @@ public enum PasswordGeneratorHostMode
 public sealed class PasswordGeneratorPanel
 {
     private readonly ShellViewModel _vm;
+    private readonly ClipboardService _clipboard;
     private readonly PasswordGeneratorOptions _options;
     private readonly ComboBox _presetBox;
     private readonly TextBlock _lengthLabel;
@@ -41,8 +43,14 @@ public sealed class PasswordGeneratorPanel
     private readonly Grid _ambiguousRow = null!;
     private readonly Grid _requireEachRow = null!;
     private readonly Border _optionsShell;
+    private readonly VaultTagPickerPanel _tagPicker;
+    private readonly TextBlock _categoriesLabel;
     private readonly TextBlock? _introText;
-    private readonly TextBlock _previewLabel;
+    private readonly TextBlock _previewHint;
+    private readonly Button _copyPreviewBtn;
+    private readonly TextBlock _optionsHeader;
+    private readonly Border _categoriesDivider;
+    private readonly Button? _dialogRegenerateBtn;
     private readonly IReadOnlyList<TextBlock> _sectionLabels;
     private readonly List<ToggleSwitch> _charToggles = [];
     private readonly List<TextBlock> _charToggleLabels = [];
@@ -51,12 +59,22 @@ public sealed class PasswordGeneratorPanel
 
     public string CurrentPassword => _preview.Text;
 
+    public IReadOnlyList<string> GetSelectedTags() => _tagPicker.GetSelectedTags();
+
+    public void SetSelectedTags(IEnumerable<string>? tags) => _tagPicker.SetSelectedTags(tags);
+
     public PasswordGeneratorPanel(
         ShellViewModel vm,
         PasswordGeneratorOptions? initial = null,
-        PasswordGeneratorHostMode hostMode = PasswordGeneratorHostMode.Page)
+        PasswordGeneratorHostMode hostMode = PasswordGeneratorHostMode.Page,
+        ClipboardService? clipboard = null)
     {
         _vm = vm;
+        _clipboard = clipboard ?? new ClipboardService(
+            vm.Policy,
+            vm.PersonalSettings.ClipboardClearSeconds,
+            vm.LogPolicyViolation);
+        _tagPicker = new VaultTagPickerPanel(vm);
         _options = initial?.Clone() ?? PasswordGeneratorOptions.Default;
 
         _presetBox = new ComboBox
@@ -138,32 +156,66 @@ public sealed class PasswordGeneratorPanel
         _ambiguousToggle = CreateCharToggle(_options.ExcludeAmbiguous);
         _requireEachToggle = CreateCharToggle(_options.RequireFromEachGroup);
 
-        _previewLabel = CreateSectionLabel("Preview (select text to copy)");
         _preview = new TextBlock
         {
             FontFamily = new FontFamily("Consolas"),
-            FontSize = 16,
+            FontSize = 17,
             TextWrapping = TextWrapping.Wrap,
-            IsTextSelectionEnabled = true
+            IsTextSelectionEnabled = true,
+            Margin = new Thickness(0, 8, 0, 0)
         };
+
+        var previewTitle = CreateSectionLabel("Generated password");
+        _previewHint = new TextBlock
+        {
+            Text = "Select to copy",
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+
+        var previewHeader = new Grid { ColumnSpacing = 8 };
+        previewHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        previewHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        previewHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(previewTitle, 0);
+        Grid.SetColumn(_previewHint, 1);
+
+        _copyPreviewBtn = new Button
+        {
+            Content = new FontIcon { Glyph = "\uE8C8", FontSize = 14 }
+        };
+        ToolTipService.SetToolTip(_copyPreviewBtn, "Copy password");
+        _copyPreviewBtn.Click += (_, _) => CopyPreviewToClipboard();
+        Grid.SetColumn(_copyPreviewBtn, 2);
+
+        previewHeader.Children.Add(previewTitle);
+        previewHeader.Children.Add(_previewHint);
+        previewHeader.Children.Add(_copyPreviewBtn);
+
+        var previewInner = new StackPanel { Spacing = 0 };
+        previewInner.Children.Add(previewHeader);
+        previewInner.Children.Add(_preview);
+
         _previewBorder = new Border
         {
             Padding = new Thickness(16, 14, 16, 14),
-            MinHeight = 56,
-            CornerRadius = new CornerRadius(10),
-            Child = _preview
+            MinHeight = 72,
+            CornerRadius = new CornerRadius(12),
+            Child = previewInner
         };
         FortivaControlTheme.ApplyPreviewSurface(_previewBorder, _preview);
-        _preview.FontSize = 17;
 
-        _strengthLabel = new TextBlock { FontSize = 12 };
-        _errorLabel = new TextBlock { FontSize = 12, Visibility = Visibility.Collapsed };
+        _strengthLabel = new TextBlock { FontSize = 12, Margin = new Thickness(2, 0, 0, 0) };
+        _errorLabel = new TextBlock { FontSize = 12, Visibility = Visibility.Collapsed, Margin = new Thickness(2, 0, 0, 0) };
 
         _sectionLabels =
         [
             _lengthLabel, _wordCountLabel, _separatorLabel, _charSetsHeader,
-            _symbolsLabel, _customCharsetLabel, _previewLabel
+            _symbolsLabel, _customCharsetLabel, previewTitle
         ];
+        _categoriesLabel = CreateSectionLabel("Categories (optional)");
+        _optionsHeader = CreateSectionLabel("Generation rules");
+        _categoriesDivider = new Border { Height = 1, Opacity = 0.55, Margin = new Thickness(0, 4, 0, 8) };
 
         void ApplyPresetUi()
         {
@@ -248,6 +300,7 @@ public sealed class PasswordGeneratorPanel
                 _preview.Text = pw;
                 var analysis = _vm.AnalyzeStrength(pw);
                 _strengthLabel.Text = $"{analysis.Label} · {analysis.EntropyBits:F0} bits entropy";
+                ApplyStrengthColor(analysis.Strength);
             }
             catch (Exception ex)
             {
@@ -273,14 +326,14 @@ public sealed class PasswordGeneratorPanel
 
         RegenerateInternal = Regenerate;
 
-        var lengthHeader = new Grid { ColumnSpacing = 8 };
+        var lengthHeader = new Grid { ColumnSpacing = 8, MinHeight = 24 };
         lengthHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         lengthHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         lengthHeader.Children.Add(_lengthLabel);
         Grid.SetColumn(_lengthValue, 1);
         lengthHeader.Children.Add(_lengthValue);
 
-        var leftOptions = new StackPanel { Spacing = 10 };
+        var leftOptions = new StackPanel { Spacing = 12, VerticalAlignment = VerticalAlignment.Top };
         leftOptions.Children.Add(CreateSectionLabel("Preset"));
         leftOptions.Children.Add(_presetBox);
         leftOptions.Children.Add(lengthHeader);
@@ -294,7 +347,7 @@ public sealed class PasswordGeneratorPanel
         leftOptions.Children.Add(_ambiguousRow);
         leftOptions.Children.Add(_requireEachRow);
 
-        var rightOptions = new StackPanel { Spacing = 10 };
+        var rightOptions = new StackPanel { Spacing = 12, VerticalAlignment = VerticalAlignment.Top };
         rightOptions.Children.Add(_charSetsHeader);
         rightOptions.Children.Add(_charOptionsPanel);
         rightOptions.Children.Add(_symbolsLabel);
@@ -302,9 +355,9 @@ public sealed class PasswordGeneratorPanel
         rightOptions.Children.Add(_customCharsetLabel);
         rightOptions.Children.Add(_customCharsetBox);
 
-        var optionsGrid = new Grid { ColumnSpacing = 28 };
-        optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var optionsGrid = new Grid { ColumnSpacing = 32 };
+        optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 240 });
+        optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 240 });
         Grid.SetColumn(leftOptions, 0);
         Grid.SetColumn(rightOptions, 1);
         optionsGrid.Children.Add(leftOptions);
@@ -312,16 +365,16 @@ public sealed class PasswordGeneratorPanel
 
         _optionsShell = new Border
         {
-            CornerRadius = new CornerRadius(12),
-            Padding = new Thickness(16),
+            CornerRadius = new CornerRadius(14),
+            Padding = new Thickness(20, 18, 20, 18),
             BorderThickness = new Thickness(1),
             Child = optionsGrid
         };
 
         Root = new StackPanel
         {
-            Spacing = 14,
-            MinWidth = 560,
+            Spacing = 16,
+            MinWidth = 580,
             HorizontalAlignment = HorizontalAlignment.Stretch
         };
 
@@ -331,16 +384,43 @@ public sealed class PasswordGeneratorPanel
             {
                 Text = "Create strong passwords for new accounts or rotate existing ones.",
                 TextWrapping = TextWrapping.WrapWholeWords,
-                FontSize = 13
+                FontSize = 13,
+                Margin = new Thickness(0, 0, 0, 4)
             };
             Root.Children.Add(_introText);
         }
 
-        Root.Children.Add(_previewLabel);
         Root.Children.Add(_previewBorder);
         Root.Children.Add(_strengthLabel);
         Root.Children.Add(_errorLabel);
+
+        if (hostMode == PasswordGeneratorHostMode.Dialog)
+        {
+            _dialogRegenerateBtn = new Button
+            {
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(0, 0, 0, 4),
+                Content = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 6,
+                    Children =
+                    {
+                        new FontIcon { Glyph = "\uE72C", FontSize = 14 },
+                        new TextBlock { Text = "Regenerate" }
+                    }
+                }
+            };
+            _dialogRegenerateBtn.Click += (_, _) => Regenerate();
+            Root.Children.Add(_dialogRegenerateBtn);
+        }
+
+        Root.Children.Add(_optionsHeader);
         Root.Children.Add(_optionsShell);
+
+        Root.Children.Add(_categoriesDivider);
+        Root.Children.Add(_categoriesLabel);
+        Root.Children.Add(_tagPicker.Root);
 
         _vm.ThemeChanged += ApplyThemeResources;
 
@@ -353,6 +433,37 @@ public sealed class PasswordGeneratorPanel
 
     public void Regenerate() => RegenerateInternal();
 
+    private void CopyPreviewToClipboard()
+    {
+        if (string.IsNullOrEmpty(_preview.Text))
+            return;
+
+        _clipboard.RefreshPolicy(_vm.Policy, _vm.PersonalSettings.ClipboardClearSeconds);
+        try
+        {
+            _clipboard.CopyText(_preview.Text);
+        }
+        catch (InvalidOperationException)
+        {
+            _previewHint.Text = "Copy blocked";
+            return;
+        }
+
+        _previewHint.Text = "Copied!";
+        FortivaSurfaceEffects.PulseSuccess(_previewBorder);
+        _ = ResetCopyHintAsync();
+    }
+
+    private async Task ResetCopyHintAsync()
+    {
+        try
+        {
+            await Task.Delay(1600);
+            _previewHint.Text = "Select to copy";
+        }
+        catch { /* dialog closed */ }
+    }
+
     public void ApplyThemeResources()
     {
         var theme = FortivaControlTheme.ResolveAppTheme();
@@ -360,10 +471,12 @@ public sealed class PasswordGeneratorPanel
         FortivaThemeResources.MergeOnto(Root, theme);
 
         _optionsShell.RequestedTheme = theme;
-        _optionsShell.Background = FortivaControlTheme.GetBrush("FortivaSurfaceSubtleBrush", theme, Root);
+        _optionsShell.Background = FortivaControlTheme.GetBrush("FortivaGlassFillBrush", theme, Root);
         _optionsShell.BorderBrush = FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", theme, Root);
+        FortivaSurfaceEffects.ApplyCardElevation(_optionsShell, 4f);
 
         FortivaControlTheme.ApplyPreviewSurface(_previewBorder, _preview, Root);
+        FortivaSurfaceEffects.ApplyIconButton(_copyPreviewBtn, Root);
         FortivaControlTheme.ApplyComboBox(_presetBox, Root);
         FortivaControlTheme.TryApplyStyle(_presetBox, "FortivaComboBox");
         FortivaControlTheme.ApplyTextBox(_separatorBox, Root);
@@ -383,8 +496,15 @@ public sealed class PasswordGeneratorPanel
         if (_introText is not null)
             FortivaControlTheme.ApplyBodyText(_introText, Root);
 
-        foreach (var label in _sectionLabels)
+        if (_dialogRegenerateBtn is not null)
+            FortivaControlTheme.ApplySecondaryButton(_dialogRegenerateBtn, Root);
+
+        _tagPicker.ApplyTheme(Root);
+
+        foreach (var label in _sectionLabels.Append(_categoriesLabel).Append(_optionsHeader))
             FortivaControlTheme.ApplySectionLabel(label, context: Root);
+
+        _categoriesDivider.Background = FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", theme, Root);
 
         foreach (var label in _charToggleLabels)
             FortivaControlTheme.ApplyBodyText(label, Root);
@@ -392,6 +512,27 @@ public sealed class PasswordGeneratorPanel
         _errorLabel.Foreground = FortivaControlTheme.GetBrush("SystemFillColorCriticalBrush", theme, Root);
         FortivaControlTheme.ApplyMutedText(_strengthLabel, Root);
         FortivaControlTheme.ApplyMutedText(_lengthValue, Root);
+        FortivaControlTheme.ApplyMutedText(_previewHint, Root);
+
+        if (!string.IsNullOrEmpty(_preview.Text))
+        {
+            var analysis = _vm.AnalyzeStrength(_preview.Text);
+            ApplyStrengthColor(analysis.Strength);
+        }
+    }
+
+    private void ApplyStrengthColor(PasswordStrength strength)
+    {
+        _strengthLabel.Foreground = strength switch
+        {
+            PasswordStrength.VeryWeak or PasswordStrength.Weak =>
+                new SolidColorBrush(Color.FromArgb(255, 220, 50, 50)),
+            PasswordStrength.Fair =>
+                new SolidColorBrush(Color.FromArgb(255, 200, 130, 0)),
+            PasswordStrength.Strong =>
+                new SolidColorBrush(Color.FromArgb(255, 0, 160, 80)),
+            _ => FortivaControlTheme.GetBrush("FortivaAccentBrush", FortivaControlTheme.ResolveAppTheme(), Root)
+        };
     }
 
     private static TextBlock CreateSectionLabel(string text, bool small = false)

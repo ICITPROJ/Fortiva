@@ -16,7 +16,15 @@ public static class VaultCategoryFilter
     public const string FavoritesKey = "__favorites__";
     public const string UntaggedKey = "__untagged__";
 
-    public static IReadOnlyList<VaultCategoryItem> BuildCategories(IEnumerable<VaultEntryViewModel> entries)
+    public static bool IsUserTag(string? key)
+        => !string.IsNullOrEmpty(key)
+           && key != AllKey
+           && key != FavoritesKey
+           && key != UntaggedKey;
+
+    public static IReadOnlyList<VaultCategoryItem> BuildCategories(
+        IEnumerable<VaultEntryViewModel> entries,
+        IEnumerable<string>? savedCategories = null)
     {
         var all = entries.ToList();
         var items = new List<VaultCategoryItem>
@@ -44,22 +52,38 @@ public static class VaultCategoryFilter
             }
         };
 
-        var tags = all
-            .SelectMany(e => e.Entry.Tags)
-            .Select(t => t.Trim())
-            .Where(t => t.Length > 0)
-            .GroupBy(t => t, StringComparer.OrdinalIgnoreCase)
-            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
+        var tagCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var tag in tags)
+        foreach (var saved in savedCategories ?? [])
+        {
+            var normalized = VaultTagHelper.NormalizeTag(saved);
+            if (normalized is not null)
+                tagCounts.TryAdd(normalized, 0);
+        }
+
+        foreach (var entry in all)
+        {
+            var tagsInEntry = entry.Entry.Tags
+                .Select(VaultTagHelper.NormalizeTag)
+                .Where(t => t is not null)
+                .Cast<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var normalized in tagsInEntry)
+            {
+                tagCounts.TryGetValue(normalized, out var count);
+                tagCounts[normalized] = count + 1;
+            }
+        }
+
+        foreach (var tag in tagCounts.OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase))
         {
             items.Add(new VaultCategoryItem
             {
                 Key = tag.Key,
                 Label = tag.Key,
                 IconGlyph = "\uE8E7",
-                Count = all.Count(e =>
-                    e.Entry.Tags.Any(t => string.Equals(t.Trim(), tag.Key, StringComparison.OrdinalIgnoreCase)))
+                Count = tag.Value
             });
         }
 

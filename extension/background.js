@@ -51,6 +51,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         domain: message.domain || "",
         url: message.url,
         entryId: message.entryId || undefined,
+        fillNonce: message.fillNonce || undefined,
       },
     }).then(sendResponse);
     return true;

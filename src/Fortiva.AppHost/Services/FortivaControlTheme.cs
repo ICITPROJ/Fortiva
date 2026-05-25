@@ -112,12 +112,20 @@ public static class FortivaControlTheme
         FortivaThemeResources.MergeOnto(border, theme);
         border.RequestedTheme = theme;
         content.RequestedTheme = theme;
-        border.Background = theme == ElementTheme.Light
-            ? GetBrush("FortivaPreviewGradientBrush", theme, border)
-            : GetBrush("FortivaAccentGlowBrush", theme, border);
+        border.Background = GetBrush("FortivaPreviewGradientBrush", theme, border);
         border.BorderBrush = GetBrush("FortivaGlassBorderBrush", theme, border);
         border.BorderThickness = new Thickness(1);
+        border.CornerRadius = new CornerRadius(12);
         content.Foreground = GetBrush("FortivaHeadingBrush", theme, border);
+        FortivaSurfaceEffects.ApplyCardElevation(border, 4f);
+    }
+
+    public static void ApplyAccentButton(Button button, FrameworkElement? context = null)
+    {
+        var theme = ResolveAppTheme();
+        FortivaThemeResources.MergeOnto(button, theme);
+        button.RequestedTheme = theme;
+        TryApplyStyle(button, "FortivaAccentButton");
     }
 
     public static void ApplySectionLabel(TextBlock label, bool muted = false, FrameworkElement? context = null)

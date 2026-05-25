@@ -27,7 +27,7 @@ public sealed partial class PasswordGeneratorPage : Page
 
         if (_panel is null)
         {
-            _panel = new PasswordGeneratorPanel(_vm, hostMode: PasswordGeneratorHostMode.Page);
+            _panel = new PasswordGeneratorPanel(_vm, hostMode: PasswordGeneratorHostMode.Page, clipboard: _clipboard);
             GeneratorHost.Children.Add(_panel.Root);
         }
         else
@@ -56,6 +56,7 @@ public sealed partial class PasswordGeneratorPage : Page
             return;
 
         _clipboard.CopyPassword(_panel.CurrentPassword);
+        FortivaSurfaceEffects.PulseSuccess(CopyPasswordBtn);
         StatusBar.Message = "Password copied to clipboard.";
         StatusBar.Severity = InfoBarSeverity.Success;
         StatusBar.IsOpen = true;
@@ -76,6 +77,6 @@ public sealed partial class PasswordGeneratorPage : Page
         }
 
         NavigationService.Current.Navigate<EntryPage>(
-            new EntryDraft { Password = _panel.CurrentPassword }, animate: true);
+            new EntryDraft { Password = _panel.CurrentPassword, Tags = _panel.GetSelectedTags() }, animate: true);
     }
 }

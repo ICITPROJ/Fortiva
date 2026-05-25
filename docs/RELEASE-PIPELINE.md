@@ -186,6 +186,13 @@ See `packaging/intune/` and [`UPDATE-STRATEGY.md`](UPDATE-STRATEGY.md).
 - Installers must match `FortivaPersonal-{version}-Setup.exe`.
 - Manifest must include a real SHA-256 (placeholder hashes are rejected client-side).
 - Legacy `studio.icmclab.cloud` URLs remain allowed for older builds.
+- Release builds require **Authenticode signing** (icmclab publisher) for bridge clients and update install.
+- Pre-update vault backup runs automatically before Personal auto-update (`pre-update-backups/`, last 3 kept).
+
+### Post-release user actions (when extension or Hello changed)
+
+1. **Browser extension** — Fortiva → Settings → Browser extension → **Connect browser**, then **Reload extension** in each browser profile.
+2. **Windows Hello** — Existing Hello users may re-enroll once in Settings so v4 hardware-backed credentials apply when KeyCredential is available.
 
 ---
 

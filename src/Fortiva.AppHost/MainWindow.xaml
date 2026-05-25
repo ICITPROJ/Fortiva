@@ -17,7 +17,8 @@
         </Grid.RowDefinitions>
 
         <!-- Custom title bar area -->
-        <Grid x:Name="AppTitleBar" Height="48" Background="{ThemeResource FortivaTitleBarBrush}">
+        <Grid x:Name="AppTitleBar" Height="48" Background="{ThemeResource FortivaTitleBarBrush}"
+              BorderBrush="{ThemeResource FortivaGlassBorderBrush}" BorderThickness="0,0,0,1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="LeftPaddingColumn" Width="0"/>
                 <ColumnDefinition Width="Auto"/>
@@ -30,15 +31,20 @@
                 <TextBlock x:Name="TitleText" FontWeight="SemiBold" FontSize="14"
                            Foreground="{ThemeResource FortivaHeadingBrush}" VerticalAlignment="Center"/>
             </StackPanel>
-            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" Margin="8,0,4,0" VerticalAlignment="Center">
-                <TextBlock x:Name="StatusText" FontSize="11" MaxWidth="240"
-                           TextTrimming="CharacterEllipsis"
-                           Foreground="{ThemeResource FortivaBodyBrush}" VerticalAlignment="Center"/>
-                <Button x:Name="PanicBtn" ToolTipService.ToolTip="Panic Lock (wipe + hide)"
-                        Width="32" Height="32" Padding="0"
-                        Background="Transparent" BorderThickness="0"
+            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" Margin="8,0,8,0" VerticalAlignment="Center">
+                <Border Style="{StaticResource FortivaStatusPill}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon x:Name="StatusIcon" Glyph="&#xE72E;" FontSize="11"
+                                  VerticalAlignment="Center"/>
+                        <TextBlock x:Name="StatusText" FontSize="11" MaxWidth="220"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{ThemeResource FortivaBodyBrush}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+                <Button x:Name="PanicBtn" Style="{StaticResource FortivaIconButton}"
+                        ToolTipService.ToolTip="Panic lock — wipe clipboard and hide window"
                         Click="PanicBtn_Click">
-                    <FontIcon Glyph="&#xE785;" FontSize="14" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                    <FontIcon x:Name="PanicIcon" Glyph="&#xE946;" FontSize="14"/>
                 </Button>
             </StackPanel>
         </Grid>
@@ -52,6 +58,9 @@
                         PaneDisplayMode="Left"
                         OpenPaneLength="220"
                         SelectionChanged="NavView_SelectionChanged">
+            <NavigationView.Resources>
+                <Style TargetType="NavigationViewItem" BasedOn="{StaticResource FortivaNavigationViewItem}"/>
+            </NavigationView.Resources>
             <NavigationView.MenuItems>
                 <NavigationViewItem x:Name="NavLock"    Tag="Lock"       Content="Lock vault">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE72E;"/></NavigationViewItem.Icon>

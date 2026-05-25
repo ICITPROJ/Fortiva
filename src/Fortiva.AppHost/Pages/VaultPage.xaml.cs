@@ -119,7 +119,7 @@ public sealed partial class VaultPage : Page
 
     private void RefreshCategories()
     {
-        var categories = VaultCategoryFilter.BuildCategories(_vm.Entries);
+        var categories = VaultCategoryFilter.BuildCategories(_vm.Entries, _vm.PersonalSettings.VaultCategories);
         CategoryList.SelectionChanged -= CategoryList_SelectionChanged;
         CategoryList.ItemsSource = categories;
 
@@ -148,6 +148,27 @@ public sealed partial class VaultPage : Page
 
         _selectedCategoryKey = item.Key;
         RefreshList();
+    }
+
+    private IReadOnlyList<string> GetPreselectedTagsForNewEntry()
+        => VaultCategoryFilter.IsUserTag(_selectedCategoryKey) ? [_selectedCategoryKey] : [];
+
+    private async void NewCategory_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.IsReadOnly)
+        {
+            await ShowInfoAsync("Vault is read-only.");
+            return;
+        }
+
+        var tag = await VaultCategoryDialog.ShowCreateAsync(Content.XamlRoot, _vm);
+        if (tag is null)
+            return;
+
+        _selectedCategoryKey = tag;
+        RefreshCategories();
+        RefreshList();
+        _vm.StatusMessage = $"Category “{tag}” created.";
     }
 
     private string GetSelectedCategoryLabel()
@@ -234,8 +255,9 @@ public sealed partial class VaultPage : Page
     private async Task GeneratePasswordAsync()
     {
         if (!_vm.IsUnlocked) return;
-        var password = await PasswordGeneratorDialog.ShowAsync(Content.XamlRoot, _vm);
-        if (password is null) return;
+        var generated = await PasswordGeneratorDialog.ShowAsync(
+            Content.XamlRoot, _vm, preselectedTags: GetPreselectedTagsForNewEntry());
+        if (generated is null) return;
 
         var create = new ContentDialog
         {
@@ -252,12 +274,12 @@ public sealed partial class VaultPage : Page
         if (choice == ContentDialogResult.Primary)
         {
             NavigationService.Current.Navigate<EntryPage>(
-                new EntryDraft { Password = password }, animate: true);
+                new EntryDraft { Password = generated.Password, Tags = generated.Tags }, animate: true);
             return;
         }
 
         if (choice == ContentDialogResult.Secondary)
-            CopyEntryField(password, isPassword: true);
+            CopyEntryField(generated.Password, isPassword: true);
     }
 
     private async void AddEntry_Click(object sender, RoutedEventArgs e)
@@ -266,7 +288,7 @@ public sealed partial class VaultPage : Page
     private async Task QuickAddAsync()
     {
         if (_vm.IsReadOnly) { await ShowInfoAsync("Vault is read-only."); return; }
-        var outcome = await QuickAddEntryDialog.ShowAsync(Content.XamlRoot, _vm);
+        var outcome = await QuickAddEntryDialog.ShowAsync(Content.XamlRoot, _vm, GetPreselectedTagsForNewEntry());
         if (outcome.Result == QuickAddEntryDialog.QuickAddResult.Saved)
         {
             RefreshList();
@@ -279,7 +301,8 @@ public sealed partial class VaultPage : Page
     private void AddEntryFull_Click(object sender, RoutedEventArgs e)
     {
         if (_vm.IsReadOnly) { _ = ShowInfoAsync("Vault is read-only."); return; }
-        NavigationService.Current.Navigate<EntryPage>(null, animate: true);
+        NavigationService.Current.Navigate<EntryPage>(
+            new EntryDraft { Tags = GetPreselectedTagsForNewEntry() }, animate: true);
     }
 
     private async Task ShowInfoAsync(string message)

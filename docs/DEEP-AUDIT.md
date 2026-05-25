@@ -19,7 +19,7 @@ This document lists every finding by severity. Items marked **FIXED** were addre
 
 | ID | Area | Finding | Impact | Status |
 |----|------|---------|--------|--------|
-| C1 | Hello / Core | `WindowsHelloKeyProtector` stores MK in DPAPI blob; Hello is a **UI consent gate**, not TPM-gated key wrap | Local attacker with user session can extract MK without biometrics | OPEN |
+| C1 | Hello / Core | `WindowsHelloKeyProtector` stores MK in DPAPI blob; Hello is a **UI consent gate**, not TPM-gated key wrap | Local attacker with user session can extract MK without biometrics | **FIXED** — KeyCredential v4 + HelloVerificationGate |
 | C2 | Rollback | Deleting `%VaultDir%\local.state` bypasses rollback detection (`DpapiLocalStateStore.CheckRollback` returned OK when file missing) | Attacker restores old vault revision undetected | **FIXED** — missing state + `RevisionCounter > 1` flagged |
 | C3 | Snapshots | `VaultEngine.UnlockFromSnapshot` used `confirmRollback: true`, opening snapshots writable without user confirmation | Silent rollback acceptance on snapshot restore | **FIXED** — defaults to read-only until confirmed |
 | C4 | Release | `release.yml` tags installers as `1.0.1` but `build-release.ps1` did not propagate version to assemblies (`AppVersion.Current` stays `1.0.0`) | Infinite auto-update loop | **FIXED** — `-Version` passed through MSBuild |
@@ -155,7 +155,7 @@ Current flow: UI verifies Hello → loads DPAPI-protected MK blob. **No** `KeyCr
 
 ### Next sprint (recommended)
 
-1. **C1** — TPM/Hello-gated MK wrap (Core + AppHost)  
+1. ~~**C1** — TPM/Hello-gated MK wrap (Core + AppHost)~~ **Done**  
 2. **H6** — Enforce policy in `VaultSession` mutations  
 3. **H1** — In-process bridge token only  
 4. **M5** — CI: AppHost tests + installer compile  

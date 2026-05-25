@@ -23,6 +23,8 @@ public sealed class PersonalUserSettings
     public string? PortableVaultDirectory { get; set; }
     /// <summary>User dismissed the one-time browser extension setup prompt.</summary>
     public bool BrowserExtensionSetupDismissed { get; set; }
+    /// <summary>User-defined sidebar categories (tags), including empty ones.</summary>
+    public List<string> VaultCategories { get; set; } = [];
 
     private static string SettingsPath =>
         Path.Combine(FortivaPaths.PersonalDataRoot, "user.prefs.json");
@@ -77,6 +79,13 @@ public sealed class PersonalUserSettings
             ClipboardClearSeconds = DefaultClipboardClearSeconds;
             changed = true;
         }
+
+        VaultCategories = VaultCategories
+            .Select(VaultTagHelper.NormalizeTag)
+            .Where(t => t is not null)
+            .Cast<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         return changed;
     }

@@ -11,6 +11,7 @@ public sealed class CredentialRequest
     public string Domain { get; set; } = "";
     public string? Url { get; set; }
     public Guid? EntryId { get; set; }
+    public string? FillNonce { get; set; }
 }
 
 public sealed class CredentialMatchSummary
@@ -29,6 +30,7 @@ public sealed class CredentialResponse
     public string? PasskeyCredentialId { get; set; }
     public string? Error { get; set; }
     public IReadOnlyList<CredentialMatchSummary>? Matches { get; set; }
+    public string? FillNonce { get; set; }
 }
 
 public sealed class BridgeStatusResponse
@@ -54,14 +56,14 @@ public sealed class BrowserBridgeServer : IDisposable
     public const string PipeName = "Fortiva.BrowserBridge";
 
     private readonly Func<CredentialRequest, CredentialResponse> _credentialResolver;
-    private readonly Func<CredentialRequest, IReadOnlyList<CredentialMatchSummary>> _matchLister;
+    private readonly Func<CredentialRequest, CredentialResponse> _matchLister;
     private readonly string _sessionToken;
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
 
     public BrowserBridgeServer(
         Func<CredentialRequest, CredentialResponse> credentialResolver,
-        Func<CredentialRequest, IReadOnlyList<CredentialMatchSummary>> matchLister,
+        Func<CredentialRequest, CredentialResponse> matchLister,
         string sessionToken)
     {
         _credentialResolver = credentialResolver;
@@ -140,13 +142,8 @@ public sealed class BrowserBridgeServer : IDisposable
 
                 if (msg.Command == "list_credentials")
                 {
-                    var matches = _matchLister(req);
-                    await writer.WriteLineAsync(BridgeJson.Serialize(new CredentialResponse
-                    {
-                        Found = matches.Count > 0,
-                        Matches = matches,
-                        Error = matches.Count == 0 ? "no_match" : null
-                    }).AsMemory(), ct);
+                    var response = _matchLister(req);
+                    await writer.WriteLineAsync(BridgeJson.Serialize(response).AsMemory(), ct);
                     return;
                 }
             }

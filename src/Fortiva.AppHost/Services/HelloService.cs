@@ -1,3 +1,4 @@
+using Fortiva.Core.Hello;
 using Windows.Security.Credentials.UI;
 
 namespace Fortiva.AppHost.Services;
@@ -24,6 +25,8 @@ public static class HelloService
                 return new HelloVerificationResult(false, DescribeAvailability(availability));
 
             var result = await RequestVerificationAsync(message);
+            if (result == UserConsentVerificationResult.Verified)
+                HelloVerificationGate.MarkVerified();
             return MapResult(result);
         }
         catch (Exception ex)

@@ -1,6 +1,5 @@
 using Fortiva.AppHost.Services;
 using Fortiva.AppHost.ViewModels;
-using Fortiva.Core.Hello;
 using Fortiva.Core.Platform;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -10,7 +9,7 @@ namespace Fortiva.AppHost.Pages;
 public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
 {
     private readonly ShellViewModel _vm = ShellViewModel.Current;
-    private readonly WindowsHelloKeyProtector _helloProtector;
+    private readonly HelloUnlockManager _hello;
     private bool _rollbackConfirmRequired;
     private bool _helloCheckComplete;
     private bool _bridgeUnlockMode;
@@ -18,7 +17,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
     public UnlockPage()
     {
         InitializeComponent();
-        _helloProtector = new WindowsHelloKeyProtector(
+        _hello = new HelloUnlockManager(
             FortivaPaths.GetHelloDataDirectory(_vm.IsEnterprise),
             _vm.IsEnterprise);
         LoadLogo();
@@ -84,7 +83,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
         var available = await HelloService.IsAvailableAsync();
         DispatcherQueue.TryEnqueue(() =>
         {
-            var configured = _helloProtector.IsConfigured;
+            var configured = _hello.IsConfigured;
             var showHello = available && configured;
             HelloBtn.Visibility = showHello
                 ? Microsoft.UI.Xaml.Visibility.Visible
@@ -128,7 +127,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
     {
         if (!_helloCheckComplete) return;
 
-        var helloBlocksPassword = HelloMandatory && _helloProtector.IsConfigured;
+        var helloBlocksPassword = HelloMandatory && _hello.IsConfigured;
         PasswordField.IsEnabled = !helloBlocksPassword;
         UnlockBtn.IsEnabled = !helloBlocksPassword;
         HelloBtn.IsEnabled = true;
@@ -136,7 +135,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
 
     private void EnablePasswordWhileHelloProbes()
     {
-        if (HelloMandatory && _helloProtector.IsConfigured)
+        if (HelloMandatory && _hello.IsConfigured)
             return;
         PasswordField.IsEnabled = true;
         UnlockBtn.IsEnabled = true;
@@ -164,10 +163,10 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
             return;
         }
 
-        var masterKey = _helloProtector.TryLoadMasterKey(helloVerified: true);
+        var masterKey = await _hello.TryLoadMasterKeyAsync();
         if (masterKey is null)
         {
-            _helloProtector.Clear();
+            await _hello.ClearAsync();
             HelloBtn.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
             SetBusy(false);
             if (HelloMandatory)
@@ -189,7 +188,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
 
             if (!ok)
             {
-                _helloProtector.Clear();
+                await _hello.ClearAsync();
                 HelloBtn.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
                 if (HelloMandatory)
                 {
@@ -223,7 +222,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
     {
         if (_vm.IsBusy || !_helloCheckComplete) return;
 
-        if (HelloMandatory && _helloProtector.IsConfigured)
+        if (HelloMandatory && _hello.IsConfigured)
         {
             ShowError("Your organization requires Windows Hello to unlock this vault.");
             return;
@@ -274,7 +273,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
     {
         BusyRing.Visibility = busy ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
         BusyRing.IsActive = busy;
-        var helloBlocksPassword = HelloMandatory && _helloProtector.IsConfigured;
+        var helloBlocksPassword = HelloMandatory && _hello.IsConfigured;
         UnlockBtn.IsEnabled = !busy && _helloCheckComplete && !helloBlocksPassword;
         HelloBtn.IsEnabled = !busy && _helloCheckComplete;
         PasswordField.IsEnabled = !busy && _helloCheckComplete && !helloBlocksPassword;

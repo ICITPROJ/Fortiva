@@ -10,6 +10,7 @@ let tabContext = null;
 let fortivaStatus = "setup";
 let pendingMatches = [];
 let selectedEntryId = null;
+let activeFillNonce = null;
 
 const MESSAGES = {
   ready: "Fortiva is ready. Open a login form, then click Fill.",
@@ -17,6 +18,10 @@ const MESSAGES = {
   setup: "Fortiva is not connected. Open Fortiva → Settings → Browser extension → Connect browser.",
   noTab: "Open a website tab first, then click the Fortiva icon.",
   badTab: "Fortiva can only fill on normal website pages (http/https).",
+  tabChanged:
+    "This tab changed since you opened the popup. The site line was refreshed — review it, then click Fill again.",
+  homograph:
+    "This hostname uses unusual characters. Confirm you are on the real site before filling.",
   noMatch: (host) =>
     `No saved login for ${host}. Add one in Fortiva with this site’s URL, then try again.`,
   multiple: "More than one login matches this site. Pick one below, then click Fill.",
@@ -28,6 +33,7 @@ const MESSAGES = {
   cancelled: "Unlock was cancelled. Open Fortiva and unlock to continue.",
   working: "Working…",
   unlocking: "Fortiva is locked — check the Fortiva window to unlock.",
+  staleNonce: "Fill request expired. Close and reopen the popup, then try again.",
 };
 
 function setStatus(text, tone = "loading") {
@@ -48,7 +54,20 @@ function sendMessage(message) {
   });
 }
 
-function fillCredentialsOnPage(username, password) {
+function displayHost(host, url) {
+  let origin = host;
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    /* keep host */
+  }
+
+  const ascii = host.includes("xn--") ? host : host;
+  const label = origin !== host ? `${origin} (${host})` : origin;
+  return { label, ascii, suspicious: /[^\x00-\x7F]/.test(host) || host.includes("xn--") };
+}
+
+function fillCredentialsOnPage(username, password, expectedHost) {
   function isVisible(el) {
     if (!el || el.disabled || el.readOnly) return false;
     const style = window.getComputedStyle(el);
@@ -74,6 +93,11 @@ function fillCredentialsOnPage(username, password) {
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
     return true;
+  }
+
+  const pageHost = String(location.hostname || "").toLowerCase();
+  if (expectedHost && pageHost !== String(expectedHost).toLowerCase()) {
+    return { ok: false, reason: "host_mismatch" };
   }
 
   const userField = findVisible([
@@ -109,12 +133,20 @@ async function getActiveTabContext() {
 
   let host;
   try {
-    host = new URL(tab.url).hostname;
+    host = new URL(tab.url).hostname.toLowerCase();
   } catch {
     return { ok: false, reason: "bad_tab", tab };
   }
 
   return { ok: true, tab, host, url: tab.url, isFillable: true };
+}
+
+function renderSiteLine(context) {
+  const display = displayHost(context.host, context.url);
+  siteLine.innerHTML = `This page: <strong>${escapeHtml(display.label)}</strong>`;
+  if (display.suspicious) {
+    setStatus(MESSAGES.homograph, "warn");
+  }
 }
 
 function renderMatches(matches) {
@@ -175,15 +207,15 @@ async function refreshConnection() {
   setStatus(MESSAGES.setup, "error");
 }
 
-async function preloadMatches() {
-  if (!tabContext?.ok || fortivaStatus !== "ready") return;
+async function preloadMatches(context = tabContext) {
+  if (!context?.ok || fortivaStatus !== "ready") return;
 
-  siteLine.innerHTML = `This page: <strong>${escapeHtml(tabContext.host)}</strong>`;
+  renderSiteLine(context);
 
   const list = await sendMessage({
     type: "list_credentials",
-    domain: tabContext.host,
-    url: tabContext.url,
+    domain: context.host,
+    url: context.url,
   });
 
   if (list?.error === "locked") {
@@ -198,11 +230,12 @@ async function preloadMatches() {
     return;
   }
 
+  activeFillNonce = list?.fillNonce || null;
   const matches = list?.matches || [];
   renderMatches(matches);
 
   if (matches.length === 0) {
-    setStatus(MESSAGES.noMatch(tabContext.host), "warn");
+    setStatus(MESSAGES.noMatch(context.host), "warn");
   } else if (matches.length === 1) {
     setStatus(`Found “${matches[0].title || "saved login"}”. Click Fill when ready.`, "");
   } else {
@@ -225,25 +258,50 @@ async function init() {
     return;
   }
 
-  siteLine.innerHTML = `This page: <strong>${escapeHtml(tabContext.host)}</strong>`;
+  renderSiteLine(tabContext);
   await refreshConnection();
-  if (fortivaStatus === "ready") await preloadMatches();
+  if (fortivaStatus === "ready") await preloadMatches(tabContext);
 }
 
 fillBtn.addEventListener("click", async () => {
-  if (!tabContext?.ok) return;
-
   fillBtn.disabled = true;
   setStatus(MESSAGES.working, "loading");
 
   try {
+    const freshContext = await getActiveTabContext();
+    if (!freshContext.ok) {
+      setStatus(freshContext.reason === "no_tab" ? MESSAGES.noTab : MESSAGES.badTab, "warn");
+      return;
+    }
+
+    if (tabContext?.ok && freshContext.host !== tabContext.host) {
+      tabContext = freshContext;
+      activeFillNonce = null;
+      renderSiteLine(tabContext);
+      await preloadMatches(tabContext);
+      setStatus(MESSAGES.tabChanged, "warn");
+      return;
+    }
+
+    tabContext = freshContext;
+    renderSiteLine(tabContext);
+
     if (fortivaStatus !== "ready") {
       await refreshConnection();
       if (fortivaStatus !== "ready") return;
     }
 
+    if (!activeFillNonce) {
+      await preloadMatches(tabContext);
+    }
+
     if (pendingMatches.length > 1 && !selectedEntryId) {
       setStatus("Choose a saved login from the list first.", "warn");
+      return;
+    }
+
+    if (!activeFillNonce) {
+      setStatus(MESSAGES.staleNonce, "warn");
       return;
     }
 
@@ -254,8 +312,16 @@ fillBtn.addEventListener("click", async () => {
       domain: tabContext.host,
       url: tabContext.url,
       entryId: selectedEntryId || undefined,
+      fillNonce: activeFillNonce,
     });
 
+    activeFillNonce = null;
+
+    if (creds?.error === "invalid_nonce") {
+      await preloadMatches(tabContext);
+      setStatus(MESSAGES.staleNonce, "warn");
+      return;
+    }
     if (creds?.error === "cancelled") {
       setStatus(MESSAGES.cancelled, "warn");
       return;
@@ -283,11 +349,15 @@ fillBtn.addEventListener("click", async () => {
     const [{ result }] = await chrome.scripting.executeScript({
       target: { tabId: tabContext.tab.id },
       func: fillCredentialsOnPage,
-      args: [creds.username || "", creds.password || ""],
+      args: [creds.username || "", creds.password || "", tabContext.host],
     });
 
     if (result?.ok) {
       setStatus(MESSAGES.filled(creds.title || tabContext.host), "success");
+      return;
+    }
+    if (result?.reason === "host_mismatch") {
+      setStatus(MESSAGES.tabChanged, "warn");
       return;
     }
     if (result?.reason === "fields_not_empty") {
@@ -303,7 +373,7 @@ fillBtn.addEventListener("click", async () => {
     setStatus(MESSAGES.setup, "error");
     setConnection("setup", "Not connected");
   } finally {
-    fillBtn.disabled = fortivaStatus !== "ready";
+    fillBtn.disabled = fortivaStatus === "ready" && tabContext?.isFillable;
   }
 });
 

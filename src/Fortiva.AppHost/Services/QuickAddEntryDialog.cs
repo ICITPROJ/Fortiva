@@ -23,13 +23,19 @@ public static class QuickAddEntryDialog
         public EntryDraft? Draft { get; init; }
     }
 
-    public static async Task<Outcome> ShowAsync(XamlRoot xamlRoot, ShellViewModel vm)
+    public static async Task<Outcome> ShowAsync(
+        XamlRoot xamlRoot,
+        ShellViewModel vm,
+        IEnumerable<string>? preselectedTags = null)
     {
         var theme = FortivaControlTheme.ResolveAppTheme();
 
         var titleBox = new TextBox { PlaceholderText = "e.g. GitHub, Work email…" };
         var usernameBox = new TextBox { PlaceholderText = "username or email (optional)" };
         var urlBox = new TextBox { PlaceholderText = "https://example.com (optional)" };
+
+        var tagPicker = new VaultTagPickerPanel(vm);
+        tagPicker.SetSelectedTags(preselectedTags);
 
         var password = vm.GeneratePassword(PasswordGeneratorOptions.Default);
         var passwordBox = new TextBox
@@ -60,7 +66,7 @@ public static class QuickAddEntryDialog
 
         var intro = new TextBlock
         {
-            Text = "Add a login quickly — expand with More options if you need tags, notes, or TOTP.",
+            Text = "Add a login quickly — pick a category or type a new one below.",
             TextWrapping = TextWrapping.WrapWholeWords,
             FontSize = 13
         };
@@ -68,6 +74,7 @@ public static class QuickAddEntryDialog
         var titleLabel = CreateLabel("Title");
         var usernameLabel = CreateLabel("Username / email");
         var urlLabel = CreateLabel("URL");
+        var categoryLabel = CreateLabel("Categories");
         var passwordLabel = CreateLabel("Password (auto-generated)");
 
         var form = new StackPanel { Spacing = 12, MinWidth = 420 };
@@ -78,6 +85,8 @@ public static class QuickAddEntryDialog
         form.Children.Add(usernameBox);
         form.Children.Add(urlLabel);
         form.Children.Add(urlBox);
+        form.Children.Add(categoryLabel);
+        form.Children.Add(tagPicker.Root);
         form.Children.Add(passwordLabel);
 
         var passwordRow = new Grid { ColumnSpacing = 8 };
@@ -116,7 +125,9 @@ public static class QuickAddEntryDialog
             FortivaControlTheme.ApplySectionLabel(titleLabel, context: form);
             FortivaControlTheme.ApplySectionLabel(usernameLabel, context: form);
             FortivaControlTheme.ApplySectionLabel(urlLabel, context: form);
+            FortivaControlTheme.ApplySectionLabel(categoryLabel, context: form);
             FortivaControlTheme.ApplySectionLabel(passwordLabel, context: form);
+            tagPicker.ApplyTheme(form);
         }
 
         FortivaDialogs.Configure(dlg, xamlRoot, onOpened: RefreshTheme);
@@ -132,6 +143,8 @@ public static class QuickAddEntryDialog
                 if (result == ContentDialogResult.None)
                     return new Outcome { Result = QuickAddResult.Cancelled };
 
+                var tags = tagPicker.GetSelectedTags();
+
                 if (result == ContentDialogResult.Secondary)
                 {
                     return new Outcome
@@ -142,7 +155,8 @@ public static class QuickAddEntryDialog
                             Title = titleBox.Text.Trim(),
                             Username = usernameBox.Text.Trim(),
                             Url = urlBox.Text.Trim(),
-                            Password = passwordBox.Text
+                            Password = passwordBox.Text,
+                            Tags = tags
                         }
                     };
                 }
@@ -167,7 +181,8 @@ public static class QuickAddEntryDialog
                         Title = titleBox.Text.Trim(),
                         Username = usernameBox.Text.Trim(),
                         Password = passwordBox.Text,
-                        Url = urlBox.Text.Trim()
+                        Url = urlBox.Text.Trim(),
+                        Tags = tags.ToList()
                     });
                     return new Outcome { Result = QuickAddResult.Saved };
                 }
