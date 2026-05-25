@@ -6,5 +6,5 @@ namespace Fortiva.Core.BrowserBridge;
 public static class BridgePipeGuard
 {
     public static bool IsAllowedClient(NamedPipeServerStream pipe) =>
-        BridgeClientValidator.IsAllowedClient(pipe);
+        BridgeClientValidator.IsAllowedBridgeHostClient(pipe);
 }

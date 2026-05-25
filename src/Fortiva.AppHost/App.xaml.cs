@@ -30,6 +30,7 @@ public partial class App : Application
     public App()
     {
         Edition = ResolveEdition();
+        AuthenticodePolicy.ConfigureForEdition(Edition);
         ProcessMitigation.EnableBestEffort();
         UnhandledException += App_UnhandledException;
         AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;

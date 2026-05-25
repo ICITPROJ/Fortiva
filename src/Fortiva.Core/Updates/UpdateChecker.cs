@@ -44,7 +44,7 @@ public sealed class UpdateChecker
                 if (manifest is null || !manifest.IsValid)
                     return Fail(UpdateMessages.ManifestUnavailable);
 
-                return ReleaseManifestEvaluator.Evaluate(manifest, currentVersion, fromNetwork: true);
+                return ReleaseManifestEvaluator.Evaluate(manifest, currentVersion, fromNetwork: false);
             }
 
             (manifest, fromNetwork) = await _loader.TryLoadAsync(

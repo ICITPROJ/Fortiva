@@ -4,6 +4,9 @@ namespace Fortiva.Core.Updates;
 
 public static class UpdateUrlPolicy
 {
+    /// <summary>Legacy icmclab.cloud update feed stops working after this UTC date.</summary>
+    public static DateTimeOffset LegacyFeedSunsetUtc { get; } = new(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);
+
     private static readonly HashSet<string> AllowedLegacyHosts = new(StringComparer.OrdinalIgnoreCase)
     {
         "studio.icmclab.cloud",
@@ -15,15 +18,36 @@ public static class UpdateUrlPolicy
         ReleaseManifestUrls.GitHubRepository
     };
 
+    private static readonly HashSet<string> AllowedGitHubCdnHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "release-assets.githubusercontent.com"
+    };
+
     private static readonly Regex GitHubReleaseAssetPath = new(
         @"^/[^/]+/[^/]+/releases/(?:latest/download|download/[^/]+)/[^/]+$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex PersonalInstallerName = new(
-        @"^FortivaPersonal-\d+\.\d+\.\d+-Setup\.exe$",
+        @"^FortivaPersonal-\d+(?:\.\d+){0,3}-Setup\.exe$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public const string DefaultInstallerArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS";
+
+    /// <summary>Returns manifest installer args when every token is an allowed Inno Setup switch; otherwise the default.</summary>
+    public static string ResolveInstallerArgs(ReleaseManifest manifest)
+    {
+        var raw = manifest.InstallerArgs?.Trim();
+        if (string.IsNullOrWhiteSpace(raw))
+            return DefaultInstallerArgs;
+
+        foreach (var token in raw.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!IsAllowedInstallerToken(token))
+                return DefaultInstallerArgs;
+        }
+
+        return raw;
+    }
 
     public static void ValidateManifestUrl(string manifestUrl)
     {
@@ -32,6 +56,9 @@ public static class UpdateUrlPolicy
         RequireHttps(uri);
 
         if (IsAllowedGitHubManifest(uri))
+            return;
+
+        if (IsAllowedGitHubReleaseCdnManifest(uri))
             return;
 
         if (IsAllowedLegacyManifest(uri))
@@ -49,6 +76,9 @@ public static class UpdateUrlPolicy
         if (IsAllowedGitHubInstaller(uri))
             return;
 
+        if (IsAllowedGitHubReleaseCdnInstaller(uri))
+            return;
+
         if (IsAllowedLegacyInstaller(uri))
             return;
 
@@ -60,6 +90,36 @@ public static class UpdateUrlPolicy
         if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Update URLs must use HTTPS.");
     }
+
+    private static bool IsGitHubReleaseCdn(Uri uri)
+    {
+        if (!AllowedGitHubCdnHosts.Contains(uri.Host))
+            return false;
+
+        RequireHttps(uri);
+        return uri.AbsolutePath.StartsWith("/github-production-release-asset/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsAllowedGitHubReleaseCdnManifest(Uri uri)
+        => IsGitHubReleaseCdn(uri) &&
+           string.Equals(ExtractGitHubAssetFileName(uri), ReleaseManifestUrls.ManifestFileName, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsAllowedGitHubReleaseCdnInstaller(Uri uri)
+        => IsGitHubReleaseCdn(uri) &&
+           PersonalInstallerName.IsMatch(ExtractGitHubAssetFileName(uri));
+
+    private static bool IsAllowedInstallerToken(string token)
+    {
+        if (!token.StartsWith("/", StringComparison.Ordinal))
+            return false;
+
+        var key = token.Split('=')[0];
+        return PersonalInstallerArgPrefix.IsMatch(key);
+    }
+
+    private static readonly Regex PersonalInstallerArgPrefix = new(
+        @"^/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$",
+        RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static bool IsAllowedGitHubManifest(Uri uri)
         => IsAllowedGitHubReleaseAsset(uri, ReleaseManifestUrls.ManifestFileName);
@@ -95,14 +155,19 @@ public static class UpdateUrlPolicy
     }
 
     private static bool IsAllowedLegacyManifest(Uri uri)
-        => AllowedLegacyHosts.Contains(uri.Host) &&
+        => IsLegacyFeedActive() &&
+           AllowedLegacyHosts.Contains(uri.Host) &&
            uri.AbsolutePath.Contains("/fortiva/", StringComparison.OrdinalIgnoreCase) &&
            uri.AbsolutePath.EndsWith(ReleaseManifestUrls.ManifestFileName, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsAllowedLegacyInstaller(Uri uri)
-        => AllowedLegacyHosts.Contains(uri.Host) &&
+        => IsLegacyFeedActive() &&
+           AllowedLegacyHosts.Contains(uri.Host) &&
            uri.AbsolutePath.Contains("/fortiva/", StringComparison.OrdinalIgnoreCase) &&
            PersonalInstallerName.IsMatch(Path.GetFileName(uri.LocalPath));
+
+    internal static bool IsLegacyFeedActive(DateTimeOffset? utcNow = null)
+        => (utcNow ?? DateTimeOffset.UtcNow) < LegacyFeedSunsetUtc;
 
     private static string? ExtractGitHubRepository(Uri uri)
     {

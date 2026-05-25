@@ -19,6 +19,25 @@ public sealed class BridgeClientValidatorTests
         Assert.Equal(expected, BridgeClientValidator.IsAllowedExecutableName(name));
 
     [Fact]
+    public void IsAllowedBridgeHostPath_RejectsPersonalExecutable()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "FortivaInstall-" + Guid.NewGuid());
+        var personal = Path.Combine(root, "Fortiva.Personal.exe");
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(personal, "");
+            Assert.False(BridgeClientValidator.IsAllowedBridgeHostPath(personal, [root]));
+        }
+        finally
+        {
+            if (File.Exists(personal)) File.Delete(personal);
+            if (Directory.Exists(root)) Directory.Delete(root);
+        }
+    }
+
+    [Fact]
     public void IsAllowedExecutablePath_RejectsWhenInstallRootsEmpty()
     {
         var bridge = Path.Combine(Path.GetTempPath(), "Fortiva.BrowserBridge.Host.exe");
@@ -26,6 +45,7 @@ public sealed class BridgeClientValidatorTests
         {
             File.WriteAllText(bridge, "");
             Assert.False(BridgeClientValidator.IsAllowedExecutablePath(bridge, []));
+            Assert.False(BridgeClientValidator.IsAllowedBridgeHostPath(bridge, []));
         }
         finally
         {
@@ -34,7 +54,7 @@ public sealed class BridgeClientValidatorTests
     }
 
     [Fact]
-    public void IsAllowedExecutablePath_RejectsBridgeOutsideInstallRoot()
+    public void IsAllowedBridgeHostPath_RejectsBridgeOutsideInstallRoot()
     {
         var root = Path.Combine(Path.GetTempPath(), "FortivaInstall-" + Guid.NewGuid());
         var bridgeDir = Path.Combine(root, "BrowserBridge");
@@ -48,8 +68,8 @@ public sealed class BridgeClientValidatorTests
             File.WriteAllText(validBridge, "");
             File.WriteAllText(invalidBridge, "");
 
-            Assert.True(BridgeClientValidator.IsAllowedExecutablePath(validBridge, [root]));
-            Assert.False(BridgeClientValidator.IsAllowedExecutablePath(invalidBridge, [root]));
+            Assert.True(BridgeClientValidator.IsAllowedBridgeHostPath(validBridge, [root]));
+            Assert.False(BridgeClientValidator.IsAllowedBridgeHostPath(invalidBridge, [root]));
         }
         finally
         {

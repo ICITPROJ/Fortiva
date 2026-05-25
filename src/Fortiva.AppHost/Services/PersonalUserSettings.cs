@@ -16,9 +16,13 @@ public sealed class PersonalUserSettings
     public bool ParanoiaMode { get; set; }
     public int AutoLockSeconds { get; set; } = DefaultAutoLockSeconds;
     public int ClipboardClearSeconds { get; set; } = DefaultClipboardClearSeconds;
-    /// <summary>Check icmclab release feed and apply verified updates (Personal only).</summary>
+    /// <summary>Check GitHub Releases manifest and apply verified updates (Personal only).</summary>
     public bool AutoUpdateEnabled { get; set; } = true;
     public DateTimeOffset? LastUpdateCheckUtc { get; set; }
+    public DateTimeOffset? LastUpdateApplyFailedUtc { get; set; }
+    public string? LastUpdateApplyError { get; set; }
+    /// <summary>User dismissed the Hello v4 hardware upgrade prompt.</summary>
+    public bool HelloHardwareUpgradeDismissed { get; set; }
     /// <summary>Last portable vault directory (USB). Null when using the local profile vault.</summary>
     public string? PortableVaultDirectory { get; set; }
     /// <summary>User dismissed the one-time browser extension setup prompt.</summary>
@@ -37,19 +41,14 @@ public sealed class PersonalUserSettings
         PersonalUserSettings? settings = null;
         var loadedFromLegacy = false;
 
-        try
+        if (File.Exists(SettingsPath))
         {
-            if (File.Exists(SettingsPath))
-                settings = DeserializeFromFile(SettingsPath);
-            else if (File.Exists(LegacySettingsPath))
-            {
-                settings = DeserializeFromFile(LegacySettingsPath);
-                loadedFromLegacy = settings is not null;
-            }
+            settings = TryDeserializeFromFile(SettingsPath);
         }
-        catch
+        else if (File.Exists(LegacySettingsPath))
         {
-            settings = null;
+            settings = TryDeserializeFromFile(LegacySettingsPath);
+            loadedFromLegacy = settings is not null;
         }
 
         settings ??= new PersonalUserSettings();
@@ -80,12 +79,18 @@ public sealed class PersonalUserSettings
             changed = true;
         }
 
-        VaultCategories = VaultCategories
+        var normalized = VaultCategories
             .Select(VaultTagHelper.NormalizeTag)
             .Where(t => t is not null)
             .Cast<string>()
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        if (!CategoriesEqual(VaultCategories, normalized))
+        {
+            VaultCategories = normalized;
+            changed = true;
+        }
 
         return changed;
     }
@@ -103,9 +108,47 @@ public sealed class PersonalUserSettings
             File.Move(temp, path);
     }
 
-    private static PersonalUserSettings? DeserializeFromFile(string path)
+    private static PersonalUserSettings? TryDeserializeFromFile(string path)
     {
-        var json = File.ReadAllText(path);
-        return JsonSerializer.Deserialize<PersonalUserSettings>(json);
+        try
+        {
+            var json = File.ReadAllText(path);
+            return JsonSerializer.Deserialize<PersonalUserSettings>(json);
+        }
+        catch
+        {
+            TryBackupCorruptFile(path);
+            return null;
+        }
+    }
+
+    internal static void TryBackupCorruptFile(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+                return;
+
+            var backup = path + $".corrupt-{DateTime.UtcNow:yyyyMMddHHmmss}.bak";
+            File.Move(path, backup);
+        }
+        catch
+        {
+            // Best effort — caller falls back to defaults.
+        }
+    }
+
+    private static bool CategoriesEqual(IReadOnlyList<string> left, IReadOnlyList<string> right)
+    {
+        if (left.Count != right.Count)
+            return false;
+
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (!string.Equals(left[i], right[i], StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+
+        return true;
     }
 }

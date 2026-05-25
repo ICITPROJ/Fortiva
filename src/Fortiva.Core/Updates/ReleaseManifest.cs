@@ -37,15 +37,11 @@ public sealed class ReleaseManifest
     [JsonIgnore]
 
     public bool IsValid =>
-
         SchemaVersion >= 1 &&
-
         !string.IsNullOrWhiteSpace(Version) &&
-
+        AppVersion.TryParseVersion(Version, out _) &&
         !string.IsNullOrWhiteSpace(InstallerUrl) &&
-
         InstallerSha256.Length == 64 &&
-
         !IsPlaceholderSha256(InstallerSha256);
 
 
@@ -79,8 +75,10 @@ public static class ReleaseManifestUrls
 
 
     public static string ReleaseAssetUrl(string version, string fileName)
-
         => $"https://github.com/{GitHubRepository}/releases/download/v{version}/{fileName}";
+
+    public static string PersonalInstallerFileName(string version)
+        => $"FortivaPersonal-{version}-Setup.exe";
 
 
 
@@ -121,34 +119,37 @@ public static class AppVersion
 
 
     public static bool IsRemoteNewer(string remote, string? local = null)
-
     {
-
         local ??= Current;
-
-        return ParseVersion(remote) > ParseVersion(local);
-
+        if (!TryParseVersion(remote, out var remoteVersion) || !TryParseVersion(local, out var localVersion))
+            return false;
+        return remoteVersion > localVersion;
     }
 
-
-
-    public static Version ParseVersion(string value)
-
+    public static bool TryParseVersion(string value, out Version version)
     {
+        version = new Version(0, 0, 0, 0);
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
 
         var core = value.Split('-', '+')[0].Trim();
-
         var parts = core.Split('.');
+        if (parts.Length is < 3 or > 4)
+            return false;
 
         var nums = new int[4];
+        for (var i = 0; i < parts.Length; i++)
+        {
+            if (!int.TryParse(parts[i], out nums[i]) || nums[i] < 0)
+                return false;
+        }
 
-        for (var i = 0; i < Math.Min(parts.Length, 4); i++)
-
-            int.TryParse(parts[i], out nums[i]);
-
-        return new Version(nums[0], nums[1], nums[2], nums[3]);
-
+        version = new Version(nums[0], nums[1], nums[2], nums[3]);
+        return true;
     }
+
+    public static Version ParseVersion(string value)
+        => TryParseVersion(value, out var version) ? version : new Version(0, 0, 0, 0);
 
 }
 

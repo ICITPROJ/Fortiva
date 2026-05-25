@@ -215,6 +215,31 @@ public sealed class ShellViewModel : ViewModelBase
 
     public AppThemePreference ThemePreference => _appearance.Theme;
 
+    public void RecordUpdateApplyFailure(string message)
+    {
+        if (IsEnterprise || IsAdmin) return;
+        _personalSettings.LastUpdateApplyFailedUtc = DateTimeOffset.UtcNow;
+        _personalSettings.LastUpdateApplyError = message;
+        SavePersonalSettings();
+    }
+
+    public void ClearUpdateApplyFailure()
+    {
+        if (IsEnterprise || IsAdmin) return;
+        if (_personalSettings.LastUpdateApplyError is null && _personalSettings.LastUpdateApplyFailedUtc is null)
+            return;
+        _personalSettings.LastUpdateApplyFailedUtc = null;
+        _personalSettings.LastUpdateApplyError = null;
+        SavePersonalSettings();
+    }
+
+    public void SetHelloHardwareUpgradeDismissed(bool dismissed)
+    {
+        if (IsEnterprise) return;
+        _personalSettings.HelloHardwareUpgradeDismissed = dismissed;
+        SavePersonalSettings();
+    }
+
     public void SavePersonalSettings()
     {
         if (IsEnterprise) return;

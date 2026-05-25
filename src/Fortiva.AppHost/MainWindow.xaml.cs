@@ -17,6 +17,8 @@ public sealed partial class MainWindow : Window
 {
     private readonly ShellViewModel _vm = ShellViewModel.Current;
     private bool _suppressNav;
+    private DateTimeOffset _lastPointerActivityReset = DateTimeOffset.MinValue;
+    private static readonly TimeSpan PointerActivityThrottle = TimeSpan.FromSeconds(45);
 
     public MainWindow()
     {
@@ -107,7 +109,8 @@ public sealed partial class MainWindow : Window
 
         if (Content is UIElement root)
         {
-            root.PointerMoved += (_, _) => OnUserActivity();
+            root.PointerPressed += (_, _) => OnUserActivity();
+            root.PointerMoved += (_, _) => OnPointerActivity();
             root.KeyDown += (_, _) => OnUserActivity();
         }
     }
@@ -116,6 +119,19 @@ public sealed partial class MainWindow : Window
     {
         if (_vm.IsUnlocked)
             _vm.ResetAutoLock();
+    }
+
+    private void OnPointerActivity()
+    {
+        if (!_vm.IsUnlocked)
+            return;
+
+        var now = DateTimeOffset.UtcNow;
+        if (now - _lastPointerActivityReset < PointerActivityThrottle)
+            return;
+
+        _lastPointerActivityReset = now;
+        _vm.ResetAutoLock();
     }
 
     private bool _portablePromptShown;

@@ -34,4 +34,42 @@ public class AppVersionTests
         };
         Assert.False(placeholder.IsValid);
     }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not-a-version")]
+    [InlineData("1.2")]
+    public void TryParseVersion_rejects_invalid_values(string value)
+    {
+        Assert.False(AppVersion.TryParseVersion(value, out _));
+    }
+
+    [Fact]
+    public void ReleaseManifest_rejects_invalid_version_string()
+    {
+        var manifest = new ReleaseManifest
+        {
+            Version = "not-a-version",
+            InstallerUrl = "https://example.com/setup.exe",
+            InstallerSha256 = new string('a', 64)
+        };
+        Assert.False(manifest.IsValid);
+    }
+
+    [Fact]
+    public void ResolveInstallerArgs_uses_manifest_when_safe()
+    {
+        var manifest = new ReleaseManifest
+        {
+            InstallerArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOCLOSEAPPLICATIONS"
+        };
+        Assert.Equal(manifest.InstallerArgs, UpdateUrlPolicy.ResolveInstallerArgs(manifest));
+    }
+
+    [Fact]
+    public void ResolveInstallerArgs_falls_back_on_unsafe_tokens()
+    {
+        var manifest = new ReleaseManifest { InstallerArgs = "/VERYSILENT & calc.exe" };
+        Assert.Equal(UpdateUrlPolicy.DefaultInstallerArgs, UpdateUrlPolicy.ResolveInstallerArgs(manifest));
+    }
 }

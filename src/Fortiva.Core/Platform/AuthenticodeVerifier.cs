@@ -12,6 +12,9 @@ public static class AuthenticodeVerifier
     /// </summary>
     public static bool IsSigned(string filePath)
     {
+        if (!AuthenticodePolicy.RequireSignedExecutables)
+            return true;
+
         if (!OperatingSystem.IsWindows())
             return true;
 

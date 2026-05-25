@@ -37,7 +37,16 @@ public sealed class UpdateService
         {
             var result = await CheckAsync().ConfigureAwait(false);
             if (result.Status == UpdateStatus.UpdateAvailable && result.Manifest is not null && !_vm.IsUnlocked)
-                await ApplyAsync(result.Manifest, silent: true).ConfigureAwait(false);
+            {
+                try
+                {
+                    await ApplyAsync(result.Manifest, silent: true).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    _vm.RecordUpdateApplyFailure(UpdateMessages.ForApplyFailure(ex));
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -121,9 +130,11 @@ public sealed class UpdateService
             Process.Start(new ProcessStartInfo
             {
                 FileName = dest,
-                Arguments = UpdateUrlPolicy.DefaultInstallerArgs,
+                Arguments = UpdateUrlPolicy.ResolveInstallerArgs(manifest),
                 UseShellExecute = true
             });
+
+            _vm.ClearUpdateApplyFailure();
 
             // Give the installer a moment to start, then exit so files are not locked.
             await Task.Delay(750).ConfigureAwait(false);
@@ -133,6 +144,7 @@ public sealed class UpdateService
         catch (Exception ex)
         {
             App.LogException("ApplyAsync", ex);
+            _vm.RecordUpdateApplyFailure(UpdateMessages.ForApplyFailure(ex));
             throw;
         }
     }

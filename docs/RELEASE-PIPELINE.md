@@ -171,6 +171,7 @@ See `packaging/intune/` and [`UPDATE-STRATEGY.md`](UPDATE-STRATEGY.md).
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | App says “Up to date” but you pushed code | Release not finished or `HEAD` already tagged | Wait for green Release workflow; confirm manifest version at `/releases/latest/download/latest.personal.json` |
+| Update check fails on GitHub Releases | CDN redirect blocked or stale bundled manifest | Ensure `UpdateUrlPolicy` allows `release-assets.githubusercontent.com` with correct filename; CI syncs `packaging/releases/latest.personal.json` on release |
 | `git push` says “everything up to date” | No new commits | `git commit` first, then push |
 | Release workflow red | Build/installer/test failure | Open failed run logs on Actions tab |
 | Manifest 404 | No successful release yet | Fix workflow; re-push or manual dispatch |
@@ -185,8 +186,8 @@ See `packaging/intune/` and [`UPDATE-STRATEGY.md`](UPDATE-STRATEGY.md).
 - Only GitHub release URLs from **ICITPROJ/Fortiva** are accepted by the client (`UpdateUrlPolicy`).
 - Installers must match `FortivaPersonal-{version}-Setup.exe`.
 - Manifest must include a real SHA-256 (placeholder hashes are rejected client-side).
-- Legacy `studio.icmclab.cloud` URLs remain allowed for older builds.
-- Release builds require **Authenticode signing** (icmclab publisher) for bridge clients and update install.
+- Legacy `studio.icmclab.cloud` URLs remain allowed until **2026-09-01 UTC** (`UpdateUrlPolicy.LegacyFeedSunsetUtc`).
+- **Authenticode signing is deferred for Personal** — unsigned GitHub Releases; updates still use SHA-256. See [`CODESIGNING.md`](CODESIGNING.md). Enterprise may enable signing later.
 - Pre-update vault backup runs automatically before Personal auto-update (`pre-update-backups/`, last 3 kept).
 
 ### Post-release user actions (when extension or Hello changed)
@@ -203,6 +204,8 @@ See `packaging/intune/` and [`UPDATE-STRATEGY.md`](UPDATE-STRATEGY.md).
 | `build-release.ps1` | MSBuild + publish Personal/Enterprise/Admin + bridge + extension |
 | `build-installers.ps1` | Inno Setup installers + prerequisites |
 | `scripts/publish-release-manifest.ps1` | Write `latest.personal.json` with SHA-256 |
+| `scripts/sign-release-artifacts.ps1` | *(Optional)* Authenticode-sign dist EXEs and installers — see [`CODESIGNING.md`](CODESIGNING.md) |
+| `scripts/verify-authenticode.ps1` | *(Optional)* Fail CI if build is unsigned |
 | `scripts/bump-version.ps1` | Bump/sync version in props + extension manifest |
 | `scripts/publish-release.ps1` | Push `main` (documents auto-release) |
 | `scripts/test-browser-extension.ps1` | Verify extension staging + registry |

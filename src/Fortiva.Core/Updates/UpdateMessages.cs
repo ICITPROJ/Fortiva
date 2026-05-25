@@ -29,6 +29,33 @@ public static class UpdateMessages
     public static string OfflineUpdateAvailable(string version)
         => $"Version {version} is available. Connect to the internet and check again to download it.";
 
+    public static string ForApplyFailure(Exception ex)
+    {
+        var root = Unwrap(ex);
+        var message = root.Message;
+
+        if (message.Contains("SHA-256", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("integrity check", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("changed after verification", StringComparison.OrdinalIgnoreCase))
+            return "The downloaded installer failed verification. Try checking for updates again.";
+
+        if (message.Contains("Authenticode", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("not Authenticode-signed", StringComparison.OrdinalIgnoreCase))
+            return "The update installer is not signed by icmclab studio. Installation was blocked for your safety.";
+
+        if (message.Contains("Lock the vault", StringComparison.OrdinalIgnoreCase))
+            return "Lock the vault before installing an update.";
+
+        if (root is HttpRequestException or SocketException or TaskCanceledException)
+            return ForCheckFailure(ex);
+
+        if (message.Contains("host is not allowed", StringComparison.OrdinalIgnoreCase) ||
+            message.Contains("path is not allowed", StringComparison.OrdinalIgnoreCase))
+            return "The update manifest points to an untrusted download location. Try again later or install manually from GitHub.";
+
+        return "Could not install the update. Lock the vault, check your connection, and try again.";
+    }
+
     private static Exception Unwrap(Exception ex)
     {
         while (ex.InnerException is not null)

@@ -51,6 +51,38 @@ public sealed class PersonalUserSettingsTests
         }
     }
 
+    [Fact]
+    public void EnsureDefaults_PersistsNormalizedCategories()
+    {
+        var settings = new PersonalUserSettings
+        {
+            VaultCategories = [" Work ", "work", "Personal"]
+        };
+        Assert.True(settings.EnsureDefaults());
+        Assert.Equal(["Work", "Personal"], settings.VaultCategories);
+    }
+
+    [Fact]
+    public void TryBackupCorruptFile_RenamesExistingFile()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "fortiva-prefs-test-" + Guid.NewGuid().ToString("N"));
+        var prefs = Path.Combine(dir, "user.prefs.json");
+        try
+        {
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(prefs, "{not json");
+
+            PersonalUserSettings.TryBackupCorruptFile(prefs);
+
+            Assert.False(File.Exists(prefs));
+            Assert.Single(Directory.GetFiles(dir, "user.prefs.json.corrupt-*.bak"));
+        }
+        finally
+        {
+            try { if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true); } catch { }
+        }
+    }
+
     private static PersonalUserSettings LoadFromDirectory(string personalDataRoot)
     {
         var path = Path.Combine(personalDataRoot, "user.prefs.json");

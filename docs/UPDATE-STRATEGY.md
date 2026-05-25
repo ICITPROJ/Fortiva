@@ -64,7 +64,9 @@ git push origin main
 
 
 
-CI auto-bumps the patch version from the latest git tag, builds installers, publishes `latest.personal.json`, and creates the GitHub Release. **Manual git tags are optional** (override only).
+CI auto-bumps the patch version from the latest git tag, builds installers, **Authenticode-signs** published EXEs and installers (when `CODESIGN_PFX_*` secrets are configured), verifies signatures, publishes `latest.personal.json`, and creates the GitHub Release. **Manual git tags are optional** (override only).
+
+Legacy update host `studio.icmclab.cloud` is accepted only until **2026-09-01 UTC**; GitHub Releases is the canonical feed.
 
 
 

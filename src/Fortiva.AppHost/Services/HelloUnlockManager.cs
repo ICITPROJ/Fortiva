@@ -19,6 +19,16 @@ public sealed class HelloUnlockManager
 
     public bool IsHardwareBacked => WindowsHelloKeyProtector.IsHardwareBackedBundle(_dataDirectory);
 
+    public bool UsesSoftwareOnlyHello => IsConfigured && !IsHardwareBacked;
+
+    public async Task<bool> ShouldPromptHardwareUpgradeAsync()
+    {
+        if (!UsesSoftwareOnlyHello)
+            return false;
+
+        return await HelloCredentialStore.IsAvailableAsync();
+    }
+
     public async Task StoreFromMasterKeyAsync(byte[] masterKey)
     {
         if (await HelloCredentialStore.IsAvailableAsync())

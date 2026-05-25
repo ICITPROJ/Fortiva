@@ -50,11 +50,15 @@ public sealed partial class SettingsPage : Page
         var policy = _vm.Policy;
 
         _autoLockSeconds = Math.Clamp(
-            policy?.MaxAutoLockSeconds ?? _vm.PersonalSettings.AutoLockSeconds,
+            _vm.IsEnterprise && policy is not null
+                ? policy.MaxAutoLockSeconds
+                : _vm.PersonalSettings.AutoLockSeconds,
             PersonalUserSettings.MinAutoLockSeconds,
             PersonalUserSettings.MaxAutoLockSeconds);
         _clipboardSeconds = Math.Clamp(
-            policy?.ClipboardClearSeconds ?? _vm.PersonalSettings.ClipboardClearSeconds,
+            _vm.IsEnterprise && policy is not null
+                ? policy.ClipboardClearSeconds
+                : _vm.PersonalSettings.ClipboardClearSeconds,
             PersonalUserSettings.MinClipboardClearSeconds,
             PersonalUserSettings.MaxClipboardClearSeconds);
 
@@ -84,8 +88,11 @@ public sealed partial class SettingsPage : Page
         }
 
         HelloStatus.Text = _hello.IsConfigured
-            ? "Windows Hello is configured."
+            ? _hello.IsHardwareBacked
+                ? "Windows Hello is configured (hardware-backed)."
+                : "Windows Hello is configured."
             : "Windows Hello is not configured.";
+        _ = RefreshHelloUpgradeBannerAsync();
 
         var canChangeSecrets = _vm.IsUnlocked && !_vm.IsReadOnly;
         CurrentPwd.IsEnabled = canChangeSecrets;
@@ -95,9 +102,8 @@ public sealed partial class SettingsPage : Page
         SetupHelloBtn.IsEnabled = canChangeSecrets;
         RemoveHelloBtn.IsEnabled = _hello.IsConfigured;
 
-        var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
         AboutAppName.Text   = $"Fortiva {App.Edition}";
-        AboutVersion.Text   = $"Version {version?.ToString(3) ?? "1.0.0"}";
+        AboutVersion.Text   = $"Version {AppVersion.Current}";
         AboutPublisher.Text = "Published by icmclab studio";
         RefreshAboutLogo();
 
@@ -106,11 +112,14 @@ public sealed partial class SettingsPage : Page
         UpdatesDivider.Visibility = showUpdates ? Visibility.Visible : Visibility.Collapsed;
         if (showUpdates)
         {
+            AutoUpdateSwitch.Toggled -= AutoUpdate_Toggled;
             AutoUpdateSwitch.IsOn = _vm.PersonalSettings.AutoUpdateEnabled;
-            UpdateFeedText.Text = $"Update feed: {ReleaseManifestUrls.PersonalLatest}";
+            AutoUpdateSwitch.Toggled += AutoUpdate_Toggled;
+            UpdateFeedText.Text = $"Installed: v{AppVersion.Current} · Feed: {ReleaseManifestUrls.PersonalLatest}";
             UpdateStatusText.Text = _vm.PersonalSettings.LastUpdateCheckUtc is null
                 ? "Automatic update check on launch (once per day)."
                 : $"Last checked { _vm.PersonalSettings.LastUpdateCheckUtc:yyyy-MM-dd HH:mm} UTC.";
+            RefreshUpdateApplyFailureBanner();
         }
 
         var ctx = _vm.Context;
@@ -441,7 +450,10 @@ public sealed partial class SettingsPage : Page
         }
 
         await _vm.SyncHelloCredentialAsync(pwdBox.Password);
-        HelloStatus.Text = "Windows Hello is configured.";
+        HelloStatus.Text = _hello.IsHardwareBacked
+            ? "Windows Hello is configured (hardware-backed)."
+            : "Windows Hello is configured.";
+        HelloUpgradeInfo.IsOpen = false;
         RemoveHelloBtn.IsEnabled = true;
         ShowInfo("Windows Hello set up. You can unlock with face, fingerprint, or PIN.", InfoBarSeverity.Success);
     }
@@ -496,7 +508,7 @@ public sealed partial class SettingsPage : Page
                     }
                     catch (Exception ex)
                     {
-                        ShowInfo(UpdateMessages.ForCheckFailure(ex), InfoBarSeverity.Error);
+                        ShowInfo(UpdateMessages.ForApplyFailure(ex), InfoBarSeverity.Error);
                     }
                 }
             }
@@ -598,6 +610,33 @@ public sealed partial class SettingsPage : Page
             ShowInfo(ex.Message, InfoBarSeverity.Error);
         }
     }
+
+    private async Task RefreshHelloUpgradeBannerAsync()
+    {
+        var show = !_vm.PersonalSettings.HelloHardwareUpgradeDismissed &&
+                   await _hello.ShouldPromptHardwareUpgradeAsync();
+        HelloUpgradeInfo.IsOpen = show;
+    }
+
+    private void HelloUpgradeInfo_Closed(InfoBar sender, InfoBarClosedEventArgs args)
+        => _vm.SetHelloHardwareUpgradeDismissed(true);
+
+    private void RefreshUpdateApplyFailureBanner()
+    {
+        var error = _vm.PersonalSettings.LastUpdateApplyError;
+        if (string.IsNullOrWhiteSpace(error))
+        {
+            UpdateApplyFailureInfo.IsOpen = false;
+            return;
+        }
+
+        var when = _vm.PersonalSettings.LastUpdateApplyFailedUtc?.ToString("yyyy-MM-dd HH:mm") ?? "recently";
+        UpdateApplyFailureInfo.Message = $"{error} (last attempt {when} UTC). Use Check for updates to retry.";
+        UpdateApplyFailureInfo.IsOpen = true;
+    }
+
+    private void UpdateApplyFailureInfo_Closed(InfoBar sender, InfoBarClosedEventArgs args)
+        => _vm.ClearUpdateApplyFailure();
 
     private void ShowInfo(string msg, InfoBarSeverity severity = InfoBarSeverity.Informational)
     {

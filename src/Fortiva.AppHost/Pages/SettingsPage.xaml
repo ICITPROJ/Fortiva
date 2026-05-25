@@ -60,6 +60,13 @@
                     When configured, you can unlock with face recognition, fingerprint, or PIN.
                 </TextBlock>
                 <TextBlock x:Name="HelloStatus" FontSize="13" Opacity="0.8"/>
+                <InfoBar x:Name="HelloUpgradeInfo"
+                         IsOpen="False"
+                         IsClosable="True"
+                         Severity="Informational"
+                         Title="Upgrade Windows Hello security"
+                         Message="Your Hello credential uses software protection. Re-enroll once to use hardware-backed TPM storage when available."
+                         Closed="HelloUpgradeInfo_Closed"/>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button x:Name="SetupHelloBtn" Content="Set up Windows Hello" Click="SetupHello_Click"/>
                     <Button x:Name="RemoveHelloBtn" Content="Remove Hello credential" Click="RemoveHello_Click"/>
@@ -119,6 +126,12 @@
                               OnContent="On - verify and install in the background"
                               Toggled="AutoUpdate_Toggled"/>
                 <TextBlock x:Name="UpdateStatusText" FontSize="12" Opacity="0.7" TextWrapping="WrapWholeWords"/>
+                <InfoBar x:Name="UpdateApplyFailureInfo"
+                         IsOpen="False"
+                         IsClosable="True"
+                         Severity="Warning"
+                         Title="Automatic update failed"
+                         Closed="UpdateApplyFailureInfo_Closed"/>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button x:Name="CheckUpdateBtn" Content="Check for updates"
                             Style="{StaticResource FortivaAccentButton}" Click="CheckUpdate_Click"/>

@@ -418,7 +418,10 @@ public sealed class VaultSession : IDisposable
     {
         _autoLockTimeoutSeconds = seconds > 0 ? seconds : 300;
         if (_autoLock is not null)
+        {
             _autoLock.TimeoutSeconds = _autoLockTimeoutSeconds;
+            _autoLock.ResetActivity();
+        }
     }
 
     public void ApplyPolicy(FortivaPolicy? policy)

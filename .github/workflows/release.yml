@@ -142,6 +142,9 @@ jobs:
         shell: pwsh
         run: ./build-release.ps1 -Version ${{ needs.prepare.outputs.version }}
 
+      # Authenticode signing disabled for Personal — see docs/CODESIGNING.md.
+      # Re-enable sign + verify steps when CODESIGN_* secrets or Azure Artifact Signing is configured.
+
       - name: Build installers
         shell: pwsh
         run: ./build-installers.ps1 -Version ${{ needs.prepare.outputs.version }}
@@ -185,7 +188,7 @@ jobs:
           & ./scripts/bump-version.ps1 -Set -Version $v | Out-Null
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Directory.Build.props extension/manifest.json
+          git add Directory.Build.props extension/manifest.json packaging/releases/latest.personal.json
           if (git diff --cached --quiet) { Write-Host "Version files already match $v"; exit 0 }
           git commit -m "chore(release): sync version to $v [skip release]"
           git push origin HEAD:main

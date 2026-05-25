@@ -8,9 +8,11 @@ namespace Fortiva.Core.BrowserBridge;
 /// <summary>Validates named-pipe clients by process name and executable path.</summary>
 public static class BridgeClientValidator
 {
+    public const string BridgeHostExecutableName = "Fortiva.BrowserBridge.Host.exe";
+
     private static readonly HashSet<string> AllowedExecutableNames = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Fortiva.BrowserBridge.Host.exe",
+        BridgeHostExecutableName,
         "Fortiva.Personal.exe",
         "Fortiva.Enterprise.exe"
     };
@@ -32,6 +34,58 @@ public static class BridgeClientValidator
 
     public static bool IsAllowedExecutableName(string fileName) =>
         AllowedExecutableNames.Contains(fileName);
+
+    public static bool IsAllowedBridgeHostClient(NamedPipeServerStream pipe, IReadOnlyList<string>? installRoots = null)
+    {
+        try
+        {
+            if (!GetNamedPipeClientProcessId(pipe.SafePipeHandle.DangerousGetHandle(), out var pid) || pid == 0)
+                return false;
+
+            using var proc = Process.GetProcessById((int)pid);
+            return IsAllowedBridgeHostPath(proc.MainModule?.FileName, installRoots);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static bool IsAllowedBridgeHostPath(string? fullPath, IReadOnlyList<string>? installRoots = null)
+    {
+        if (string.IsNullOrWhiteSpace(fullPath))
+            return false;
+
+        try
+        {
+            fullPath = Path.GetFullPath(fullPath);
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (!string.Equals(Path.GetFileName(fullPath), BridgeHostExecutableName, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var roots = ResolveInstallRoots(installRoots);
+        if (roots.Count == 0)
+            return false;
+
+        foreach (var root in roots)
+        {
+            if (!IsUnderDirectory(fullPath, root))
+                continue;
+
+            if (!AuthenticodeVerifier.IsSigned(fullPath))
+                return false;
+
+            var bridgeDir = Path.Combine(root, "BrowserBridge");
+            return IsUnderDirectory(fullPath, bridgeDir) || IsUnderDirectory(fullPath, root);
+        }
+
+        return false;
+    }
 
     public static bool IsAllowedExecutablePath(string? fullPath, IReadOnlyList<string>? installRoots = null)
     {
@@ -63,7 +117,7 @@ public static class BridgeClientValidator
             if (!AuthenticodeVerifier.IsSigned(fullPath))
                 return false;
 
-            if (fileName.Equals("Fortiva.BrowserBridge.Host.exe", StringComparison.OrdinalIgnoreCase))
+            if (fileName.Equals(BridgeHostExecutableName, StringComparison.OrdinalIgnoreCase))
             {
                 var bridgeDir = Path.Combine(root, "BrowserBridge");
                 if (IsUnderDirectory(fullPath, bridgeDir) || IsUnderDirectory(fullPath, root))
@@ -78,20 +132,7 @@ public static class BridgeClientValidator
     }
 
     public static bool IsAllowedClient(NamedPipeServerStream pipe, IReadOnlyList<string>? installRoots = null)
-    {
-        try
-        {
-            if (!GetNamedPipeClientProcessId(pipe.SafePipeHandle.DangerousGetHandle(), out var pid) || pid == 0)
-                return false;
-
-            using var proc = Process.GetProcessById((int)pid);
-            return IsAllowedExecutablePath(proc.MainModule?.FileName, installRoots);
-        }
-        catch
-        {
-            return false;
-        }
-    }
+        => IsAllowedBridgeHostClient(pipe, installRoots);
 
     internal static bool IsUnderDirectory(string filePath, string directoryPath)
     {
