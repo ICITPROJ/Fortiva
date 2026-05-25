@@ -2,13 +2,14 @@ name: Release
 
 on:
   push:
+    branches: [main]
     tags:
       - 'v*.*.*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 1.0.1)'
-        required: true
+        description: 'Release version (e.g. 1.0.6) — leave empty to auto-bump from latest tag'
+        required: false
         type: string
 
 env:
@@ -20,25 +21,95 @@ permissions:
   contents: write
 
 jobs:
+  prepare:
+    name: Plan release
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.plan.outputs.should_release }}
+      version: ${{ steps.plan.outputs.version }}
+      reason: ${{ steps.plan.outputs.reason }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          msg="${{ github.event.head_commit.message }}"
+          if echo "$msg" | grep -q '\[skip release\]'; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "reason=Commit message contains [skip release]" >> "$GITHUB_OUTPUT"
+            echo "version=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            input='${{ inputs.version }}'
+            if [ -n "$input" ]; then
+              ver="$input"
+            else
+              latest=$(git tag -l 'v*.*.*' --sort=-v:refname | head -n1 || true)
+              if [ -z "$latest" ]; then ver="1.0.0"; else
+                core="${latest#v}"
+                IFS='.' read -r major minor patch <<< "$core"
+                ver="${major}.${minor}.$((patch + 1))"
+              fi
+            fi
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "version=$ver" >> "$GITHUB_OUTPUT"
+            echo "reason=Manual workflow dispatch" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            ver="${GITHUB_REF#refs/tags/v}"
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "version=$ver" >> "$GITHUB_OUTPUT"
+            echo "reason=Tag push $GITHUB_REF" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Push to main — auto-release when HEAD is not already the latest tag commit
+          git fetch --tags --force
+          head=$(git rev-parse HEAD)
+          latest=$(git tag -l 'v*.*.*' --sort=-v:refname | head -n1 || true)
+
+          if [ -n "$latest" ]; then
+            tag_commit=$(git rev-parse "${latest}^{commit}")
+            if [ "$tag_commit" = "$head" ]; then
+              echo "should_release=false" >> "$GITHUB_OUTPUT"
+              echo "reason=HEAD already released as $latest" >> "$GITHUB_OUTPUT"
+              echo "version=" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            core="${latest#v}"
+            IFS='.' read -r major minor patch <<< "$core"
+            ver="${major}.${minor}.$((patch + 1))"
+          else
+            ver="1.0.0"
+          fi
+
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "reason=New commits on main since $latest — auto release $ver" >> "$GITHUB_OUTPUT"
+
   release:
     name: Build, test, publish GitHub Release
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Resolve version
-        id: version
+      - name: Log release plan
         shell: pwsh
         run: |
-          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
-            $v = '${{ inputs.version }}'.Trim()
-          } else {
-            $v = '${{ github.ref_name }}' -replace '^v', ''
-          }
-          if ($v -notmatch '^\d+\.\d+\.\d+') { throw "Invalid version: $v" }
-          "value=$v" >> $env:GITHUB_OUTPUT
-          Write-Host "Release version: $v"
+          Write-Host "Release version: ${{ needs.prepare.outputs.version }}"
+          Write-Host "Reason: ${{ needs.prepare.outputs.reason }}"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -69,17 +140,17 @@ jobs:
 
       - name: Build release (dist/)
         shell: pwsh
-        run: ./build-release.ps1 -Version ${{ steps.version.outputs.value }}
+        run: ./build-release.ps1 -Version ${{ needs.prepare.outputs.version }}
 
       - name: Build installers
         shell: pwsh
-        run: ./build-installers.ps1 -Version ${{ steps.version.outputs.value }}
+        run: ./build-installers.ps1 -Version ${{ needs.prepare.outputs.version }}
         timeout-minutes: 30
 
       - name: Verify release artifacts
         shell: pwsh
         run: |
-          $v = '${{ steps.version.outputs.value }}'
+          $v = '${{ needs.prepare.outputs.version }}'
           $installer = "dist/installers/FortivaPersonal-$v-Setup.exe"
           if (-not (Test-Path $installer)) { throw "Missing installer: $installer" }
           $sizeMb = [math]::Round((Get-Item $installer).Length / 1MB, 1)
@@ -90,34 +161,39 @@ jobs:
         shell: pwsh
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: ./scripts/publish-release-manifest.ps1 -Version ${{ steps.version.outputs.value }}
-
-      - name: Create git tag (manual runs only)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "v${{ steps.version.outputs.value }}" -m "Release ${{ steps.version.outputs.value }}" 2>$null || true
-          git push origin "v${{ steps.version.outputs.value }}"
+        run: ./scripts/publish-release-manifest.ps1 -Version ${{ needs.prepare.outputs.version }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.value }}
-          name: Fortiva ${{ steps.version.outputs.value }}
+          tag_name: v${{ needs.prepare.outputs.version }}
+          name: Fortiva ${{ needs.prepare.outputs.version }}
           generate_release_notes: true
           make_latest: true
           fail_on_unmatched_files: false
           files: |
-            dist/installers/FortivaPersonal-${{ steps.version.outputs.value }}-Setup.exe
+            dist/installers/FortivaPersonal-${{ needs.prepare.outputs.version }}-Setup.exe
             packaging/releases/latest.personal.json
-            dist/installers/FortivaEnterprise-${{ steps.version.outputs.value }}-Setup.exe
-            dist/installers/FortivaAdmin-${{ steps.version.outputs.value }}-Setup.exe
+            dist/installers/FortivaEnterprise-${{ needs.prepare.outputs.version }}-Setup.exe
+            dist/installers/FortivaAdmin-${{ needs.prepare.outputs.version }}-Setup.exe
+
+      - name: Sync version files on main
+        if: github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: |
+          $v = '${{ needs.prepare.outputs.version }}'
+          & ./scripts/bump-version.ps1 -Set -Version $v | Out-Null
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Directory.Build.props extension/manifest.json
+          if (git diff --cached --quiet) { Write-Host "Version files already match $v"; exit 0 }
+          git commit -m "chore(release): sync version to $v [skip release]"
+          git push origin HEAD:main
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: fortiva-${{ steps.version.outputs.value }}
+          name: fortiva-${{ needs.prepare.outputs.version }}
           retention-days: 90
           path: |
             dist/installers/*.exe
