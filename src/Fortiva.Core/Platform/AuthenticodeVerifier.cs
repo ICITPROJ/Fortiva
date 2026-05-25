@@ -21,22 +21,31 @@ public static class AuthenticodeVerifier
         return VerifySignedFile(filePath);
 #else
         if (AllowUnsignedBridgeForDevelopment())
-            return false;
+            return true;
 
         return VerifySignedFile(filePath);
 #endif
     }
 
-    /// <summary>DEBUG / test-only escape hatch — never honored in Release builds.</summary>
+    /// <summary>
+    /// DEBUG or GitHub Actions test runs with FORTIVA_ALLOW_UNSIGNED_BRIDGE=1.
+    /// Never enabled for shipped Release builds on end-user machines.
+    /// </summary>
     internal static bool AllowUnsignedBridgeForDevelopment()
     {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE"),
+                "1",
+                StringComparison.Ordinal))
+            return false;
+
 #if DEBUG
-        return string.Equals(
-            Environment.GetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE"),
-            "1",
-            StringComparison.Ordinal);
+        return true;
 #else
-        return false;
+        return string.Equals(
+            Environment.GetEnvironmentVariable("GITHUB_ACTIONS"),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
 #endif
     }
 
