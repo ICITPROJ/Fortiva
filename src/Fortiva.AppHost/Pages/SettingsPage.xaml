@@ -72,7 +72,7 @@
             <StackPanel x:Name="BrowserExtensionSection" Spacing="12">
                 <TextBlock Text="Browser extension" FontSize="16" FontWeight="SemiBold" Opacity="0.7"/>
                 <TextBlock TextWrapping="WrapWholeWords" Opacity="0.7" FontSize="13">
-                    Fill logins in Edge or Chrome from your unlocked vault. Fortiva prepares the connection automatically — you only need to load the extension once in your browser.
+                    Fill logins from your unlocked vault on any website. One click in Fortiva prepares everything — you only confirm Load unpacked once in Edge or Chrome.
                 </TextBlock>
                 <Border Style="{StaticResource FortivaGlassPanelGlow}" Padding="14">
                     <StackPanel Spacing="6">
@@ -81,17 +81,11 @@
                                    TextWrapping="WrapWholeWords" FontFamily="Consolas"/>
                     </StackPanel>
                 </Border>
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button x:Name="SetupBrowserExtensionBtn" Content="Set up browser connection"
-                            Style="{StaticResource FortivaAccentButton}" Click="SetupBrowserExtension_Click"/>
-                    <Button x:Name="OpenExtensionFolderBtn" Content="Open extension folder" Click="OpenExtensionFolder_Click"/>
-                </StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button x:Name="OpenEdgeExtensionsBtn" Content="Open Edge extensions" Click="OpenEdgeExtensions_Click"/>
-                    <Button x:Name="CopyExtensionPathBtn" Content="Copy folder path" Click="CopyExtensionPath_Click"/>
-                </StackPanel>
+                <Button x:Name="ConnectBrowserBtn" Content="Connect browser"
+                        HorizontalAlignment="Left"
+                        Style="{StaticResource FortivaAccentButton}" Click="ConnectBrowser_Click"/>
                 <TextBlock TextWrapping="WrapWholeWords" Opacity="0.55" FontSize="11">
-                    One-time in Edge: turn on Developer mode, click Load unpacked, then choose the folder above. After that, click the Fortiva icon on a login page and use Fill credentials.
+                    After connecting, open any login page, click the Fortiva toolbar icon, and choose Fill credentials. Fortiva never autofills without your click.
                 </TextBlock>
             </StackPanel>
 

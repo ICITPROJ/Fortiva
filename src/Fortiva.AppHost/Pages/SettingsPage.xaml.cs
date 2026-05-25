@@ -134,21 +134,7 @@ public sealed partial class SettingsPage : Page
             return;
 
         var status = BrowserExtensionSetupHelper.GetStatus(_vm);
-        if (status.IsReadyForBrowser)
-        {
-            BrowserExtensionStatusText.Text =
-                "Browser connection is ready. If you have not loaded the extension yet, open Edge extensions and choose Load unpacked using the folder below.";
-        }
-        else if (status.BridgeExecutableFound && status.ExtensionSourcePath is not null)
-        {
-            BrowserExtensionStatusText.Text =
-                "Almost ready — click Set up browser connection to register Fortiva with your browser.";
-        }
-        else
-        {
-            BrowserExtensionStatusText.Text =
-                "Extension files were not found with this install. Reinstall Fortiva or run a full release build.";
-        }
+        BrowserExtensionStatusText.Text = BrowserExtensionSetupHelper.FormatStatusMessage(status);
 
         BrowserExtensionPathText.Text = status.ExtensionFilesReady
             ? $"Extension folder: {status.ExtensionStagingPath}"
@@ -157,23 +143,24 @@ public sealed partial class SettingsPage : Page
                 : "Extension folder not prepared yet.";
     }
 
-    private void SetupBrowserExtension_Click(object sender, RoutedEventArgs e)
+    private async void ConnectBrowser_Click(object sender, RoutedEventArgs e)
     {
-        SetupBrowserExtensionBtn.IsEnabled = false;
+        ConnectBrowserBtn.IsEnabled = false;
         try
         {
-            var result = BrowserExtensionSetupHelper.EnsureReady(_vm);
+            var result = await BrowserExtensionSetupHelper.ConnectBrowserAsync(_vm, XamlRoot);
+            RefreshBrowserExtensionUi();
             if (!result.Success)
             {
                 ShowInfo(result.Error ?? "Browser setup failed.", InfoBarSeverity.Error);
-                RefreshBrowserExtensionUi();
                 return;
             }
 
-            RefreshBrowserExtensionUi();
-            ShowInfo(
-                "Browser connection configured. In Edge, turn on Developer mode, click Load unpacked, and select the extension folder shown below.",
-                InfoBarSeverity.Success);
+            var browser = result.Browser == BrowserExtensionSetupHelper.SupportedBrowser.Chrome ? "Chrome" : "Edge";
+            var msg = result.AutoLoadAttempted
+                ? $"Fortiva opened {browser} with the extension. Click the Fortiva icon on a login page to fill credentials."
+                : $"Fortiva opened {browser} and the extension folder. Turn on Developer mode, click Load unpacked, and select the folder that opened.";
+            ShowInfo(msg, InfoBarSeverity.Success);
         }
         catch (Exception ex)
         {
@@ -182,54 +169,8 @@ public sealed partial class SettingsPage : Page
         }
         finally
         {
-            SetupBrowserExtensionBtn.IsEnabled = true;
+            ConnectBrowserBtn.IsEnabled = true;
         }
-    }
-
-    private void OpenExtensionFolder_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var setup = BrowserExtensionSetupHelper.EnsureStagingFolder(_vm);
-            if (!setup.Success)
-            {
-                ShowInfo(setup.Error ?? "Could not prepare the extension folder.", InfoBarSeverity.Error);
-                return;
-            }
-
-            BrowserExtensionSetupHelper.OpenExtensionFolder(setup.ExtensionStagingPath!);
-            RefreshBrowserExtensionUi();
-        }
-        catch (Exception ex)
-        {
-            ShowInfo(App.DescribeException(ex), InfoBarSeverity.Error);
-        }
-    }
-
-    private async void OpenEdgeExtensions_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            await BrowserExtensionSetupHelper.OpenEdgeExtensionsAsync();
-        }
-        catch
-        {
-            ShowInfo("Could not open Edge. Open edge://extensions manually in your browser.", InfoBarSeverity.Warning);
-        }
-    }
-
-    private void CopyExtensionPath_Click(object sender, RoutedEventArgs e)
-    {
-        var setup = BrowserExtensionSetupHelper.EnsureStagingFolder(_vm);
-        if (!setup.Success)
-        {
-            ShowInfo(setup.Error ?? "Could not prepare the extension folder.", InfoBarSeverity.Error);
-            return;
-        }
-
-        BrowserExtensionSetupHelper.CopyPathToClipboard(setup.ExtensionStagingPath!);
-        RefreshBrowserExtensionUi();
-        ShowInfo("Extension folder path copied to clipboard.", InfoBarSeverity.Success);
     }
 
     private void RefreshSharedVaultUi()

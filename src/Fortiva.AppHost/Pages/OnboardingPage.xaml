@@ -161,18 +161,14 @@
                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
                             <TextBlock Text="Connect your browser" FontSize="24" FontWeight="SemiBold"/>
                             <TextBlock TextWrapping="WrapWholeWords" Opacity="0.8" FontSize="13" LineHeight="20">
-                                Fortiva can fill logins in Edge when you click the toolbar icon. Setup takes about a minute — load the extension once, then use Fill on any login page.
+                                One click prepares Fortiva for Edge or Chrome. Confirm Load unpacked once, then fill any login from the toolbar icon.
                             </TextBlock>
                             <TextBlock x:Name="BrowserExtStatusText" FontSize="12" Opacity="0.75" TextWrapping="WrapWholeWords"/>
-                            <Button x:Name="BrowserExtSetupBtn" Content="Set up browser connection"
+                            <Button x:Name="BrowserExtConnectBtn" Content="Connect browser"
                                     HorizontalAlignment="Stretch"
-                                    Style="{StaticResource FortivaAccentButton}" Click="BrowserExtSetup_Click"/>
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button x:Name="BrowserExtOpenEdgeBtn" Content="Open Edge extensions" Click="BrowserExtOpenEdge_Click"/>
-                                <Button x:Name="BrowserExtOpenFolderBtn" Content="Open extension folder" Click="BrowserExtOpenFolder_Click"/>
-                            </StackPanel>
+                                    Style="{StaticResource FortivaAccentButton}" Click="BrowserExtConnect_Click"/>
                             <TextBlock TextWrapping="WrapWholeWords" Opacity="0.55" FontSize="11">
-                                In Edge: Developer mode → Load unpacked → choose the folder Fortiva opens for you.
+                                You can skip and connect later from Settings → Browser extension.
                             </TextBlock>
                             <Button x:Name="BrowserExtContinueBtn" Content="Continue to vault"
                                     HorizontalAlignment="Stretch"

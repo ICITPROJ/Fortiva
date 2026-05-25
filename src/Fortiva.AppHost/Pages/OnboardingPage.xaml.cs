@@ -387,51 +387,24 @@ public sealed partial class OnboardingPage : Page
 
     private void RefreshBrowserExtensionStep()
     {
+        BrowserExtensionSetupHelper.EnsureReady(_vm);
         var status = BrowserExtensionSetupHelper.GetStatus(_vm);
-        BrowserExtStatusText.Text = status.IsReadyForBrowser
-            ? $"Ready. Extension folder:\n{status.ExtensionStagingPath}"
-            : "Click Set up browser connection, then load that folder in Edge (Developer mode → Load unpacked).";
+        BrowserExtStatusText.Text = BrowserExtensionSetupHelper.FormatStatusMessage(status);
     }
 
-    private void BrowserExtSetup_Click(object sender, RoutedEventArgs e)
+    private async void BrowserExtConnect_Click(object sender, RoutedEventArgs e)
     {
-        BrowserExtSetupBtn.IsEnabled = false;
+        BrowserExtConnectBtn.IsEnabled = false;
         try
         {
-            var result = BrowserExtensionSetupHelper.EnsureReady(_vm);
-            BrowserExtStatusText.Text = result.Success
-                ? $"Connection ready.\nExtension folder:\n{result.ExtensionStagingPath}\n\nOpen Edge extensions, enable Developer mode, Load unpacked, and select this folder."
-                : result.Error ?? "Setup failed.";
+            var result = await BrowserExtensionSetupHelper.ConnectBrowserAsync(_vm, XamlRoot);
+            RefreshBrowserExtensionStep();
+            if (!result.Success)
+                BrowserExtStatusText.Text = result.Error ?? "Setup failed.";
         }
         finally
         {
-            BrowserExtSetupBtn.IsEnabled = true;
-        }
-    }
-
-    private async void BrowserExtOpenEdge_Click(object sender, RoutedEventArgs e)
-    {
-        try { await BrowserExtensionSetupHelper.OpenEdgeExtensionsAsync(); }
-        catch { BrowserExtStatusText.Text = "Open edge://extensions manually in Edge."; }
-    }
-
-    private void BrowserExtOpenFolder_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var result = BrowserExtensionSetupHelper.EnsureStagingFolder(_vm);
-            if (!result.Success)
-            {
-                BrowserExtStatusText.Text = result.Error ?? "Could not prepare extension folder.";
-                return;
-            }
-
-            BrowserExtensionSetupHelper.OpenExtensionFolder(result.ExtensionStagingPath!);
-            RefreshBrowserExtensionStep();
-        }
-        catch (Exception ex)
-        {
-            BrowserExtStatusText.Text = App.DescribeException(ex);
+            BrowserExtConnectBtn.IsEnabled = true;
         }
     }
 
