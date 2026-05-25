@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using Fortiva.AppHost.ViewModels;
 using Fortiva.Core.Platform;
 using Fortiva.Core.Updates;
@@ -99,14 +100,8 @@ public sealed class UpdateService
             if (!hash.Equals(manifest.InstallerSha256.ToLowerInvariant(), StringComparison.Ordinal))
                 throw new InvalidOperationException("Installer failed pre-launch integrity check.");
 
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = dest,
-                Arguments = UpdateUrlPolicy.DefaultInstallerArgs,
-                UseShellExecute = true
-            });
-
-            // Never force-quit during launch — user may be mid-setup or have an unlocked vault.
+            LaunchInstallerWithRestart(dest, ResolveInstalledExePath(), UpdateUrlPolicy.DefaultInstallerArgs);
+            App.ExitForUpdate();
             return true;
         }
         catch (Exception ex)
@@ -114,6 +109,37 @@ public sealed class UpdateService
             App.LogException("ApplyAsync", ex);
             throw;
         }
+    }
+
+    internal static string ResolveInstalledExePath()
+    {
+        var fromProcess = Environment.ProcessPath;
+        if (!string.IsNullOrWhiteSpace(fromProcess) && File.Exists(fromProcess))
+            return fromProcess;
+
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Programs", "icmclab studio", "Fortiva Personal", "Fortiva.Personal.exe");
+    }
+
+    internal static void LaunchInstallerWithRestart(string installerPath, string appExePath, string installerArgs)
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"fortiva-update-{Guid.NewGuid():N}.cmd");
+        var script = new StringBuilder()
+            .AppendLine("@echo off")
+            .AppendLine($"start /wait \"\" \"{installerPath}\" {installerArgs}")
+            .AppendLine($"if exist \"{appExePath}\" start \"\" \"{appExePath}\"")
+            .AppendLine("del \"%~f0\"")
+            .ToString();
+        File.WriteAllText(scriptPath, script);
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = scriptPath,
+            UseShellExecute = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
+            CreateNoWindow = true
+        });
     }
 
     public static bool ShouldCheckNow(DateTimeOffset? lastCheck, TimeSpan interval)

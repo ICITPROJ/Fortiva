@@ -475,7 +475,7 @@ public sealed partial class SettingsPage : Page
                     Title = "Install update?",
                     Content = new TextBlock
                     {
-                        Text = $"{result.Message}\n\nFortiva will close and install the update. Your vault is not affected.",
+                        Text = $"{result.Message}\n\nFortiva will close, install the update, and reopen automatically. Your vault is not affected.",
                         TextWrapping = TextWrapping.WrapWholeWords
                     },
                     PrimaryButtonText = "Install now",

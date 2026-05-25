@@ -82,7 +82,7 @@ CloseApplications=yes
 
 CloseApplicationsFilter={#AppExeName}
 
-RestartApplications=no
+RestartApplications=yes
 
 ; Per-user vault lives in %APPDATA% — do not require admin (avoids wrong-profile deletes)
 

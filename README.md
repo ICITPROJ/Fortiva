@@ -97,13 +97,15 @@ Installers bundle .NET 8 + Windows App SDK and install **WebView2** + **VC++ x64
 
 | Document | Description |
 |----------|-------------|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System overview, release/update flow, component map |
 | [`docs/UserManual.md`](docs/UserManual.md) | End-user guide (install, vault, security audit, backup) |
 | [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) | Threat model, trust boundaries, mitigations |
 | [`docs/VAULT-FORMAT.md`](docs/VAULT-FORMAT.md) | `.fva` binary format specification |
 | [`docs/POLICY-LICENSING.md`](docs/POLICY-LICENSING.md) | License structure, policy engine |
 | [`docs/ONBOARDING-RECOVERY.md`](docs/ONBOARDING-RECOVERY.md) | Onboarding, panic lock, snapshot recovery |
 | [`docs/UPDATE-STRATEGY.md`](docs/UPDATE-STRATEGY.md) | Personal auto-update via GitHub Releases |
-| [`docs/RELEASE-PIPELINE.md`](docs/RELEASE-PIPELINE.md) | CI/CD release workflow |
+| [`docs/RELEASE-PIPELINE.md`](docs/RELEASE-PIPELINE.md) | CI/CD — auto-release on push to `main` |
+| [`docs/GIT-PUSH-WALKTHROUGH.pdf`](docs/GIT-PUSH-WALKTHROUGH.pdf) | Short git push guide for contributors |
 | [`docs/SECURITY-PENTEST-REPORT.md`](docs/SECURITY-PENTEST-REPORT.md) | Adversarial review findings |
 
 ## QA
@@ -117,6 +119,8 @@ powershell -ExecutionPolicy Bypass -File scripts/qa-stress-audit.ps1 -SkipBuild
 
 GitHub Actions (`.github/workflows/ci.yml`, `release.yml`):
 
-1. **Core** — build + test
-2. **Release** — `build-release.ps1`, prerequisites fetch, Inno Setup installers, GitHub Release assets
+1. **Core** — build + test on every push / PR
+2. **Release** — **auto-release on push to `main`**: bump patch version, build installers, publish GitHub Release + `latest.personal.json` (~8–10 min)
 3. **CodeQL** — security scanning
+
+Developer flow: `git push origin main` → wait for Release workflow → users **Check for updates** in the app. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).

@@ -46,22 +46,36 @@ Hosting is **free** via [GitHub Releases](https://docs.github.com/en/repositorie
 
 
 
-### Publishing a release (CI / ops)
+### Publishing a release (developers)
+
+
+
+Releases are **automatic** when you push to `main` (see [`ARCHITECTURE.md`](ARCHITECTURE.md) and [`RELEASE-PIPELINE.md`](RELEASE-PIPELINE.md)).
 
 
 
 ```powershell
+git add -A
+git commit -m "Your change description"
+git push origin main
+# Wait ~8–10 min for GitHub Actions Release workflow
+# Users: Settings → Check for updates
+```
 
-# After build-release.ps1 + build-installers.ps1:
 
-powershell -File scripts/publish-release-manifest.ps1 -Version 1.0.1
 
-git tag v1.0.1
+CI auto-bumps the patch version from the latest git tag, builds installers, publishes `latest.personal.json`, and creates the GitHub Release. **Manual git tags are optional** (override only).
 
-git push origin v1.0.1
 
-# GitHub Actions attaches manifest + installers to the Release
 
+Local manifest generation (dry run, no publish):
+
+
+
+```powershell
+./build-release.ps1 -Version 1.0.7
+./build-installers.ps1 -Version 1.0.7
+powershell -File scripts/publish-release-manifest.ps1 -Version 1.0.7
 ```
 
 

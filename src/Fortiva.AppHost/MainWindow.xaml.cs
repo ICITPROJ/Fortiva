@@ -20,6 +20,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        App.RegisterUiDispatcher(DispatcherQueue);
 
         // Custom title bar (before theme chrome so title-bar colors apply)
         ExtendsContentIntoTitleBar = true;

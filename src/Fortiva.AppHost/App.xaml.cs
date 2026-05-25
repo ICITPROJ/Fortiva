@@ -1,3 +1,4 @@
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using System;
 using System.IO;
@@ -14,7 +15,17 @@ public partial class App : Application
     public static string Edition { get; private set; } = "Personal";
     public static IntPtr MainWindowHandle { get; private set; }
 
+    private static DispatcherQueue? _uiDispatcher;
     private Window? _window;
+
+    internal static void RegisterUiDispatcher(DispatcherQueue dispatcher) => _uiDispatcher = dispatcher;
+
+    internal static void ExitForUpdate()
+    {
+        void Exit() => ((App)Current).Exit();
+        if (_uiDispatcher?.TryEnqueue(Exit) != true)
+            Exit();
+    }
 
     public App()
     {

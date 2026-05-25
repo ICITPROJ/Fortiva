@@ -1,196 +1,201 @@
 # Fortiva release pipeline
 
+Automated path from **`git push origin main`** → **GitHub Release** → **Personal auto-update**.
 
+For system context see [`ARCHITECTURE.md`](ARCHITECTURE.md). For client-side update behaviour see [`UPDATE-STRATEGY.md`](UPDATE-STRATEGY.md).
 
-Fully automated path from **git tag** → **client auto-update** via **GitHub Releases** (no hosting fees).
+---
 
-
+## Overview
 
 ```text
-
-git tag v1.0.1 && git push origin v1.0.1
-
+git push origin main
         │
-
         ▼
-
-GitHub Actions (release.yml)
-
-  • unit tests
-
-  • build-release.ps1
-  • fetch-installer-prerequisites.ps1 (WebView2 + VC++ embedded in installers)
-  • Inno Setup installers
-
-  • latest.personal.json (version + SHA-256 + GitHub asset URLs)
-
-  • GitHub Release assets attached to tag
-
+GitHub Actions — Release workflow (.github/workflows/release.yml)
+  │
+  ├─ prepare (ubuntu)
+  │    • Skip if commit message contains [skip release]
+  │    • Skip if HEAD already equals latest tag commit
+  │    • Else: auto-bump patch from latest v*.*.* tag (e.g. 1.0.5 → 1.0.6)
+  │
+  └─ release (windows-latest) — if prepare says should_release
+       • unit tests (Core + AppHost)
+       • build-release.ps1 -Version {computed}
+       • build-installers.ps1 -Version {computed}
+       • publish-release-manifest.ps1
+       • GitHub Release (tag v{x.y.z}, make_latest)
+       • sync Directory.Build.props + extension/manifest.json
+         commit: chore(release): sync version … [skip release]
         │
-
         ▼
-
-Fortiva Personal clients (within 24h)
-
-  GET https://github.com/ICITPROJ/Fortiva/releases/latest/download/latest.personal.json
-
-  download installer from GitHub Releases + verify SHA-256 + silent install
-
+Fortiva Personal (installed clients)
+  GET …/releases/latest/download/latest.personal.json
+  verify SHA-256 → silent install
 ```
 
+**You do not need to create git tags manually.** Push to `main`; CI assigns the next patch version and publishes.
 
+---
 
-## Cost
-
-
-
-| Service | Role | Cost |
-
-|---------|------|------|
-
-| **GitHub Actions** | Build + publish | Free tier (public repos: unlimited minutes) |
-
-| **GitHub Releases** | Host manifest + installers | **Free** — [no bandwidth cap on release assets](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases) |
-
-| **IONOS / Fasthosts / Azure** | Not used for updates | What you already pay (domains/site only) |
-
-
-
-## One-time setup
-
-
-
-Push this repo to GitHub. The workflow file is `.github/workflows/release.yml`.
-
-
-
-No FTP secrets, storage accounts, or CDN required.
-
-
-
-If you rename the repository, update `ReleaseManifestUrls.GitHubRepository` in  
-
-`src/Fortiva.Core/Updates/ReleaseManifest.cs` and add the new `owner/repo` to  
-
-`UpdateUrlPolicy` if needed.
-
-
-
-## Releasing a version
-
-
-
-### Automated (recommended)
-
-
-
-```bash
-
-git tag v1.0.1
-
-git push origin v1.0.1
-
-```
-
-
-
-GitHub Actions runs automatically. Watch **Actions → Release**.
-
-
-
-### Manual trigger
-
-
-
-**Actions → Release → Run workflow** and enter e.g. `1.0.1`.
-
-
-
-### Local dry run
-
-
+## Developer workflow (recommended)
 
 ```powershell
-./build-release.ps1
-
-./scripts/fetch-installer-prerequisites.ps1   # WebView2 + VC++ (also run by build-installers.ps1)
-
-./build-installers.ps1 -Version 1.0.1
-
-./scripts/publish-release-manifest.ps1 -Version 1.0.1
-
-# inspect packaging/releases/latest.personal.json
-
+cd C:\Repo\Github\Fortiva
+git add -A
+git commit -m "Describe your change"
+git push origin main
 ```
 
+Then:
 
+1. Watch **Actions → Release**: https://github.com/ICITPROJ/Fortiva/actions/workflows/release.yml  
+2. Wait until the run is green (~8–10 minutes)  
+3. In Fortiva: **Settings → Check for updates** → **Install now**
 
-## Release assets (per tag)
+Optional helper (same result — push only):
 
+```powershell
+.\scripts\publish-release.ps1
+```
 
+---
+
+## When releases are skipped
+
+| Condition | Result |
+|-----------|--------|
+| `HEAD` is already the commit pointed to by the latest `v*.*.*` tag | No release (already published) |
+| Commit message contains `[skip release]` | No release (version-sync bot commit) |
+| Only CI/docs change with no new commits since tag | Same as first row |
+
+---
+
+## Manual / override triggers
+
+### Push an explicit version tag
+
+```bash
+git tag v1.0.7
+git push origin v1.0.7
+```
+
+The Release workflow runs for that tag with version **1.0.7** (no auto-bump).
+
+### GitHub Actions UI
+
+**Actions → Release → Run workflow**
+
+- Leave version empty to auto-bump from latest tag  
+- Or enter e.g. `1.0.7`
+
+### Local dry run (no publish)
+
+```powershell
+./build-release.ps1 -Version 1.0.7
+./build-installers.ps1 -Version 1.0.7
+./scripts/publish-release-manifest.ps1 -Version 1.0.7
+# inspect packaging/releases/latest.personal.json
+```
+
+---
+
+## Version numbering
+
+| Source | When used |
+|--------|-----------|
+| **Auto-bump** from latest git tag | Default on push to `main` |
+| **Tag push** `vX.Y.Z` | Explicit release version |
+| **`Directory.Build.props`** | Local/dev builds; synced by CI after release |
+| **`scripts/bump-version.ps1 -Patch`** | Optional local bump before push |
+
+CI build always uses the **computed release version**, not whatever happens to be in props at commit time (props may lag until sync commit).
+
+---
+
+## Release assets (per version)
 
 Each GitHub Release includes:
 
-
-
 | Asset | Purpose |
-
 |-------|---------|
-
-| `latest.personal.json` | Update manifest (also used by `/releases/latest/download/`) |
-
+| `latest.personal.json` | Update manifest (`/releases/latest/download/`) |
 | `FortivaPersonal-{version}-Setup.exe` | Personal auto-update installer |
+| `FortivaEnterprise-{version}-Setup.exe` | Optional IT / manual download |
+| `FortivaAdmin-{version}-Setup.exe` | Optional admin console download |
 
-| `FortivaEnterprise-{version}-Setup.exe` | Optional manual / IT download |
+Verify manifest in a browser:
 
-| `FortivaAdmin-{version}-Setup.exe` | Optional manual / IT download |
+- https://github.com/ICITPROJ/Fortiva/releases/latest/download/latest.personal.json
 
+---
 
+## Cost
 
-Verify in a browser:
+| Service | Role | Cost |
+|---------|------|------|
+| **GitHub Actions** | Build + publish | Free tier (public repos) |
+| **GitHub Releases** | Host manifest + installers | **Free** |
 
+No FTP, Azure storage, or CDN required for Personal updates.
 
+---
 
-- https://github.com/ICITPROJ/az-700-prep/releases/latest/download/latest.personal.json
+## One-time setup
 
+Push this repo to **ICITPROJ/Fortiva** on GitHub. Workflows:
 
+- `.github/workflows/ci.yml` — tests on every push  
+- `.github/workflows/release.yml` — auto-release on `main`
+
+If you rename the repository, update:
+
+- `ReleaseManifestUrls.GitHubRepository` in `src/Fortiva.Core/Updates/ReleaseManifest.cs`
+- `UpdateUrlPolicy` allowed repositories
+
+---
 
 ## Enterprise clients
 
+Enterprise edition does **not** poll the public manifest. IT distributes via:
 
+- GitHub Release assets, or  
+- Intune / manual install  
 
-Enterprise edition does **not** poll the public URL. IT installs from:
+See `packaging/intune/` and [`UPDATE-STRATEGY.md`](UPDATE-STRATEGY.md).
 
-
-
-- GitHub Release assets, or
-
-- Intune / manual distribution
-
-
+---
 
 ## Troubleshooting
 
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| App says “Up to date” but you pushed code | Release not finished or `HEAD` already tagged | Wait for green Release workflow; confirm manifest version at `/releases/latest/download/latest.personal.json` |
+| `git push` says “everything up to date” | No new commits | `git commit` first, then push |
+| Release workflow red | Build/installer/test failure | Open failed run logs on Actions tab |
+| Manifest 404 | No successful release yet | Fix workflow; re-push or manual dispatch |
+| SHA mismatch on install | Manifest out of sync with installer | Re-run release (manifest generated in CI from built EXE) |
+| Wrong repo in app | Old build or wrong `GitHubRepository` constant | Ship new release from this repo |
+| Looking at **Fortiva-Website** Actions | Wrong repository | Use **ICITPROJ/Fortiva** for the desktop app |
 
-
-| Symptom | Fix |
-
-|---------|-----|
-
-| Update check fails | Rebuild client from this repo (uses GitHub Releases URL) |
-
-| Manifest 404 | Publish a GitHub Release with `latest.personal.json` attached |
-
-| SHA mismatch | Regenerate manifest with `publish-release-manifest.ps1` after rebuilding installer |
-
-| Wrong repo in URLs | Set `GITHUB_REPOSITORY` in CI or pass `-Repository owner/repo` to manifest script |
-
-
+---
 
 ## Security
 
+- Only GitHub release URLs from **ICITPROJ/Fortiva** are accepted by the client (`UpdateUrlPolicy`).
+- Installers must match `FortivaPersonal-{version}-Setup.exe`.
+- Manifest must include a real SHA-256 (placeholder hashes are rejected client-side).
+- Legacy `studio.icmclab.cloud` URLs remain allowed for older builds.
 
+---
 
-Only GitHub release URLs from `ICITPROJ/Fortiva` are accepted. Installers must be named `FortivaPersonal-{version}-Setup.exe`. Legacy `studio.icmclab.cloud` URLs remain allowed for older builds.
+## Key scripts
 
-
+| Script | Purpose |
+|--------|---------|
+| `build-release.ps1` | MSBuild + publish Personal/Enterprise/Admin + bridge + extension |
+| `build-installers.ps1` | Inno Setup installers + prerequisites |
+| `scripts/publish-release-manifest.ps1` | Write `latest.personal.json` with SHA-256 |
+| `scripts/bump-version.ps1` | Bump/sync version in props + extension manifest |
+| `scripts/publish-release.ps1` | Push `main` (documents auto-release) |
+| `scripts/test-browser-extension.ps1` | Verify extension staging + registry |
