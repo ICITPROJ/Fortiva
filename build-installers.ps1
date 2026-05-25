@@ -139,7 +139,7 @@ foreach ($entry in $scripts) {
 
     $isccArgs = @()
 
-    if ($Version) { $isccArgs += "/DAppVersion=""$Version""" }
+    if ($Version) { $isccArgs += "/DAppVersion=$Version" }
 
 
 
