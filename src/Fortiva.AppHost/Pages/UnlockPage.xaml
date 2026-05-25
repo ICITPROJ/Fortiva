@@ -22,8 +22,8 @@
                            HorizontalAlignment="Center" Stretch="Uniform"/>
                     <TextBlock x:Name="HeadingText" Style="{StaticResource FortivaHeroTitle}"
                                HorizontalAlignment="Center" Text="Unlock vault"/>
-                    <TextBlock x:Name="SubtitleText" FontSize="13" Opacity="0.7"
-                               HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="WrapWholeWords"
+                    <TextBlock x:Name="SubtitleText" Style="{StaticResource FortivaBodyText}" FontSize="13"
+                               HorizontalAlignment="Center" TextAlignment="Center"
                                Text="Enter your master password to continue."/>
                 </StackPanel>
 
@@ -35,7 +35,7 @@
                          IsClosable="False"/>
 
                 <StackPanel Grid.Row="3" Spacing="8">
-                    <TextBlock Text="Master password" FontWeight="SemiBold" FontSize="13"/>
+                    <TextBlock Text="Master password" Style="{StaticResource FortivaFieldLabel}"/>
                     <PasswordBox x:Name="PasswordField"
                                  Style="{StaticResource FortivaPasswordBox}"
                                  PlaceholderText="Enter master password"
@@ -55,8 +55,10 @@
                                   HorizontalAlignment="Center" Visibility="Collapsed"/>
                 </StackPanel>
 
-                <TextBlock Grid.Row="5" Text="Lost your master password? Fortiva cannot recover it - use an offline backup or encrypted .fvab export if you have one."
-                           FontSize="11" Opacity="0.55" TextWrapping="WrapWholeWords" TextAlignment="Center"/>
+                <TextBlock Grid.Row="5"
+                           Style="{StaticResource FortivaHelperText}"
+                           TextAlignment="Center"
+                           Text="Lost your master password? Fortiva cannot recover it - use an offline backup or encrypted .fvab export if you have one."/>
             </Grid>
         </Border>
     </Grid>

@@ -166,15 +166,13 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
         var masterKey = await _hello.TryLoadMasterKeyAsync();
         if (masterKey is null)
         {
-            await _hello.ClearAsync();
-            HelloBtn.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
             SetBusy(false);
             if (HelloMandatory)
             {
-                SubtitleText.Text = "Windows Hello credential was reset. Unlock with your master password, then re-configure Hello in Settings.";
+                SubtitleText.Text = "Windows Hello could not load your credential. Unlock with your master password, then re-configure Hello in Settings.";
                 ApplyUnlockControls();
             }
-            ShowError("Your Windows Hello credential is outdated. Unlock with your master password, then re-configure Hello in Settings.");
+            ShowError("Windows Hello could not unlock the vault key. Try again, use your master password, or re-configure Hello in Settings.");
             return;
         }
 
@@ -188,14 +186,12 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
 
             if (!ok)
             {
-                await _hello.ClearAsync();
-                HelloBtn.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
                 if (HelloMandatory)
                 {
                     SubtitleText.Text = "Windows Hello unlock failed. Unlock with your master password, then re-configure Hello in Settings.";
                     ApplyUnlockControls();
                 }
-                ShowError(error ?? "Windows Hello unlock failed. Re-configure Hello in Settings.");
+                ShowError(error ?? "Windows Hello unlock failed. Try your master password or re-configure Hello in Settings.");
             }
             else if (error is not null)
             {

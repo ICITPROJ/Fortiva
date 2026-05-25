@@ -16,7 +16,7 @@
 
             <!-- Appearance -->
             <StackPanel Spacing="12">
-                <TextBlock Text="Appearance" FontSize="16" FontWeight="SemiBold" Opacity="0.7"/>
+                <TextBlock Text="Appearance" Style="{StaticResource FortivaSectionTitle}"/>
                 <ComboBox x:Name="ThemeCombo" Header="Theme" Style="{StaticResource FortivaComboBox}" SelectionChanged="Theme_Changed">
                     <ComboBoxItem Content="Use system setting" Tag="System"/>
                     <ComboBoxItem Content="Light" Tag="Light"/>
@@ -28,25 +28,24 @@
 
             <!-- Security -->
             <StackPanel Spacing="16">
-                <TextBlock Text="Security" FontSize="16" FontWeight="SemiBold" Opacity="0.7"/>
+                <TextBlock Text="Security" Style="{StaticResource FortivaSectionTitle}"/>
 
-                <ToggleSwitch x:Name="ParanoiaModeSwitch" Header="Paranoia Mode"
+                <ToggleSwitch x:Name="ParanoiaModeSwitch" Style="{StaticResource FortivaToggleSwitch}"
+                              Header="Paranoia Mode"
                               OffContent="Off - vault opens with rollback warning"
                               OnContent="On - vault opens read-only if rollback detected"
                               Toggled="ParanoiaMode_Toggled"/>
 
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Auto-lock after inactivity" FontWeight="SemiBold" FontSize="13"/>
-                    <!-- Minimum/Maximum/Value set in code-behind - WinUI 3 XBF replays attributes
-                         in source order; setting Minimum before Value violates the range constraint -->
+                    <TextBlock Text="Auto-lock after inactivity" Style="{StaticResource FortivaFieldLabel}"/>
                     <Slider x:Name="AutoLockSlider" ValueChanged="AutoLock_Changed"/>
-                    <TextBlock x:Name="AutoLockLabel" FontSize="11" Opacity="0.6"/>
+                    <TextBlock x:Name="AutoLockLabel" Style="{StaticResource FortivaHelperText}"/>
                 </StackPanel>
 
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Clipboard auto-clear" FontWeight="SemiBold" FontSize="13"/>
+                    <TextBlock Text="Clipboard auto-clear" Style="{StaticResource FortivaFieldLabel}"/>
                     <Slider x:Name="ClipboardSlider" ValueChanged="Clipboard_Changed"/>
-                    <TextBlock x:Name="ClipboardLabel" FontSize="11" Opacity="0.6"/>
+                    <TextBlock x:Name="ClipboardLabel" Style="{StaticResource FortivaHelperText}"/>
                 </StackPanel>
             </StackPanel>
 
@@ -54,12 +53,12 @@
 
             <!-- Windows Hello -->
             <StackPanel Spacing="12">
-                <TextBlock Text="Windows Hello" FontSize="16" FontWeight="SemiBold" Opacity="0.7"/>
-                <TextBlock TextWrapping="WrapWholeWords" Opacity="0.7" FontSize="13">
+                <TextBlock Text="Windows Hello" Style="{StaticResource FortivaSectionTitle}"/>
+                <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13">
                     Windows Hello protects access to the vault key protector.
                     When configured, you can unlock with face recognition, fingerprint, or PIN.
                 </TextBlock>
-                <TextBlock x:Name="HelloStatus" FontSize="13" Opacity="0.8"/>
+                <TextBlock x:Name="HelloStatus" Style="{StaticResource FortivaBodyText}" FontSize="13"/>
                 <InfoBar x:Name="HelloUpgradeInfo"
                          IsOpen="False"
                          IsClosable="True"
@@ -77,22 +76,22 @@
 
             <!-- Browser extension -->
             <StackPanel x:Name="BrowserExtensionSection" Spacing="12">
-                <TextBlock Text="Browser extension" FontSize="16" FontWeight="SemiBold" Opacity="0.7"/>
-                <TextBlock TextWrapping="WrapWholeWords" Opacity="0.7" FontSize="13">
+                <TextBlock Text="Browser extension" Style="{StaticResource FortivaSectionTitle}"/>
+                <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13">
                     On any login page, click the Fortiva icon in Edge or Chrome and choose Fill login.
                     Fortiva prepares the connection for you — one quick browser step the first time.
                 </TextBlock>
                 <Border Style="{StaticResource FortivaGlassPanelGlow}" Padding="14">
                     <StackPanel Spacing="6">
-                        <TextBlock x:Name="BrowserExtensionStatusText" FontSize="13" TextWrapping="WrapWholeWords"/>
-                        <TextBlock x:Name="BrowserExtensionPathText" FontSize="11" Opacity="0.6"
-                                   TextWrapping="WrapWholeWords" FontFamily="Consolas"/>
+                        <TextBlock x:Name="BrowserExtensionStatusText" Style="{StaticResource FortivaBodyText}" FontSize="13"/>
+                        <TextBlock x:Name="BrowserExtensionPathText" Style="{StaticResource FortivaHelperText}"
+                                   FontFamily="Consolas"/>
                     </StackPanel>
                 </Border>
                 <Button x:Name="ConnectBrowserBtn" Content="Connect browser"
                         HorizontalAlignment="Left"
                         Style="{StaticResource FortivaAccentButton}" Click="ConnectBrowser_Click"/>
-                <TextBlock TextWrapping="WrapWholeWords" Opacity="0.55" FontSize="11">
+                <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaHelperText}">
                     Fortiva never fills a form unless you click Fill. Keep the app unlocked while browsing.
                 </TextBlock>
             </StackPanel>
@@ -101,13 +100,13 @@
 
             <!-- Change master password -->
             <StackPanel Spacing="12">
-                <TextBlock Text="Change master password" FontSize="16" FontWeight="SemiBold" Opacity="0.7"/>
+                <TextBlock Text="Change master password" Style="{StaticResource FortivaSectionTitle}"/>
                 <StackPanel Spacing="8">
-                    <PasswordBox x:Name="CurrentPwd" PlaceholderText="Current master password"/>
-                    <PasswordBox x:Name="NewPwd" PlaceholderText="New master password" PasswordChanged="NewPwd_Changed"/>
-                    <PasswordBox x:Name="NewPwdConfirm" PlaceholderText="Confirm new password"/>
+                    <PasswordBox x:Name="CurrentPwd" Style="{StaticResource FortivaPasswordBox}" PlaceholderText="Current master password"/>
+                    <PasswordBox x:Name="NewPwd" Style="{StaticResource FortivaPasswordBox}" PlaceholderText="New master password" PasswordChanged="NewPwd_Changed"/>
+                    <PasswordBox x:Name="NewPwdConfirm" Style="{StaticResource FortivaPasswordBox}" PlaceholderText="Confirm new password"/>
                     <ProgressBar x:Name="NewPwdStrength" Maximum="4" Height="4"/>
-                    <TextBlock x:Name="NewPwdStrengthLabel" FontSize="11" Opacity="0.6"/>
+                    <TextBlock x:Name="NewPwdStrengthLabel" Style="{StaticResource FortivaHelperText}"/>
                     <Button x:Name="ChangePasswordBtn" Content="Change password" Click="ChangePassword_Click"/>
                 </StackPanel>
             </StackPanel>
@@ -116,16 +115,17 @@
 
             <!-- Updates (Personal) -->
             <StackPanel x:Name="UpdatesSection" Spacing="12">
-                <TextBlock Text="Updates" FontSize="16" FontWeight="SemiBold" Opacity="0.7"/>
-                <TextBlock TextWrapping="WrapWholeWords" Opacity="0.7" FontSize="13">
+                <TextBlock Text="Updates" Style="{StaticResource FortivaSectionTitle}"/>
+                <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13">
                     Fortiva checks GitHub Releases for verified updates. Routine Windows security patches do not require a new Fortiva install.
                 </TextBlock>
-                <TextBlock x:Name="UpdateFeedText" FontSize="11" Opacity="0.5" TextWrapping="WrapWholeWords"/>
-                <ToggleSwitch x:Name="AutoUpdateSwitch" Header="Automatic updates"
+                <TextBlock x:Name="UpdateFeedText" Style="{StaticResource FortivaHelperText}"/>
+                <ToggleSwitch x:Name="AutoUpdateSwitch" Style="{StaticResource FortivaToggleSwitch}"
+                              Header="Automatic updates"
                               OffContent="Off - check manually only"
                               OnContent="On - verify and install in the background"
                               Toggled="AutoUpdate_Toggled"/>
-                <TextBlock x:Name="UpdateStatusText" FontSize="12" Opacity="0.7" TextWrapping="WrapWholeWords"/>
+                <TextBlock x:Name="UpdateStatusText" Style="{StaticResource FortivaMutedText}"/>
                 <InfoBar x:Name="UpdateApplyFailureInfo"
                          IsOpen="False"
                          IsClosable="True"
@@ -145,25 +145,25 @@
 
             <!-- Enterprise shared vault -->
             <StackPanel x:Name="SharedVaultSection" Spacing="12" Visibility="Collapsed">
-                <TextBlock Text="Shared vault" FontSize="16" FontWeight="SemiBold" Opacity="0.7"/>
-                <TextBlock TextWrapping="WrapWholeWords" Opacity="0.7" FontSize="13">
+                <TextBlock Text="Shared vault" Style="{StaticResource FortivaSectionTitle}"/>
+                <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13">
                     Select an organization shared vault configured by IT, or use the default vault on this PC.
                 </TextBlock>
-                <ComboBox x:Name="SharedVaultBox" Header="Active vault" SelectionChanged="SharedVault_Changed"/>
-                <TextBlock x:Name="SharedVaultStatusText" FontSize="12" Opacity="0.8" TextWrapping="WrapWholeWords"/>
+                <ComboBox x:Name="SharedVaultBox" Header="Active vault" Style="{StaticResource FortivaComboBox}" SelectionChanged="SharedVault_Changed"/>
+                <TextBlock x:Name="SharedVaultStatusText" Style="{StaticResource FortivaMutedText}"/>
             </StackPanel>
 
             <Border x:Name="SharedVaultSectionDivider" Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Visibility="Collapsed"/>
 
             <!-- Portable mode -->
             <StackPanel x:Name="PortableSection" Spacing="12">
-                <TextBlock Text="Portable mode" FontSize="16" FontWeight="SemiBold" Opacity="0.7"/>
-                <TextBlock TextWrapping="WrapWholeWords" Opacity="0.7" FontSize="13">
+                <TextBlock Text="Portable mode" Style="{StaticResource FortivaSectionTitle}"/>
+                <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13">
                     Store and run your vault from a USB drive. Fortiva remembers your USB location
                     and reopens it automatically when the drive is connected.
                     Note: Windows may leave traces (prefetch, MRU) on the host PC.
                 </TextBlock>
-                <TextBlock x:Name="PortableStatusText" FontSize="12" Opacity="0.8" TextWrapping="WrapWholeWords"/>
+                <TextBlock x:Name="PortableStatusText" Style="{StaticResource FortivaMutedText}"/>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button x:Name="PortableBtn" Content="Open or create vault on USB…" Click="Portable_Click"/>
                     <Button x:Name="LocalVaultBtn" Content="Use local vault" Click="LocalVault_Click" Visibility="Collapsed"/>
@@ -173,9 +173,9 @@
             <!-- Vault info -->
             <Border Style="{StaticResource FortivaGlassPanelGlow}" Padding="16">
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Vault information" FontWeight="SemiBold"/>
-                    <TextBlock x:Name="VaultInfoText" FontSize="12" Opacity="0.7"
-                               TextWrapping="WrapWholeWords" FontFamily="Consolas"/>
+                    <TextBlock Text="Vault information" Style="{StaticResource FortivaFieldLabel}"/>
+                    <TextBlock x:Name="VaultInfoText" Style="{StaticResource FortivaMutedText}"
+                               FontFamily="Consolas"/>
                 </StackPanel>
             </Border>
 
@@ -185,20 +185,20 @@
 
             <!-- About -->
             <StackPanel Spacing="6">
-                <TextBlock Text="About" FontSize="16" FontWeight="SemiBold" Opacity="0.7"/>
+                <TextBlock Text="About" Style="{StaticResource FortivaSectionTitle}"/>
                 <Border CornerRadius="8" Padding="16"
                         Background="{ThemeResource FortivaAccentGlowBrush}"
                         BorderBrush="{ThemeResource FortivaGlassBorderBrush}" BorderThickness="1">
                     <StackPanel Spacing="8">
                         <Image x:Name="AboutLogo" Width="72" Height="72"
                                HorizontalAlignment="Left" Stretch="Uniform"/>
-                        <TextBlock x:Name="AboutAppName"   FontSize="14" FontWeight="SemiBold"/>
-                        <TextBlock x:Name="AboutVersion"   FontSize="12" Opacity="0.7"/>
-                        <TextBlock x:Name="AboutPublisher" FontSize="12" Opacity="0.6"/>
-                        <TextBlock FontSize="11" Opacity="0.5" Margin="0,4,0,0"
+                        <TextBlock x:Name="AboutAppName" Style="{StaticResource FortivaFieldLabel}" FontSize="14"/>
+                        <TextBlock x:Name="AboutVersion" Style="{StaticResource FortivaMutedText}"/>
+                        <TextBlock x:Name="AboutPublisher" Style="{StaticResource FortivaHelperText}"/>
+                        <TextBlock Style="{StaticResource FortivaHelperText}" Margin="0,4,0,0"
                                    Text="Zero-knowledge. Local-first. Windows-native."/>
                         <HyperlinkButton x:Name="WebsiteLink" Content="fortiva.studio.icmclab.cloud"
-                                         FontSize="12" Margin="0,2,0,0" Click="WebsiteLink_Click"/>
+                                         Style="{StaticResource FortivaHyperlink}" Margin="0,2,0,0" Click="WebsiteLink_Click"/>
                     </StackPanel>
                 </Border>
             </StackPanel>

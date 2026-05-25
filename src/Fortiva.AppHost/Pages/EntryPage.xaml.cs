@@ -88,6 +88,7 @@ public sealed partial class EntryPage : Page
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        ThemeService.ApplyToElement(this);
         _clipboard.RefreshPolicy(_vm.Policy, _vm.PersonalSettings.ClipboardClearSeconds);
         _revealCts?.Cancel();
         PasswordBox.PasswordRevealMode = PasswordRevealMode.Peek;

@@ -9,7 +9,7 @@ public static class WindowsPlatformInfo
     public const int MinSupportedBuild = 19041;
 
     /// <summary>Last Windows build this release train was tested on (updated via release manifest).</summary>
-    public const int DefaultMaxBuildTested = 26100;
+    public const int DefaultMaxBuildTested = 26200;
 
     public static int CurrentBuild => GetVersion().Build;
 

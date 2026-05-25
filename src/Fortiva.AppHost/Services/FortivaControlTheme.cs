@@ -35,12 +35,27 @@ public static class FortivaControlTheme
             && themeDictObj is ResourceDictionary themeDict
             && themeDict.TryGetValue(key, out var themedValue)
             && themedValue is Brush themedBrush)
-            return themedBrush;
+            return CloneBrush(themedBrush);
 
         if (Application.Current?.Resources.TryGetValue(key, out var value) == true && value is Brush brush)
-            return brush;
+            return CloneBrush(brush);
 
         return new SolidColorBrush(Microsoft.UI.Colors.Gray);
+    }
+
+    private static Brush CloneBrush(Brush brush) =>
+        brush switch
+        {
+            SolidColorBrush scb => new SolidColorBrush(scb.Color),
+            _ => brush
+        };
+
+    /// <summary>Apply resolved theme + merged dictionary to a code-built subtree root.</summary>
+    public static void ApplyResolvedTheme(FrameworkElement element)
+    {
+        var theme = ResolveAppTheme();
+        element.RequestedTheme = theme;
+        FortivaThemeResources.MergeOnto(element, theme);
     }
 
     public static void ApplyTextBox(TextBox box, FrameworkElement? context = null)
@@ -128,10 +143,13 @@ public static class FortivaControlTheme
         TryApplyStyle(button, "FortivaAccentButton");
     }
 
-    public static void ApplySectionLabel(TextBlock label, bool muted = false, FrameworkElement? context = null)
+    public static void ApplySectionLabel(TextBlock label, bool muted = false, bool pageHeader = false, FrameworkElement? context = null)
     {
         var theme = ResolveAppTheme();
         label.RequestedTheme = theme;
+        if (pageHeader)
+            label.FontSize = 16;
+        label.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         label.Foreground = muted
             ? GetBrush("FortivaMutedBrush", theme, label)
             : GetBrush("FortivaHeadingBrush", theme, label);

@@ -37,7 +37,25 @@ public sealed partial class HealthPage : Page
     protected override async void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        ThemeService.ApplyToElement(this);
+        _vm.ThemeChanged += OnThemeChanged;
         await BuildReportAsync();
+    }
+
+    protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        _vm.ThemeChanged -= OnThemeChanged;
+    }
+
+    private void OnThemeChanged()
+    {
+        DispatcherQueue.TryEnqueue(async () =>
+        {
+            ThemeService.ApplyToElement(this);
+            if (_lastAuditReport is not null)
+                await BuildReportAsync();
+        });
     }
 
     private async void Refresh_Click(object sender, RoutedEventArgs e) => await BuildReportAsync();
@@ -319,12 +337,30 @@ public sealed partial class HealthPage : Page
                 Background = new SolidColorBrush(Color.FromArgb(48, accent.R, accent.G, accent.B)),
                 Child = new TextBlock { Text = label, FontSize = 10, FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = new SolidColorBrush(accent) }
             });
-            badges.Children.Add(new TextBlock { Text = f.Category, FontSize = 10, Opacity = 0.55, HorizontalAlignment = HorizontalAlignment.Center });
+            badges.Children.Add(new TextBlock
+            {
+                Text = f.Category,
+                FontSize = 10,
+                Foreground = FortivaControlTheme.GetBrush("FortivaMutedBrush"),
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
             grid.Children.Add(badges);
 
             var text = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
-            text.Children.Add(new TextBlock { Text = f.Title, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.WrapWholeWords });
-            text.Children.Add(new TextBlock { Text = f.Detail, Opacity = 0.75, FontSize = 13, TextWrapping = TextWrapping.WrapWholeWords });
+            text.Children.Add(new TextBlock
+            {
+                Text = f.Title,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                TextWrapping = TextWrapping.WrapWholeWords,
+                Foreground = FortivaControlTheme.GetBrush("FortivaHeadingBrush")
+            });
+            text.Children.Add(new TextBlock
+            {
+                Text = f.Detail,
+                FontSize = 13,
+                TextWrapping = TextWrapping.WrapWholeWords,
+                Foreground = FortivaControlTheme.GetBrush("FortivaBodyBrush")
+            });
             Grid.SetColumn(text, 1);
             grid.Children.Add(text);
 
@@ -373,7 +409,7 @@ public sealed partial class HealthPage : Page
             StrengthBarsPanel.Children.Add(new TextBlock
             {
                 Text = "Add login entries to see a strength breakdown.",
-                Opacity = 0.65,
+                Foreground = FortivaControlTheme.GetBrush("FortivaMutedBrush"),
                 TextWrapping = TextWrapping.WrapWholeWords
             });
             return;
@@ -394,7 +430,13 @@ public sealed partial class HealthPage : Page
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) });
 
-        row.Children.Add(new TextBlock { Text = label, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Opacity = 0.8 });
+        row.Children.Add(new TextBlock
+        {
+            Text = label,
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = FortivaControlTheme.GetBrush("FortivaBodyBrush")
+        });
 
         var track = new Grid
         {
@@ -478,7 +520,8 @@ public sealed partial class HealthPage : Page
         {
             Text = $"{title} ({count})",
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            VerticalAlignment = VerticalAlignment.Center
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = FortivaControlTheme.GetBrush("FortivaHeadingBrush")
         });
         return panel;
     }

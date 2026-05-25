@@ -55,9 +55,14 @@ public sealed class UpdateChecker
             if (manifest is null || !manifest.IsValid)
                 return Fail(UpdateMessages.ManifestUnavailableWithManualInstall);
 
-            // Shipped placeholder manifest must not satisfy update checks when GitHub is unreachable.
+            // GitHub unreachable — trust bundled manifest only when it does not claim a newer release.
             if (!fromNetwork)
+            {
+                if (!AppVersion.IsRemoteNewer(manifest.Version, currentVersion))
+                    return ReleaseManifestEvaluator.Evaluate(manifest, currentVersion, fromNetwork: false);
+
                 return Fail(UpdateMessages.ManifestUnavailableWithManualInstall);
+            }
 
             return ReleaseManifestEvaluator.Evaluate(manifest, currentVersion, fromNetwork);
         }

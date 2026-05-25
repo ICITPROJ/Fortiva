@@ -16,17 +16,17 @@
 
             <!-- Import section -->
             <StackPanel Spacing="16">
-                <TextBlock Text="Import" FontSize="16" FontWeight="SemiBold" Opacity="0.7"/>
-                <TextBlock TextWrapping="WrapWholeWords" Opacity="0.7" FontSize="13">
+                <TextBlock Text="Import" Style="{StaticResource FortivaSectionTitle}"/>
+                <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13">
                     Import credentials from a CSV file, KeePass CSV export, or a browser export.
                     Imported entries are added to your existing vault.
                 </TextBlock>
-                <ComboBox x:Name="ImportFormatBox" Header="Source format" Width="280" SelectedIndex="0">
+                <ComboBox x:Name="ImportFormatBox" Header="Source format" Style="{StaticResource FortivaComboBox}" Width="280" SelectedIndex="0">
                     <ComboBoxItem>Generic CSV (name, username, password, url, notes)</ComboBoxItem>
                     <ComboBoxItem>KeePass CSV export</ComboBoxItem>
                     <ComboBoxItem>Browser CSV (Chrome / Edge / Firefox - same columns)</ComboBoxItem>
                 </ComboBox>
-                <Button x:Name="ImportBtn" Click="Import_Click">
+                <Button x:Name="ImportBtn" Style="{StaticResource FortivaSecondaryButton}" Click="Import_Click">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE8B5;" FontSize="14"/>
                         <TextBlock Text="Choose file and import…"/>
@@ -38,8 +38,8 @@
 
             <!-- Export section -->
             <StackPanel Spacing="16">
-                <TextBlock Text="Export" FontSize="16" FontWeight="SemiBold" Opacity="0.7"/>
-                <TextBlock TextWrapping="WrapWholeWords" Opacity="0.7" FontSize="13">
+                <TextBlock Text="Export" Style="{StaticResource FortivaSectionTitle}"/>
+                <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13">
                     Export your vault for backup or migration.
                     Encrypted export is always available. Plaintext CSV export requires explicit confirmation
                     and is blocked by strict enterprise policies.
@@ -50,7 +50,7 @@
                         <TextBlock Text="Export encrypted (.fva backup)"/>
                     </StackPanel>
                 </Button>
-                <Button x:Name="ExportCsvBtn" Click="ExportCsv_Click">
+                <Button x:Name="ExportCsvBtn" Style="{StaticResource FortivaSecondaryButton}" Click="ExportCsv_Click">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE8A5;" FontSize="14"/>
                         <TextBlock Text="Export as plaintext CSV…"/>

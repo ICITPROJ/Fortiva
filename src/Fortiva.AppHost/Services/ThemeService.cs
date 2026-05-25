@@ -67,8 +67,23 @@ public static class ThemeService
     {
         AppThemePreference.Light => ElementTheme.Light,
         AppThemePreference.Dark => ElementTheme.Dark,
-        _ => ElementTheme.Default
+        _ => ResolveSystemElementTheme()
     };
+
+    public static ElementTheme ResolveSystemElementTheme()
+    {
+        var bg = new UISettings().GetColorValue(UIColorType.Background);
+        return (bg.R + bg.G + bg.B) > 383 ? ElementTheme.Light : ElementTheme.Dark;
+    }
+
+    /// <summary>Apply resolved Fortiva theme to a page or subtree (matches code-built UI).</summary>
+    public static void ApplyToElement(FrameworkElement element, AppThemePreference? preference = null)
+    {
+        var pref = preference ?? _preference;
+        var theme = ToElementTheme(pref);
+        element.RequestedTheme = theme;
+        FortivaThemeResources.MergeOnto(element, theme);
+    }
 
     public static AppThemePreference Parse(string? value) => value switch
     {
@@ -102,7 +117,7 @@ public static class ThemeService
         {
             frame.RequestedTheme = theme;
             if (frame.Content is FrameworkElement page)
-                page.RequestedTheme = theme;
+                ApplyToElement(page, preference);
         }
     }
 
@@ -117,6 +132,7 @@ public static class ThemeService
             if (_preference != AppThemePreference.System || _window is null || _root is null)
                 return;
 
+            ApplyElementTheme(_root, _preference);
             ApplyTitleBar(_window, _root.ActualTheme == ElementTheme.Light);
         };
     }

@@ -49,6 +49,15 @@ public sealed class UpdateCheckerTests
         Assert.Contains("Connect to the internet", result.Message);
     }
 
+    [Fact]
+    public void Offline_bundled_same_version_should_not_be_treated_as_check_failed()
+    {
+        Assert.False(AppVersion.IsRemoteNewer("1.0.14", "1.0.14"));
+        var result = ReleaseManifestEvaluator.Evaluate(SampleManifest("1.0.14"), "1.0.14", fromNetwork: false);
+        Assert.Equal(UpdateStatus.UpToDate, result.Status);
+        Assert.Contains("latest version", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ReleaseManifest SampleManifest(string version) => new()
     {
         Version = version,

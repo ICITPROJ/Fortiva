@@ -1,5 +1,8 @@
+using System.Runtime.InteropServices;
 using Fortiva.Core.Hello;
+using Windows.Foundation;
 using Windows.Security.Credentials.UI;
+using WinRT;
 
 namespace Fortiva.AppHost.Services;
 
@@ -10,6 +13,22 @@ namespace Fortiva.AppHost.Services;
 /// </summary>
 public static class HelloService
 {
+    private static readonly Guid InteropGuid = new("9710727D-8E8D-4FBE-9002-3CB2AA5E9C7B");
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    private delegate int RequestVerificationForWindowNative(
+        IntPtr thisPtr,
+        IntPtr appWindow,
+        IntPtr messageHString,
+        ref Guid riid,
+        out IntPtr asyncOperation);
+
+    [DllImport("api-ms-win-core-winrt-string-l1-1-0.dll", CharSet = CharSet.Unicode)]
+    private static extern int WindowsCreateString(string sourceString, int length, out IntPtr hstring);
+
+    [DllImport("api-ms-win-core-winrt-string-l1-1-0.dll")]
+    private static extern void WindowsDeleteString(IntPtr hString);
+
     public static async Task<bool> IsAvailableAsync()
     {
         var availability = await GetAvailabilityAsync();
@@ -52,9 +71,62 @@ public static class HelloService
     {
         var hwnd = App.MainWindowHandle;
         if (hwnd != IntPtr.Zero)
-            return await UserConsentVerifierInterop.RequestVerificationForWindowAsync(hwnd, message);
+        {
+            try
+            {
+                return await RequestVerificationForWindowAsync(hwnd, message);
+            }
+            catch (Exception ex) when (ex is InvalidCastException or COMException)
+            {
+                App.LogException("HelloService.RequestVerificationForWindow", ex);
+            }
+        }
 
         return await UserConsentVerifier.RequestVerificationAsync(message);
+    }
+
+    private static async Task<UserConsentVerificationResult> RequestVerificationForWindowAsync(
+        IntPtr hwnd, string message)
+    {
+        var factory = ActivationFactory.Get("Windows.Security.Credentials.UI.UserConsentVerifier");
+        Marshal.ThrowExceptionForHR(factory.TryAs(InteropGuid, out var interopPtr));
+        try
+        {
+            var iid = typeof(IAsyncOperation<UserConsentVerificationResult>).GUID;
+            var hr = InvokeRequestVerificationForWindowAsync(interopPtr, hwnd, message, ref iid, out var opPtr);
+            Marshal.ThrowExceptionForHR(hr);
+            if (opPtr == IntPtr.Zero)
+                throw new COMException("Windows Hello did not return a verification operation.");
+
+            var operation = MarshalInterface<IAsyncOperation<UserConsentVerificationResult>>.FromAbi(opPtr);
+            return await operation;
+        }
+        finally
+        {
+            Marshal.Release(interopPtr);
+        }
+    }
+
+    private static int InvokeRequestVerificationForWindowAsync(
+        IntPtr interopPtr,
+        IntPtr hwnd,
+        string message,
+        ref Guid riid,
+        out IntPtr asyncOperation)
+    {
+        var vtable = Marshal.ReadIntPtr(interopPtr);
+        var methodPtr = Marshal.ReadIntPtr(vtable, 3 * IntPtr.Size);
+        var method = Marshal.GetDelegateForFunctionPointer<RequestVerificationForWindowNative>(methodPtr);
+
+        Marshal.ThrowExceptionForHR(WindowsCreateString(message, message.Length, out var messageHString));
+        try
+        {
+            return method(interopPtr, hwnd, messageHString, ref riid, out asyncOperation);
+        }
+        finally
+        {
+            WindowsDeleteString(messageHString);
+        }
     }
 
     internal static string DescribeAvailability(UserConsentVerifierAvailability availability) =>

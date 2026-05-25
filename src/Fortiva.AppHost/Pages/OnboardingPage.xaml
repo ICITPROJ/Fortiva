@@ -22,7 +22,8 @@
                                    HorizontalAlignment="Center" Stretch="Uniform"/>
                             <TextBlock Text="Welcome to Fortiva" Style="{StaticResource FortivaHeroTitle}"
                                        HorizontalAlignment="Center"/>
-                            <TextBlock TextWrapping="WrapWholeWords" TextAlignment="Center" Opacity="0.8" FontSize="14" LineHeight="22">
+                            <TextBlock TextWrapping="WrapWholeWords" TextAlignment="Center"
+                                       Style="{StaticResource FortivaBodyText}" LineHeight="22">
                                 Zero-knowledge password management for Windows. Your master password never leaves this device - it derives the key that encrypts your vault locally.
                             </TextBlock>
                             <Border CornerRadius="12" Padding="16"
@@ -30,30 +31,30 @@
                                     BorderBrush="{ThemeResource FortivaGlassBorderBrush}" BorderThickness="1">
                                 <StackPanel Spacing="10">
                                     <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <FontIcon Glyph="&#xE72E;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                                        <TextBlock Text="No cloud sync · No telemetry · No backdoor" FontWeight="SemiBold"/>
+                                        <FontIcon Glyph="&#xE72E;" FontSize="16" Foreground="{ThemeResource FortivaAccentIconBrush}"/>
+                                        <TextBlock Text="No cloud sync · No telemetry · No backdoor" Style="{StaticResource FortivaFieldLabel}"/>
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <FontIcon Glyph="&#xE9D5;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                                        <TextBlock Text="AES-256-GCM (Windows CNG) + Argon2id key derivation" FontWeight="SemiBold"/>
+                                        <FontIcon Glyph="&#xE9D5;" FontSize="16" Foreground="{ThemeResource FortivaAccentIconBrush}"/>
+                                        <TextBlock Text="AES-256-GCM (Windows CNG) + Argon2id key derivation" Style="{StaticResource FortivaFieldLabel}"/>
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <FontIcon Glyph="&#xE895;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                                        <TextBlock Text="Vault stored only on this device or your USB" FontWeight="SemiBold"/>
+                                        <FontIcon Glyph="&#xE895;" FontSize="16" Foreground="{ThemeResource FortivaAccentIconBrush}"/>
+                                        <TextBlock Text="Vault stored only on this device or your USB" Style="{StaticResource FortivaFieldLabel}"/>
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
                             <TextBlock x:Name="PortableLocationHint" Visibility="Collapsed"
                                        TextWrapping="WrapWholeWords" TextAlignment="Center"
-                                       FontSize="13" Opacity="0.75"/>
+                                       Style="{StaticResource FortivaBodyText}" FontSize="13"/>
                             <Button Content="Get started" HorizontalAlignment="Stretch"
                                     Style="{StaticResource FortivaAccentButton}" Click="NextStep_Click"/>
                         </StackPanel>
 
                         <!-- Step 1 - Master password -->
                         <StackPanel x:Name="Step1" Visibility="Collapsed" Spacing="16">
-                            <TextBlock Text="Create your master password" FontSize="24" FontWeight="SemiBold"/>
-                            <TextBlock TextWrapping="WrapWholeWords" Opacity="0.8" FontSize="13" LineHeight="20">
+                            <TextBlock Text="Create your master password" Style="{StaticResource FortivaPageTitle}"/>
+                            <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13" LineHeight="20">
                                 Choose a strong passphrase - at least 16 characters. You will need this every time you unlock Fortiva.
                             </TextBlock>
                             <Border CornerRadius="12" Padding="14"
@@ -63,24 +64,24 @@
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <FontIcon Glyph="&#xE946;" FontSize="18"
                                                   Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
-                                        <TextBlock Text="Write it down offline" FontWeight="SemiBold" FontSize="14"/>
+                                        <TextBlock Text="Write it down offline" Style="{StaticResource FortivaFieldLabel}" FontSize="14"/>
                                     </StackPanel>
-                                    <TextBlock TextWrapping="WrapWholeWords" FontSize="13" Opacity="0.9" LineHeight="20">
+                                    <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13" LineHeight="20">
                                         Fortiva cannot reset or recover your master password. Record it on paper and store it somewhere safe - not in email, cloud notes, or another password manager.
                                     </TextBlock>
                                 </StackPanel>
                             </Border>
                             <StackPanel Spacing="4">
-                                <TextBlock Text="Master password" FontWeight="SemiBold" FontSize="13"/>
+                                <TextBlock Text="Master password" Style="{StaticResource FortivaFieldLabel}"/>
                                 <PasswordBox x:Name="NewPasswordBox" PlaceholderText="Create a strong passphrase"
                                              Style="{StaticResource FortivaPasswordBox}"
                                              PasswordChanged="NewPassword_Changed"/>
                                 <ProgressBar x:Name="StrengthBar" Maximum="4" Value="0" Height="6"/>
-                                <TextBlock x:Name="StrengthLabel" FontSize="11" Opacity="0.7"/>
-                                <TextBlock x:Name="StrengthSuggestion" FontSize="11" Opacity="0.6" TextWrapping="WrapWholeWords"/>
+                                <TextBlock x:Name="StrengthLabel" Style="{StaticResource FortivaHelperText}"/>
+                                <TextBlock x:Name="StrengthSuggestion" Style="{StaticResource FortivaHelperText}"/>
                             </StackPanel>
                             <StackPanel Spacing="4">
-                                <TextBlock Text="Confirm master password" FontWeight="SemiBold" FontSize="13"/>
+                                <TextBlock Text="Confirm master password" Style="{StaticResource FortivaFieldLabel}"/>
                                 <PasswordBox x:Name="ConfirmPasswordBox" PlaceholderText="Confirm your passphrase"
                                              Style="{StaticResource FortivaPasswordBox}"/>
                             </StackPanel>
@@ -99,9 +100,9 @@
                         <!-- Step 2 - Windows Hello -->
                         <StackPanel x:Name="Step2" Visibility="Collapsed" Spacing="16">
                             <FontIcon Glyph="&#xE77B;" FontSize="48" HorizontalAlignment="Center"
-                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                            <TextBlock Text="Enable Windows Hello" FontSize="24" FontWeight="SemiBold"/>
-                            <TextBlock TextWrapping="WrapWholeWords" Opacity="0.8" FontSize="13" LineHeight="20">
+                                      Foreground="{ThemeResource FortivaAccentIconBrush}"/>
+                            <TextBlock Text="Enable Windows Hello" Style="{StaticResource FortivaPageTitle}"/>
+                            <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13" LineHeight="20">
                                 Face, fingerprint, or PIN unlock adds convenience. Your master password remains the root key - Hello never replaces it.
                             </TextBlock>
                             <InfoBar x:Name="HelloInfoBar" IsOpen="False" Severity="Informational" IsClosable="False"/>
@@ -125,17 +126,18 @@
                         <StackPanel x:Name="Step3" Visibility="Collapsed" Spacing="16">
                             <FontIcon Glyph="&#xEA8A;" FontSize="48" HorizontalAlignment="Center"
                                       Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
-                            <TextBlock Text="Final security setup" FontSize="24" FontWeight="SemiBold"/>
-                            <TextBlock TextWrapping="WrapWholeWords" Opacity="0.8" FontSize="13" LineHeight="20">
+                            <TextBlock Text="Final security setup" Style="{StaticResource FortivaPageTitle}"/>
+                            <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13" LineHeight="20">
                                 Paranoia Mode protects against silent vault rollbacks. Confirm you have secured your master password offline before finishing.
                             </TextBlock>
-                            <ToggleSwitch x:Name="ParanoiaToggle" Header="Enable Paranoia Mode (recommended)" IsOn="True"/>
+                            <ToggleSwitch x:Name="ParanoiaToggle" Style="{StaticResource FortivaToggleSwitch}"
+                                          Header="Enable Paranoia Mode (recommended)" IsOn="True"/>
                             <Border CornerRadius="12" Padding="14"
                                     BorderBrush="{ThemeResource SystemFillColorCriticalBrush}" BorderThickness="1"
                                     Background="{ThemeResource FortivaAccentGlowBrush}">
                                 <StackPanel Spacing="10">
-                                    <TextBlock Text="Offline password backup - required" FontWeight="SemiBold"/>
-                                    <TextBlock TextWrapping="WrapWholeWords" FontSize="13" Opacity="0.85" LineHeight="20">
+                                    <TextBlock Text="Offline password backup - required" Style="{StaticResource FortivaFieldLabel}"/>
+                                    <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13" LineHeight="20">
                                         If you lose this password, your vault cannot be opened - even by icmclab studio. Keep a written copy in a safe place (home safe, locked drawer). Consider exporting an encrypted .fvab backup after setup.
                                     </TextBlock>
                                     <CheckBox x:Name="OfflineAckCheck" Content="I have recorded my master password offline in a secure place"
@@ -158,16 +160,16 @@
                         <!-- Step 4 - Browser extension (one-time) -->
                         <StackPanel x:Name="Step4" Visibility="Collapsed" Spacing="16">
                             <FontIcon Glyph="&#xE774;" FontSize="48" HorizontalAlignment="Center"
-                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
-                            <TextBlock Text="Connect your browser" FontSize="24" FontWeight="SemiBold"/>
-                            <TextBlock TextWrapping="WrapWholeWords" Opacity="0.8" FontSize="13" LineHeight="20">
+                                      Foreground="{ThemeResource FortivaAccentIconBrush}"/>
+                            <TextBlock Text="Connect your browser" Style="{StaticResource FortivaPageTitle}"/>
+                            <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13" LineHeight="20">
                                 One click prepares Fortiva for Edge or Chrome. Confirm Load unpacked once, then fill any login from the toolbar icon.
                             </TextBlock>
-                            <TextBlock x:Name="BrowserExtStatusText" FontSize="12" Opacity="0.75" TextWrapping="WrapWholeWords"/>
+                            <TextBlock x:Name="BrowserExtStatusText" Style="{StaticResource FortivaMutedText}"/>
                             <Button x:Name="BrowserExtConnectBtn" Content="Connect browser"
                                     HorizontalAlignment="Stretch"
                                     Style="{StaticResource FortivaAccentButton}" Click="BrowserExtConnect_Click"/>
-                            <TextBlock TextWrapping="WrapWholeWords" Opacity="0.55" FontSize="11">
+                            <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaHelperText}">
                                 You can skip and connect later from Settings → Browser extension.
                             </TextBlock>
                             <Button x:Name="BrowserExtContinueBtn" Content="Continue to vault"
@@ -201,9 +203,9 @@
                 <StackPanel Spacing="16" HorizontalAlignment="Center">
                     <ProgressRing x:Name="BusyRing" IsActive="True" Width="48" Height="48"/>
                     <TextBlock x:Name="BusyTitle" Text="Creating your encrypted vault…"
-                               FontSize="18" FontWeight="SemiBold" TextAlignment="Center"/>
+                               Style="{StaticResource FortivaPageTitle}" FontSize="18" TextAlignment="Center"/>
                     <TextBlock x:Name="BusyDetail" Text="Deriving keys with Argon2id - this may take a few seconds."
-                               TextWrapping="WrapWholeWords" TextAlignment="Center" Opacity="0.75" FontSize="13"/>
+                               Style="{StaticResource FortivaBodyText}" TextAlignment="Center"/>
                 </StackPanel>
             </Border>
         </Grid>

@@ -1,3 +1,4 @@
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Animation;
 
@@ -28,7 +29,11 @@ public sealed class NavigationService
 
         // Skip redundant navigation — avoids re-running OnNavigatedTo and transition jank
         if (_currentPageType == pageType && ParametersEqual(_currentParameter, parameter))
+        {
+            if (_frame.Content is FrameworkElement cachedPage)
+                ThemeService.ApplyToElement(cachedPage);
             return true;
+        }
 
         var transition = animate
             ? (NavigationTransitionInfo)new EntranceNavigationTransitionInfo()
@@ -36,6 +41,9 @@ public sealed class NavigationService
 
         if (_frame.Navigate(pageType, parameter, transition) != true)
             return false;
+
+        if (_frame.Content is FrameworkElement page)
+            ThemeService.ApplyToElement(page);
 
         _currentPageType = pageType;
         _currentParameter = parameter;
@@ -48,6 +56,8 @@ public sealed class NavigationService
         _frame.GoBack();
         _currentPageType = _frame.CurrentSourcePageType as Type;
         _currentParameter = null;
+        if (_frame.Content is FrameworkElement page)
+            ThemeService.ApplyToElement(page);
         return true;
     }
 

@@ -22,6 +22,7 @@ public sealed partial class PasswordGeneratorPage : Page
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        ThemeService.ApplyToElement(this);
         _vm.ThemeChanged += OnThemeChanged;
         _clipboard.RefreshPolicy(_vm.Policy, _vm.PersonalSettings.ClipboardClearSeconds);
 

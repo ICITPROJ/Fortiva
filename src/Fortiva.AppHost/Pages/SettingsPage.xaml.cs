@@ -18,6 +18,8 @@ public sealed partial class SettingsPage : Page
 
     private int _autoLockSeconds = 300;
     private int _clipboardSeconds = 30;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _autoLockSaveTimer;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _clipboardSaveTimer;
 
     public SettingsPage()
     {
@@ -42,6 +44,7 @@ public sealed partial class SettingsPage : Page
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        ThemeService.ApplyToElement(this);
         LoadSettings();
     }
 
@@ -338,7 +341,7 @@ public sealed partial class SettingsPage : Page
         _autoLockSeconds = (int)e.NewValue;
         AutoLockLabel.Text = FormatSeconds(_autoLockSeconds);
         if (AutoLockSlider.IsEnabled)
-            _vm.SetAutoLockTimeout(_autoLockSeconds);
+            ScheduleDebouncedSave(ref _autoLockSaveTimer, () => _vm.SetAutoLockTimeout(_autoLockSeconds));
     }
 
     private void Clipboard_Changed(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
@@ -346,7 +349,27 @@ public sealed partial class SettingsPage : Page
         _clipboardSeconds = (int)e.NewValue;
         ClipboardLabel.Text = $"Clipboard clears after {_clipboardSeconds} seconds";
         if (ClipboardSlider.IsEnabled)
-            _vm.SetClipboardClearSeconds(_clipboardSeconds);
+            ScheduleDebouncedSave(ref _clipboardSaveTimer, () => _vm.SetClipboardClearSeconds(_clipboardSeconds));
+    }
+
+    private void ScheduleDebouncedSave(ref Microsoft.UI.Dispatching.DispatcherQueueTimer? timer, Action save)
+    {
+        timer ??= CreateDebounceTimer(save);
+        timer.Stop();
+        timer.Start();
+    }
+
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer CreateDebounceTimer(Action save)
+    {
+        var timer = DispatcherQueue.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(400);
+        timer.IsRepeating = false;
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            save();
+        };
+        return timer;
     }
 
     private void NewPwd_Changed(object sender, RoutedEventArgs e)
@@ -411,9 +434,9 @@ public sealed partial class SettingsPage : Page
             Text = "Enter your master password to bind Windows Hello. " +
                    "After setup you can unlock with face, fingerprint, or PIN.",
             TextWrapping = Microsoft.UI.Xaml.TextWrapping.WrapWholeWords,
-            Opacity = 0.8,
             Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 12)
         };
+        FortivaControlTheme.ApplyBodyText(desc);
         var panel = new StackPanel { Spacing = 8 };
         panel.Children.Add(desc);
         panel.Children.Add(pwdBox);

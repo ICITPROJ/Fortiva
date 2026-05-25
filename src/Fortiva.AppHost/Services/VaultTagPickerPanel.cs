@@ -79,6 +79,11 @@ public sealed class VaultTagPickerPanel
         FortivaControlTheme.ApplyTextBox(_newTagBox, context ?? Root);
         FortivaControlTheme.ApplySecondaryButton(_addBtn, context ?? Root);
         FortivaControlTheme.ApplyMutedText(_emptyHint, Root);
+        if (_addBtn.Content is StackPanel addContent)
+        {
+            foreach (var child in addContent.Children.OfType<TextBlock>())
+                FortivaControlTheme.ApplyBodyText(child, context ?? Root);
+        }
         RebuildChips();
     }
 

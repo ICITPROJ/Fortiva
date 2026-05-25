@@ -51,7 +51,7 @@ public sealed class PasswordGeneratorPanel
     private readonly TextBlock _optionsHeader;
     private readonly Border _categoriesDivider;
     private readonly Button? _dialogRegenerateBtn;
-    private readonly IReadOnlyList<TextBlock> _sectionLabels;
+    private readonly List<TextBlock> _sectionLabelBlocks = [];
     private readonly List<ToggleSwitch> _charToggles = [];
     private readonly List<TextBlock> _charToggleLabels = [];
 
@@ -208,13 +208,13 @@ public sealed class PasswordGeneratorPanel
         _strengthLabel = new TextBlock { FontSize = 12, Margin = new Thickness(2, 0, 0, 0) };
         _errorLabel = new TextBlock { FontSize = 12, Visibility = Visibility.Collapsed, Margin = new Thickness(2, 0, 0, 0) };
 
-        _sectionLabels =
+        _sectionLabelBlocks =
         [
             _lengthLabel, _wordCountLabel, _separatorLabel, _charSetsHeader,
             _symbolsLabel, _customCharsetLabel, previewTitle
         ];
-        _categoriesLabel = CreateSectionLabel("Categories (optional)");
-        _optionsHeader = CreateSectionLabel("Generation rules");
+        _categoriesLabel = CreateSectionLabel("Categories (optional)", pageHeader: true);
+        _optionsHeader = CreateSectionLabel("Generation rules", pageHeader: true);
         _categoriesDivider = new Border { Height = 1, Opacity = 0.55, Margin = new Thickness(0, 4, 0, 8) };
 
         void ApplyPresetUi()
@@ -467,8 +467,7 @@ public sealed class PasswordGeneratorPanel
     public void ApplyThemeResources()
     {
         var theme = FortivaControlTheme.ResolveAppTheme();
-        Root.RequestedTheme = theme;
-        FortivaThemeResources.MergeOnto(Root, theme);
+        FortivaControlTheme.ApplyResolvedTheme(Root);
 
         _optionsShell.RequestedTheme = theme;
         _optionsShell.Background = FortivaControlTheme.GetBrush("FortivaGlassFillBrush", theme, Root);
@@ -501,8 +500,11 @@ public sealed class PasswordGeneratorPanel
 
         _tagPicker.ApplyTheme(Root);
 
-        foreach (var label in _sectionLabels.Append(_categoriesLabel).Append(_optionsHeader))
+        foreach (var label in _sectionLabelBlocks)
             FortivaControlTheme.ApplySectionLabel(label, context: Root);
+
+        FortivaControlTheme.ApplySectionLabel(_categoriesLabel, pageHeader: true, context: Root);
+        FortivaControlTheme.ApplySectionLabel(_optionsHeader, pageHeader: true, context: Root);
 
         _categoriesDivider.Background = FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", theme, Root);
 
@@ -535,13 +537,17 @@ public sealed class PasswordGeneratorPanel
         };
     }
 
-    private static TextBlock CreateSectionLabel(string text, bool small = false)
-        => new()
+    private TextBlock CreateSectionLabel(string text, bool small = false, bool pageHeader = false)
+    {
+        var label = new TextBlock
         {
             Text = text,
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            FontSize = small ? 12 : 13
+            FontSize = pageHeader ? 16 : (small ? 12 : 13)
         };
+        _sectionLabelBlocks.Add(label);
+        return label;
+    }
 
     private ToggleSwitch CreateCharToggle(bool isOn)
     {

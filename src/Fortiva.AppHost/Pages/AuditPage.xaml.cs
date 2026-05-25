@@ -19,7 +19,24 @@ public sealed partial class AuditPage : Page
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        ThemeService.ApplyToElement(this);
+        _vm.ThemeChanged += OnThemeChanged;
         Refresh();
+    }
+
+    protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        _vm.ThemeChanged -= OnThemeChanged;
+    }
+
+    private void OnThemeChanged()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            ThemeService.ApplyToElement(this);
+            Refresh();
+        });
     }
 
     private void Refresh()
@@ -68,7 +85,8 @@ public sealed partial class AuditPage : Page
             {
                 Text = typeText,
                 FontSize = 11,
-                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Foreground = FortivaControlTheme.GetBrush("FortivaHeadingBrush")
             }
         };
         Grid.SetColumn(badge, 1);
@@ -78,7 +96,8 @@ public sealed partial class AuditPage : Page
             Text = ev.Message,
             FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
-            TextTrimming = TextTrimming.CharacterEllipsis
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = FortivaControlTheme.GetBrush("FortivaBodyBrush")
         };
         Grid.SetColumn(msg, 2);
 

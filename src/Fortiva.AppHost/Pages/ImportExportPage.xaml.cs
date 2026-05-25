@@ -18,6 +18,7 @@ public sealed partial class ImportExportPage : Page
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        ThemeService.ApplyToElement(this);
         _stateChangedHandler = () => DispatcherQueue.TryEnqueue(RefreshExportState);
         _vm.StateChanged += _stateChangedHandler;
         RefreshExportState();

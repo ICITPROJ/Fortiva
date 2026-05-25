@@ -39,6 +39,7 @@
             <SolidColorBrush x:Key="FortivaBodyBrush" Color="{StaticResource FortivaBodyColor}"/>
             <SolidColorBrush x:Key="FortivaMutedBrush" Color="{StaticResource FortivaMutedColor}"/>
             <SolidColorBrush x:Key="FortivaAccentBrush" Color="{StaticResource FortivaAccentColor}"/>
+            <SolidColorBrush x:Key="FortivaAccentIconBrush" Color="{StaticResource FortivaAccentColor}"/>
             <SolidColorBrush x:Key="FortivaAccentButtonForegroundBrush" Color="{StaticResource FortivaAccentButtonFgColor}"/>
             <!-- Frosted glass surfaces -->
             <SolidColorBrush x:Key="FortivaGlassFillBrush" Color="#EBFFFFFF"/>
@@ -171,6 +172,7 @@
             <SolidColorBrush x:Key="FortivaBodyBrush" Color="{StaticResource FortivaBodyColor}"/>
             <SolidColorBrush x:Key="FortivaMutedBrush" Color="{StaticResource FortivaMutedColor}"/>
             <SolidColorBrush x:Key="FortivaAccentBrush" Color="{StaticResource FortivaAccentColor}"/>
+            <SolidColorBrush x:Key="FortivaAccentIconBrush" Color="{StaticResource FortivaAccentColor}"/>
             <SolidColorBrush x:Key="FortivaAccentButtonForegroundBrush" Color="{StaticResource FortivaAccentButtonFgColor}"/>
             <SolidColorBrush x:Key="FortivaSurfaceBrush" Color="#161B22"/>
             <SolidColorBrush x:Key="FortivaSurfaceSubtleBrush" Color="#12161C"/>
@@ -400,7 +402,12 @@
         <Setter Property="FontSize" Value="16"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Foreground" Value="{ThemeResource FortivaHeadingBrush}"/>
-        <Setter Property="Opacity" Value="0.9"/>
+    </Style>
+
+    <Style x:Key="FortivaHelperText" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Foreground" Value="{ThemeResource FortivaMutedBrush}"/>
+        <Setter Property="TextWrapping" Value="WrapWholeWords"/>
     </Style>
 
     <Style x:Key="FortivaBodyText" TargetType="TextBlock">
@@ -442,6 +449,11 @@
         <Setter Property="Background" Value="{ThemeResource FortivaAcrylicBrush}"/>
         <Setter Property="BorderBrush" Value="{ThemeResource FortivaGlassBorderBrush}"/>
         <Setter Property="BorderThickness" Value="0,0,0,1"/>
+    </Style>
+
+    <Style x:Key="FortivaHyperlink" TargetType="HyperlinkButton">
+        <Setter Property="Foreground" Value="{ThemeResource FortivaAccentBrush}"/>
+        <Setter Property="FontSize" Value="12"/>
     </Style>
 
     <Style x:Key="FortivaAdminTabContent" TargetType="StackPanel">

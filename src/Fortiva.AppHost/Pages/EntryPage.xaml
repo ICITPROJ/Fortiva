@@ -98,7 +98,8 @@
                             </Grid.ColumnDefinitions>
                             <TextBox x:Name="UrlBox" Style="{StaticResource FortivaTextBox}"
                                      PlaceholderText="https://example.com"/>
-                            <HyperlinkButton Grid.Column="1" x:Name="VisitLink" Content="Visit" Click="VisitUrl_Click"/>
+                            <HyperlinkButton Grid.Column="1" x:Name="VisitLink" Content="Visit"
+                                             Style="{StaticResource FortivaHyperlink}" Click="VisitUrl_Click"/>
                         </Grid>
                     </StackPanel>
 
@@ -141,7 +142,8 @@
 
                     <!-- Secure note toggle -->
                     <StackPanel x:Name="SecureNotePanel" Grid.Row="3" Grid.Column="1" VerticalAlignment="Bottom" Padding="0,0,0,4">
-                        <ToggleSwitch x:Name="SecureNoteToggle" Header="This is a secure note (no password)"/>
+                        <ToggleSwitch x:Name="SecureNoteToggle" Style="{StaticResource FortivaToggleSwitch}"
+                                      Header="This is a secure note (no password)"/>
                     </StackPanel>
 
                     <!-- Notes -->

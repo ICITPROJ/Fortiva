@@ -1,14 +1,14 @@
 <Project>
   <PropertyGroup>
-    <!-- Company / product identity — applied to every assembly in the solution -->
+    <!-- Company / product identity â€” applied to every assembly in the solution -->
     <Company>icmclab studio</Company>
     <Authors>icmclab studio</Authors>
     <Product>Fortiva</Product>
-    <Copyright>Copyright © icmclab studio 2026</Copyright>
+    <Copyright>Copyright Â© icmclab studio 2026</Copyright>
     <PackageProjectUrl>https://studio.icmclab.cloud</PackageProjectUrl>
-    <Version>1.0.15</Version>
-    <AssemblyVersion>1.0.15.0</AssemblyVersion>
-    <FileVersion>1.0.15.0</FileVersion>
+    <Version>1.0.16</Version>
+    <AssemblyVersion>1.0.16.0</AssemblyVersion>
+    <FileVersion>1.0.16.0</FileVersion>
   </PropertyGroup>
   <PropertyGroup>
     <WindowsAppSDKVersion>1.6.250108002</WindowsAppSDKVersion>
@@ -22,7 +22,7 @@
     <AppxGeneratePriEnabled>false</AppxGeneratePriEnabled>
     <AppxGeneratePrisForPortableLibrariesEnabled>false</AppxGeneratePrisForPortableLibrariesEnabled>
     <EnableMrtResourceIndexer>false</EnableMrtResourceIndexer>
-    <!-- Disable all MSIX packaging targets — not needed for unpackaged/dev builds without VS -->
+    <!-- Disable all MSIX packaging targets â€” not needed for unpackaged/dev builds without VS -->
     <MsixPackageSupport>false</MsixPackageSupport>
     <ShouldImportMsixPackagingTargets>false</ShouldImportMsixPackagingTargets>
     <ShouldImportMsixCsTargets>false</ShouldImportMsixCsTargets>

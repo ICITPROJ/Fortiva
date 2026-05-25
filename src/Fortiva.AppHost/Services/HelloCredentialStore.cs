@@ -38,8 +38,9 @@ public static class HelloCredentialStore
     {
         var credential = await OpenOrCreateCredentialAsync();
         var challenge = RandomNumberGenerator.GetBytes(32);
-        var signature = await SignChallengeAsync(credential, challenge);
-        var wrapKey = SHA256.HashData(signature);
+            var signature = await SignChallengeAsync(credential, challenge);
+            _ = signature; // proves Windows Hello; do not use signature bytes as key (ECDSA is non-deterministic)
+            var wrapKey = SHA256.HashData(challenge);
 
         byte[]? wrappedMk = null;
         try
@@ -83,7 +84,8 @@ public static class HelloCredentialStore
                 return null;
 
             var signature = await SignChallengeAsync(open.Credential, challenge);
-            var wrapKey = SHA256.HashData(signature);
+            _ = signature;
+            var wrapKey = SHA256.HashData(challenge);
             try
             {
                 return CngAesGcm.Open(wrapKey, wrappedMk, MkWrapAssociatedData);

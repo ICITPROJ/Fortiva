@@ -43,7 +43,11 @@ public sealed class HelloUnlockManager
     public async Task<byte[]?> TryLoadMasterKeyAsync()
     {
         if (IsHardwareBacked)
-            return await HelloCredentialStore.TryLoadAsync(_dataDirectory);
+        {
+            var hardwareKey = await HelloCredentialStore.TryLoadAsync(_dataDirectory);
+            if (hardwareKey is not null)
+                return hardwareKey;
+        }
 
         return _protector.TryLoadMasterKey(helloVerified: true);
     }

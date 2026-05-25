@@ -1,163 +1,163 @@
-<Page
-    x:Class="Fortiva.AppHost.Admin.AdminMainWindow"
-    NavigationCacheMode="Enabled"
-    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Background="Transparent">
-
-    <Grid>
-        <TabView x:Name="MainTabView" IsAddTabButtonVisible="False" VerticalAlignment="Stretch"
-                 Background="Transparent">
-            <!-- License -->
-            <TabViewItem Header="License">
-                <ScrollViewer>
-                    <StackPanel Style="{StaticResource FortivaAdminTabContent}">
-                        <TextBlock Text="License Management" Style="{StaticResource FortivaPageTitle}"/>
-
-                        <Border x:Name="LicenseStatusBanner" Style="{StaticResource FortivaGlassPanel}" Padding="16">
-                            <StackPanel Spacing="8">
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <Image x:Name="LicenseLogo" Width="36" Height="36" Stretch="Uniform" VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="LicenseStatus" FontSize="16" FontWeight="SemiBold"
-                                               Foreground="{ThemeResource FortivaHeadingBrush}" VerticalAlignment="Center"/>
-                                </StackPanel>
-                                <TextBlock x:Name="LicenseDetail" Style="{StaticResource FortivaMutedText}" FontFamily="Consolas"/>
-                            </StackPanel>
-                        </Border>
-
-                        <StackPanel Spacing="8">
-                            <Button Style="{StaticResource FortivaAccentButton}" Click="ImportLicense_Click">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <FontIcon Glyph="&#xE8B5;" FontSize="14"/>
-                                    <TextBlock Text="Import license file…"/>
-                                </StackPanel>
-                            </Button>
-                            <Button Style="{StaticResource FortivaSecondaryButton}" Content="Verify current license"
-                                    Click="VerifyLicense_Click"/>
-                            <Button x:Name="GenerateTrialBtn" Style="{StaticResource FortivaSecondaryButton}"
-                                    Content="Generate trial (dev only)" Click="GenerateTrial_Click" Opacity="0.7"/>
-                        </StackPanel>
-
-                        <InfoBar x:Name="LicenseInfoBar" IsOpen="False" IsClosable="True"/>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabViewItem>
-
-            <!-- Policy Editor -->
-            <TabViewItem Header="Policy">
-                <ScrollViewer>
-                    <StackPanel Style="{StaticResource FortivaAdminTabContent}">
-                        <TextBlock Text="Enterprise Policy" Style="{StaticResource FortivaPageTitle}"/>
-                        <TextBlock Style="{StaticResource FortivaBodyText}"
-                                   Text="Policy settings are encrypted with DPAPI-LocalMachine and deployed to %PROGRAMDATA%\Fortiva\. Users cannot override these settings."/>
-
-                        <Border Style="{StaticResource FortivaGlassPanel}">
-                            <StackPanel Spacing="12">
-                                <Expander Header="Key Derivation (Argon2id)" IsExpanded="True" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                                    <StackPanel Spacing="12" Padding="0,8,0,0">
-                                        <StackPanel Spacing="4">
-                                            <TextBlock Text="Minimum memory (MB)" Style="{StaticResource FortivaSectionTitle}"/>
-                                            <Slider x:Name="ArgonMemSlider" ValueChanged="ArgonMem_Changed"/>
-                                            <TextBlock x:Name="ArgonMemLabel" Style="{StaticResource FortivaMutedText}"/>
-                                        </StackPanel>
-                                        <StackPanel Spacing="4">
-                                            <TextBlock Text="Minimum iterations" Style="{StaticResource FortivaSectionTitle}"/>
-                                            <Slider x:Name="ArgonIterSlider" ValueChanged="ArgonIter_Changed"/>
-                                            <TextBlock x:Name="ArgonIterLabel" Style="{StaticResource FortivaMutedText}"/>
-                                        </StackPanel>
-                                    </StackPanel>
-                                </Expander>
-
-                                <Expander Header="Lock &amp; Clipboard" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                                    <StackPanel Spacing="12" Padding="0,8,0,0">
-                                        <StackPanel Spacing="4">
-                                            <TextBlock Text="Maximum auto-lock (seconds)" Style="{StaticResource FortivaSectionTitle}"/>
-                                            <Slider x:Name="AutoLockSlider" ValueChanged="AutoLock_Changed"/>
-                                            <TextBlock x:Name="AutoLockLabel" Style="{StaticResource FortivaMutedText}"/>
-                                        </StackPanel>
-                                        <ToggleSwitch x:Name="ClipboardDisabledSwitch" Header="Disable clipboard entirely"/>
-                                        <StackPanel Spacing="4">
-                                            <TextBlock Text="Clipboard clear delay (seconds)" Style="{StaticResource FortivaSectionTitle}"/>
-                                            <Slider x:Name="ClipboardSlider" ValueChanged="Clipboard_Changed"/>
-                                            <TextBlock x:Name="ClipboardLabel" Style="{StaticResource FortivaMutedText}"/>
-                                        </StackPanel>
-                                    </StackPanel>
-                                </Expander>
-
-                                <Expander Header="Security Requirements" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                                    <StackPanel Spacing="12" Padding="0,8,0,0">
-                                        <ToggleSwitch x:Name="ParanoiaSwitch" Header="Require Paranoia Mode"/>
-                                        <ToggleSwitch x:Name="HelloSwitch" Header="Require Windows Hello"/>
-                                        <ToggleSwitch x:Name="PortableSwitch" Header="Allow portable mode" IsOn="True"/>
-                                        <ToggleSwitch x:Name="TotpSwitch" Header="Allow authenticator (TOTP) codes"/>
-                                        <ComboBox x:Name="ExportModeBox" Header="Export policy" Width="220">
-                                            <ComboBoxItem>Encrypted only</ComboBoxItem>
-                                            <ComboBoxItem>No plaintext export</ComboBoxItem>
-                                            <ComboBoxItem>Plaintext with warning</ComboBoxItem>
-                                        </ComboBox>
-                                    </StackPanel>
-                                </Expander>
-                            </StackPanel>
-                        </Border>
-
-                        <InfoBar x:Name="PolicyValidationBar" IsOpen="False" IsClosable="True"/>
-
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button Style="{StaticResource FortivaAccentButton}" Content="Save and deploy policy"
-                                    Click="SavePolicy_Click"/>
-                            <Button Style="{StaticResource FortivaSecondaryButton}" Content="Validate" Click="ValidatePolicy_Click"/>
-                            <Button Style="{StaticResource FortivaSecondaryButton}" Content="Reset to defaults" Click="ResetPolicy_Click"/>
-                        </StackPanel>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabViewItem>
-
-            <!-- Shared Vaults -->
-            <TabViewItem Header="Shared Vaults">
-                <ScrollViewer>
-                    <StackPanel Style="{StaticResource FortivaAdminTabContent}">
-                        <TextBlock Text="Shared Vault Configuration" Style="{StaticResource FortivaPageTitle}"/>
-                        <TextBlock Style="{StaticResource FortivaBodyText}"
-                                   Text="Configure shared vault paths for the Enterprise client. Users can switch to these vaults in Fortiva Enterprise Settings."/>
-                        <Border Style="{StaticResource FortivaGlassPanel}">
-                            <StackPanel Spacing="12">
-                                <ListView x:Name="SharedVaultList" Height="200" SelectionMode="Single"/>
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Button Style="{StaticResource FortivaAccentButton}" Content="Add shared vault…"
-                                            Click="AddSharedVault_Click"/>
-                                    <Button Style="{StaticResource FortivaSecondaryButton}" Content="Remove selected"
-                                            Click="RemoveSharedVault_Click"/>
-                                </StackPanel>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </ScrollViewer>
-            </TabViewItem>
-
-            <!-- Audit -->
-            <TabViewItem Header="Audit">
-                <Grid RowSpacing="0">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <Border Style="{StaticResource FortivaToolbar}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Audit Log" Style="{StaticResource FortivaSectionTitle}" VerticalAlignment="Center"/>
-                            <Button Grid.Column="1" Style="{StaticResource FortivaSecondaryButton}" Content="Export JSONL"
-                                    Click="ExportAudit_Click"/>
-                        </Grid>
-                    </Border>
-                    <ListView x:Name="AuditList" Grid.Row="1" SelectionMode="None" Background="Transparent"/>
-                    <TextBlock x:Name="AuditCount" Grid.Row="2" Margin="16,6" Style="{StaticResource FortivaMutedText}"/>
-                </Grid>
-            </TabViewItem>
-        </TabView>
-    </Grid>
-</Page>
-
+<Page
+    x:Class="Fortiva.AppHost.Admin.AdminMainWindow"
+    NavigationCacheMode="Enabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Background="Transparent">
+
+    <Grid>
+        <TabView x:Name="MainTabView" IsAddTabButtonVisible="False" VerticalAlignment="Stretch"
+                 Background="Transparent">
+            <!-- License -->
+            <TabViewItem Header="License">
+                <ScrollViewer>
+                    <StackPanel Style="{StaticResource FortivaAdminTabContent}">
+                        <TextBlock Text="License Management" Style="{StaticResource FortivaPageTitle}"/>
+
+                        <Border x:Name="LicenseStatusBanner" Style="{StaticResource FortivaGlassPanel}" Padding="16">
+                            <StackPanel Spacing="8">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Image x:Name="LicenseLogo" Width="36" Height="36" Stretch="Uniform" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="LicenseStatus" FontSize="16" FontWeight="SemiBold"
+                                               Foreground="{ThemeResource FortivaHeadingBrush}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock x:Name="LicenseDetail" Style="{StaticResource FortivaMutedText}" FontFamily="Consolas"/>
+                            </StackPanel>
+                        </Border>
+
+                        <StackPanel Spacing="8">
+                            <Button Style="{StaticResource FortivaAccentButton}" Click="ImportLicense_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8B5;" FontSize="14"/>
+                                    <TextBlock Text="Import license file…"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource FortivaSecondaryButton}" Content="Verify current license"
+                                    Click="VerifyLicense_Click"/>
+                            <Button x:Name="GenerateTrialBtn" Style="{StaticResource FortivaSecondaryButton}"
+                                    Content="Generate trial (dev only)" Click="GenerateTrial_Click" Opacity="0.7"/>
+                        </StackPanel>
+
+                        <InfoBar x:Name="LicenseInfoBar" IsOpen="False" IsClosable="True"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabViewItem>
+
+            <!-- Policy Editor -->
+            <TabViewItem Header="Policy">
+                <ScrollViewer>
+                    <StackPanel Style="{StaticResource FortivaAdminTabContent}">
+                        <TextBlock Text="Enterprise Policy" Style="{StaticResource FortivaPageTitle}"/>
+                        <TextBlock Style="{StaticResource FortivaBodyText}"
+                                   Text="Policy settings are encrypted with DPAPI-LocalMachine and deployed to %PROGRAMDATA%\Fortiva\. Users cannot override these settings."/>
+
+                        <Border Style="{StaticResource FortivaGlassPanel}">
+                            <StackPanel Spacing="12">
+                                <Expander Header="Key Derivation (Argon2id)" IsExpanded="True" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                                    <StackPanel Spacing="12" Padding="0,8,0,0">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="Minimum memory (MB)" Style="{StaticResource FortivaSectionTitle}"/>
+                                            <Slider x:Name="ArgonMemSlider" ValueChanged="ArgonMem_Changed"/>
+                                            <TextBlock x:Name="ArgonMemLabel" Style="{StaticResource FortivaMutedText}"/>
+                                        </StackPanel>
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="Minimum iterations" Style="{StaticResource FortivaSectionTitle}"/>
+                                            <Slider x:Name="ArgonIterSlider" ValueChanged="ArgonIter_Changed"/>
+                                            <TextBlock x:Name="ArgonIterLabel" Style="{StaticResource FortivaMutedText}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Expander>
+
+                                <Expander Header="Lock &amp; Clipboard" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                                    <StackPanel Spacing="12" Padding="0,8,0,0">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="Maximum auto-lock (seconds)" Style="{StaticResource FortivaSectionTitle}"/>
+                                            <Slider x:Name="AutoLockSlider" ValueChanged="AutoLock_Changed"/>
+                                            <TextBlock x:Name="AutoLockLabel" Style="{StaticResource FortivaMutedText}"/>
+                                        </StackPanel>
+                                        <ToggleSwitch x:Name="ClipboardDisabledSwitch" Style="{StaticResource FortivaToggleSwitch}" Header="Disable clipboard entirely"/>
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="Clipboard clear delay (seconds)" Style="{StaticResource FortivaSectionTitle}"/>
+                                            <Slider x:Name="ClipboardSlider" ValueChanged="Clipboard_Changed"/>
+                                            <TextBlock x:Name="ClipboardLabel" Style="{StaticResource FortivaMutedText}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Expander>
+
+                                <Expander Header="Security Requirements" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                                    <StackPanel Spacing="12" Padding="0,8,0,0">
+                                        <ToggleSwitch x:Name="ParanoiaSwitch" Style="{StaticResource FortivaToggleSwitch}" Header="Require Paranoia Mode"/>
+                                        <ToggleSwitch x:Name="HelloSwitch" Style="{StaticResource FortivaToggleSwitch}" Header="Require Windows Hello"/>
+                                        <ToggleSwitch x:Name="PortableSwitch" Style="{StaticResource FortivaToggleSwitch}" Header="Allow portable mode" IsOn="True"/>
+                                        <ToggleSwitch x:Name="TotpSwitch" Style="{StaticResource FortivaToggleSwitch}" Header="Allow authenticator (TOTP) codes"/>
+                                        <ComboBox x:Name="ExportModeBox" Header="Export policy" Width="220">
+                                            <ComboBoxItem>Encrypted only</ComboBoxItem>
+                                            <ComboBoxItem>No plaintext export</ComboBoxItem>
+                                            <ComboBoxItem>Plaintext with warning</ComboBoxItem>
+                                        </ComboBox>
+                                    </StackPanel>
+                                </Expander>
+                            </StackPanel>
+                        </Border>
+
+                        <InfoBar x:Name="PolicyValidationBar" IsOpen="False" IsClosable="True"/>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Style="{StaticResource FortivaAccentButton}" Content="Save and deploy policy"
+                                    Click="SavePolicy_Click"/>
+                            <Button Style="{StaticResource FortivaSecondaryButton}" Content="Validate" Click="ValidatePolicy_Click"/>
+                            <Button Style="{StaticResource FortivaSecondaryButton}" Content="Reset to defaults" Click="ResetPolicy_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabViewItem>
+
+            <!-- Shared Vaults -->
+            <TabViewItem Header="Shared Vaults">
+                <ScrollViewer>
+                    <StackPanel Style="{StaticResource FortivaAdminTabContent}">
+                        <TextBlock Text="Shared Vault Configuration" Style="{StaticResource FortivaPageTitle}"/>
+                        <TextBlock Style="{StaticResource FortivaBodyText}"
+                                   Text="Configure shared vault paths for the Enterprise client. Users can switch to these vaults in Fortiva Enterprise Settings."/>
+                        <Border Style="{StaticResource FortivaGlassPanel}">
+                            <StackPanel Spacing="12">
+                                <ListView x:Name="SharedVaultList" Height="200" SelectionMode="Single"/>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Style="{StaticResource FortivaAccentButton}" Content="Add shared vault…"
+                                            Click="AddSharedVault_Click"/>
+                                    <Button Style="{StaticResource FortivaSecondaryButton}" Content="Remove selected"
+                                            Click="RemoveSharedVault_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabViewItem>
+
+            <!-- Audit -->
+            <TabViewItem Header="Audit">
+                <Grid RowSpacing="0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Border Style="{StaticResource FortivaToolbar}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Audit Log" Style="{StaticResource FortivaSectionTitle}" VerticalAlignment="Center"/>
+                            <Button Grid.Column="1" Style="{StaticResource FortivaSecondaryButton}" Content="Export JSONL"
+                                    Click="ExportAudit_Click"/>
+                        </Grid>
+                    </Border>
+                    <ListView x:Name="AuditList" Grid.Row="1" SelectionMode="None" Background="Transparent"/>
+                    <TextBlock x:Name="AuditCount" Grid.Row="2" Margin="16,6" Style="{StaticResource FortivaMutedText}"/>
+                </Grid>
+            </TabViewItem>
+        </TabView>
+    </Grid>
+</Page>
+

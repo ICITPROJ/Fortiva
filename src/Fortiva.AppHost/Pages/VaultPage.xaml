@@ -59,20 +59,20 @@
 
                     <Border Grid.Column="1" Style="{StaticResource FortivaVaultStatChip}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE734;" FontSize="12" Opacity="0.8"/>
+                            <FontIcon Glyph="&#xE734;" FontSize="12" Foreground="{ThemeResource FortivaMutedBrush}"/>
                             <TextBlock x:Name="StatFavorites" Style="{StaticResource FortivaMutedText}"/>
                         </StackPanel>
                     </Border>
                     <Border Grid.Column="2" Style="{StaticResource FortivaVaultStatChip}"
                             ToolTipService.ToolTip="Entries with authenticator (TOTP)">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE192;" FontSize="12" Opacity="0.8"/>
+                            <FontIcon Glyph="&#xE192;" FontSize="12" Foreground="{ThemeResource FortivaMutedBrush}"/>
                             <TextBlock x:Name="StatTotp" Style="{StaticResource FortivaMutedText}"/>
                         </StackPanel>
                     </Border>
                     <Border Grid.Column="3" Style="{StaticResource FortivaVaultStatChip}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE72E;" FontSize="12" Opacity="0.8"/>
+                            <FontIcon Glyph="&#xE72E;" FontSize="12" Foreground="{ThemeResource FortivaMutedBrush}"/>
                             <TextBlock x:Name="StatVaultTrust" Style="{StaticResource FortivaMutedText}"/>
                         </StackPanel>
                     </Border>

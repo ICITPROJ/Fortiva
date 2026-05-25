@@ -35,8 +35,7 @@ public static class FortivaThemeResources
         if (dict is null)
             return;
 
-        if (!element.Resources.MergedDictionaries.Contains(dict))
-            element.Resources.MergedDictionaries.Add(dict);
+        ReplaceThemeDictionary(element.Resources, dict);
     }
 
     public static void MergeOnto(ContentDialog dialog, ElementTheme? theme = null)
@@ -48,7 +47,33 @@ public static class FortivaThemeResources
         if (dict is null)
             return;
 
-        if (!dialog.Resources.MergedDictionaries.Contains(dict))
-            dialog.Resources.MergedDictionaries.Add(dict);
+        ReplaceThemeDictionary(dialog.Resources, dict);
+    }
+
+    /// <summary>Keep a single Fortiva theme dictionary — avoid stale Light/Dark merges after toggling.</summary>
+    private static void ReplaceThemeDictionary(ResourceDictionary resources, ResourceDictionary themeDict)
+    {
+        for (var i = resources.MergedDictionaries.Count - 1; i >= 0; i--)
+        {
+            if (IsAppThemeDictionary(resources.MergedDictionaries[i]))
+                resources.MergedDictionaries.RemoveAt(i);
+        }
+
+        if (!resources.MergedDictionaries.Contains(themeDict))
+            resources.MergedDictionaries.Add(themeDict);
+    }
+
+    private static bool IsAppThemeDictionary(ResourceDictionary dict)
+    {
+        if (Application.Current?.Resources.ThemeDictionaries is not ResourceDictionary themeDictionaries)
+            return false;
+
+        foreach (var value in themeDictionaries.Values)
+        {
+            if (ReferenceEquals(value, dict))
+                return true;
+        }
+
+        return false;
     }
 }
