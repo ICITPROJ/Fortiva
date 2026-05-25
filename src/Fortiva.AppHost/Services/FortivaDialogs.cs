@@ -10,32 +10,39 @@ public static class FortivaDialogs
     public static void Configure(ContentDialog dialog, XamlRoot xamlRoot, Action? onOpened = null)
     {
         dialog.XamlRoot = xamlRoot;
-        var theme = FortivaControlTheme.ResolveEffectiveTheme(xamlRoot);
 
-        FortivaThemeResources.MergeOnto(dialog, theme);
-
-        if (dialog.Content is FrameworkElement content)
-            PrepareDialogContent(content, theme);
-
-        dialog.Opened += (_, _) =>
+        void ApplyDialogTheme()
         {
+            var theme = FortivaControlTheme.ResolveAppTheme();
+            dialog.RequestedTheme = theme;
             FortivaThemeResources.MergeOnto(dialog, theme);
+
             if (dialog.Content is FrameworkElement content)
             {
                 PrepareDialogContent(content, theme);
                 ApplyThemeToTree(content, theme);
             }
+        }
 
+        if (dialog.Content is FrameworkElement initialContent)
+            PrepareDialogContent(initialContent, FortivaControlTheme.ResolveAppTheme());
+
+        dialog.Opened += (_, _) =>
+        {
+            ApplyDialogTheme();
             onOpened?.Invoke();
         };
     }
 
-    public static Border WrapDialogContent(UIElement inner, ElementTheme theme)
+    public static Border WrapDialogContent(UIElement inner, ElementTheme? theme = null)
     {
+        theme ??= FortivaControlTheme.ResolveAppTheme();
         var shell = new Border
         {
-            Padding = new Thickness(4, 0, 4, 0),
-            Background = FortivaControlTheme.GetBrush("FortivaGlassFillBrush", theme),
+            Padding = new Thickness(8, 4, 8, 4),
+            Background = FortivaControlTheme.GetBrush("FortivaSurfaceBrush", theme),
+            BorderBrush = FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", theme),
+            BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(12),
             Child = inner
         };
@@ -51,7 +58,7 @@ public static class FortivaDialogs
 
     public static void ApplyThemeToTree(FrameworkElement element, ElementTheme? theme = null)
     {
-        theme ??= FortivaControlTheme.ResolveEffectiveTheme(element.XamlRoot, element);
+        theme ??= FortivaControlTheme.ResolveAppTheme();
         FortivaThemeResources.MergeOnto(element, theme);
 
         switch (element)

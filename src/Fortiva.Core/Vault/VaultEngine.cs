@@ -11,11 +11,17 @@ public sealed class VaultEngine
     private readonly DpapiLocalStateStore _localState;
     private readonly FortivaPolicy? _policy;
 
-    public VaultEngine(string vaultDirectory, DpapiScope dpapiScope, FortivaPolicy? policy = null)
+    public VaultEngine(
+        string vaultDirectory,
+        DpapiScope dpapiScope,
+        FortivaPolicy? policy = null,
+        string? localStateDirectory = null)
     {
         Directory.CreateDirectory(vaultDirectory);
         _snapshots = new VaultSnapshotManager(vaultDirectory);
-        _localState = new DpapiLocalStateStore(vaultDirectory, dpapiScope);
+        var stateDir = localStateDirectory ?? vaultDirectory;
+        Directory.CreateDirectory(stateDir);
+        _localState = new DpapiLocalStateStore(stateDir, dpapiScope);
         _policy = policy;
     }
 
@@ -127,10 +133,17 @@ public sealed class VaultEngine
             var readOnly = false;
             string? warning = null;
 
+            if (payload.Entries.Count > 0 && payload.IntegrityLog.Count == 0 && header.RevisionCounter > 1)
+            {
+                readOnly = true;
+                var integrityNote = "Integrity log is missing for an established vault.";
+                warning = string.IsNullOrEmpty(warning) ? integrityNote : $"{warning} {integrityNote}";
+            }
+
             if (rollback.IsSuspicious)
             {
                 warning = string.Join(" ", rollback.Warnings);
-                if (!confirmRollback)
+                if (rollback.ForceReadOnly || !confirmRollback)
                     readOnly = true;
             }
 

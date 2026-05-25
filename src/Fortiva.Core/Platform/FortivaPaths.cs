@@ -1,5 +1,7 @@
 namespace Fortiva.Core.Platform;
 
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 
 /// <summary>Canonical on-disk locations for Fortiva data (must match installer uninstall scripts).</summary>
@@ -34,6 +36,17 @@ public static class FortivaPaths
 
     public static string GetBridgeSessionDirectory(bool enterprise) =>
         enterprise ? EnterpriseCrashLogDirectory : PersonalCrashLogDirectory;
+
+    /// <summary>Per-user rollback state directory keyed by vault location (enterprise shared vaults).</summary>
+    public static string GetRollbackStateDirectory(string vaultDirectory, bool enterprise)
+    {
+        if (!enterprise)
+            return vaultDirectory;
+
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(vaultDirectory)))
+            .ToLowerInvariant()[..16];
+        return Path.Combine(EnterpriseCrashLogDirectory, "rollback", hash);
+    }
 
     /// <summary>
     /// Moves vault from legacy %APPDATA%\Fortiva\Personal\ to %APPDATA%\Fortiva\ when needed.

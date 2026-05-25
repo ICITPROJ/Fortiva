@@ -4,6 +4,12 @@ namespace Fortiva.Core.Tests.BrowserBridge;
 
 public sealed class BridgeClientValidatorTests
 {
+    public BridgeClientValidatorTests()
+    {
+        // Unit tests use stub EXEs; Authenticode is enforced in Release builds only.
+        Environment.SetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE", "1");
+    }
+
     [Theory]
     [InlineData("Fortiva.BrowserBridge.Host.exe", true)]
     [InlineData("Fortiva.Personal.exe", true)]

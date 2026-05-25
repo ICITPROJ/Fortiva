@@ -94,7 +94,7 @@ public sealed class DpapiLocalStateStore
             IsSuspicious = true,
             Warnings = warnings,
             RequiresConfirmation = true,
-            ForceReadOnly = paranoiaMode && header.SecurityLevel < stored.MaxSecurityLevel
+            ForceReadOnly = paranoiaMode
         };
     }
 
@@ -109,6 +109,35 @@ public sealed class DpapiLocalStateStore
     }
 
     private static byte[] GetEntropy() => "Fortiva.LocalState.v1"u8.ToArray();
+
+    /// <summary>
+    /// Migrates enterprise rollback state from shared vault directory (LocalMachine DPAPI)
+    /// to per-user storage when upgrading to per-user rollback tracking.
+    /// </summary>
+    public static void MigrateEnterpriseRollbackState(string vaultDirectory, string perUserStateDirectory)
+    {
+        Directory.CreateDirectory(perUserStateDirectory);
+        var legacyPath = Path.Combine(vaultDirectory, "local.state");
+        var newPath = Path.Combine(perUserStateDirectory, "local.state");
+        if (!File.Exists(legacyPath) || File.Exists(newPath))
+            return;
+
+        try
+        {
+            var protectedBytes = File.ReadAllBytes(legacyPath);
+            var json = ProtectedData.Unprotect(protectedBytes, GetEntropy(), DataProtectionScope.LocalMachine);
+            var metadata = JsonSerializer.Deserialize<LocalStateMetadata>(json);
+            if (metadata is null)
+                return;
+
+            var store = new DpapiLocalStateStore(perUserStateDirectory, DpapiScope.CurrentUser);
+            store.Save(metadata);
+        }
+        catch
+        {
+            // Best-effort migration; unlock may prompt for rollback confirmation instead.
+        }
+    }
 }
 
 public sealed class RollbackCheckResult

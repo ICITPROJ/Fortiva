@@ -24,6 +24,8 @@ public sealed class VaultSession : IDisposable
     private string? _bridgeSessionToken;
     private readonly object _payloadLock = new();
     private int _autoLockSuppressCount;
+    private int _autoLockTimeoutSeconds = 300;
+    private readonly string _rollbackStateDirectory;
 
     public VaultSession(
         string vaultDirectory,
@@ -32,9 +34,11 @@ public sealed class VaultSession : IDisposable
         bool enableAudit = false,
         string? auditDirectory = null,
         bool requireEnterpriseLicense = false,
-        bool enterpriseClient = false)
+        bool enterpriseClient = false,
+        string? rollbackStateDirectory = null)
     {
-        _engine = new VaultEngine(vaultDirectory, scope, policy);
+        _rollbackStateDirectory = rollbackStateDirectory ?? vaultDirectory;
+        _engine = new VaultEngine(vaultDirectory, DpapiScope.CurrentUser, policy, _rollbackStateDirectory);
         _policy = policy;
         _requireEnterpriseLicense = requireEnterpriseLicense;
         _enterpriseClient = enterpriseClient;
@@ -289,7 +293,9 @@ public sealed class VaultSession : IDisposable
 
     public void SetAutoLockTimeout(int seconds)
     {
-        if (_autoLock is not null) _autoLock.TimeoutSeconds = seconds;
+        _autoLockTimeoutSeconds = seconds > 0 ? seconds : 300;
+        if (_autoLock is not null)
+            _autoLock.TimeoutSeconds = _autoLockTimeoutSeconds;
     }
 
     public void ApplyPolicy(FortivaPolicy? policy)
@@ -349,7 +355,7 @@ public sealed class VaultSession : IDisposable
         _bridge.Start();
 
         _autoLock?.Dispose();
-        var timeout = PolicyEnforcer.EnforceAutoLock(300, _policy ?? new FortivaPolicy());
+        var timeout = PolicyEnforcer.EnforceAutoLock(_autoLockTimeoutSeconds, _policy ?? new FortivaPolicy());
         _autoLock = new AutoLockTimer(timeout);
         _autoLock.LockRequested += () =>
         {

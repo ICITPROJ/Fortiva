@@ -490,7 +490,16 @@ public sealed partial class SettingsPage : Page
                 };
                 FortivaDialogs.Configure(dlg, XamlRoot);
                 if (await dlg.ShowAsync() == ContentDialogResult.Primary && result.Manifest is not null)
-                    await UpdateService.Current.ApplyAsync(result.Manifest, silent: false);
+                {
+                    try
+                    {
+                        await UpdateService.Current.ApplyAsync(result.Manifest, silent: false);
+                    }
+                    catch (Exception ex)
+                    {
+                        ShowInfo(UpdateMessages.ForCheckFailure(ex), InfoBarSeverity.Error);
+                    }
+                }
             }
             else
             {

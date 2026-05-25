@@ -3,6 +3,7 @@
     NavigationCacheMode="Enabled"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:services="using:Fortiva.AppHost.Services"
     Background="Transparent">
 
     <Grid RowSpacing="0">
@@ -88,8 +89,14 @@
             </InfoBar.ActionButton>
         </InfoBar>
 
-        <!-- Entry grid -->
-        <Grid Grid.Row="2" Margin="24,16,24,8">
+        <!-- Entry grid + category sidebar -->
+        <Grid Grid.Row="2" Margin="24,16,24,8" ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="220"/>
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
             <GridView x:Name="EntryGrid"
                       SelectionMode="Single"
                       IsItemClickEnabled="True"
@@ -229,6 +236,79 @@
                         <Button Style="{StaticResource FortivaSecondaryButton}" Click="AddEntryFull_Click" Content="Full form…"/>
                     </StackPanel>
                 </StackPanel>
+            </Border>
+
+            <Border x:Name="EmptyCategoryState" Visibility="Collapsed"
+                    Style="{StaticResource FortivaGlassPanelGlow}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Padding="32,28" MaxWidth="420">
+                <StackPanel Spacing="10" HorizontalAlignment="Center">
+                    <FontIcon Glyph="&#xE8E7;" FontSize="36"
+                              Foreground="{ThemeResource FortivaAccentBrush}" Opacity="0.85"
+                              HorizontalAlignment="Center"/>
+                    <TextBlock Text="No entries in this category" FontSize="18" FontWeight="SemiBold"
+                               HorizontalAlignment="Center"
+                               Foreground="{ThemeResource FortivaHeadingBrush}"/>
+                    <TextBlock Text="Try another category or clear your search."
+                               TextWrapping="WrapWholeWords" TextAlignment="Center"
+                               Style="{StaticResource FortivaBodyText}"/>
+                </StackPanel>
+            </Border>
+            </Grid>
+
+            <Border Grid.Column="1" Style="{StaticResource FortivaGlassPanel}" Padding="14,16"
+                    VerticalAlignment="Stretch">
+                <Grid RowSpacing="10">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Categories" Style="{StaticResource FortivaSectionTitle}"/>
+                        <TextBlock Text="Filter by tag or quick groups"
+                                   Style="{StaticResource FortivaMutedText}"/>
+                    </StackPanel>
+                    <ListView x:Name="CategoryList" Grid.Row="1"
+                              SelectionMode="Single"
+                              IsItemClickEnabled="True"
+                              SelectionChanged="CategoryList_SelectionChanged">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="Padding" Value="4,2"/>
+                                <Setter Property="MinHeight" Value="40"/>
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="services:VaultCategoryItem">
+                                <Grid ColumnSpacing="10" Padding="8,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon Glyph="{x:Bind IconGlyph}" FontSize="14"
+                                              Foreground="{ThemeResource FortivaAccentBrush}"
+                                              VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="{x:Bind Label}"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTipService.ToolTip="{x:Bind Label}"
+                                               Foreground="{ThemeResource FortivaBodyBrush}"/>
+                                    <Border Grid.Column="2" Style="{StaticResource FortivaVaultStatChip}"
+                                            Padding="8,2" MinWidth="28">
+                                        <TextBlock Text="{x:Bind Count}" FontSize="11"
+                                                   HorizontalAlignment="Center"
+                                                   Foreground="{ThemeResource FortivaMutedBrush}"/>
+                                    </Border>
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                    <TextBlock Grid.Row="2" Text="Add tags when editing an entry to organize passwords here."
+                               Style="{StaticResource FortivaMutedText}" TextWrapping="WrapWholeWords"/>
+                </Grid>
             </Border>
         </Grid>
 

@@ -7,6 +7,7 @@ using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Graphics;
 
@@ -101,6 +102,18 @@ public sealed partial class MainWindow : Window
             Activated += MainWindow_ActivatedForPortablePrompt;
 
         DispatcherQueue.TryEnqueue(UpdateTitleBarInsets);
+
+        if (Content is UIElement root)
+        {
+            root.PointerMoved += (_, _) => OnUserActivity();
+            root.KeyDown += (_, _) => OnUserActivity();
+        }
+    }
+
+    private void OnUserActivity()
+    {
+        if (_vm.IsUnlocked)
+            _vm.ResetAutoLock();
     }
 
     private bool _portablePromptShown;
@@ -168,6 +181,8 @@ public sealed partial class MainWindow : Window
     private void NavView_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
         if (_suppressNav) return;
+        if (_vm.IsUnlocked)
+            _vm.ResetAutoLock();
         if (args.SelectedItem is not NavigationViewItem item) return;
 
         try

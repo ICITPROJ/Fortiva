@@ -65,9 +65,8 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
         ErrorBar.IsOpen = false;
         PasswordField.Password = "";
         _helloCheckComplete = false;
-        PasswordField.IsEnabled = false;
-        UnlockBtn.IsEnabled = false;
         HelloBtn.IsEnabled = false;
+        EnablePasswordWhileHelloProbes();
         RefreshBrandLogo();
         _ = CheckHelloAsync();
     }
@@ -133,6 +132,14 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
         PasswordField.IsEnabled = !helloBlocksPassword;
         UnlockBtn.IsEnabled = !helloBlocksPassword;
         HelloBtn.IsEnabled = true;
+    }
+
+    private void EnablePasswordWhileHelloProbes()
+    {
+        if (HelloMandatory && _helloProtector.IsConfigured)
+            return;
+        PasswordField.IsEnabled = true;
+        UnlockBtn.IsEnabled = true;
     }
 
     private async void UnlockBtn_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)

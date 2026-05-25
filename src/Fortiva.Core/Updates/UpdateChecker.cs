@@ -24,11 +24,6 @@ public enum UpdateStatus
 
 public sealed class UpdateChecker
 {
-    private static readonly HttpClient Http = new()
-    {
-        Timeout = TimeSpan.FromSeconds(30)
-    };
-
     private readonly ReleaseManifestLoader _loader = new();
 
     public async Task<UpdateCheckResult> CheckAsync(
@@ -81,7 +76,7 @@ public sealed class UpdateChecker
         Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
         UpdateUrlPolicy.ValidateInstallerUrl(manifest.InstallerUrl);
 
-        using var response = await Http.GetAsync(
+        using var response = await SecureUpdateHttp.GetInstallerResponseAsync(
             manifest.InstallerUrl,
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken).ConfigureAwait(false);

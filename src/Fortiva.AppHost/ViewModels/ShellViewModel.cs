@@ -27,6 +27,7 @@ public sealed class ShellViewModel : ViewModelBase
     private VaultSession? _session;
     private string _statusMessage = "Welcome to Fortiva";
     private bool _isBusy;
+    private bool _deferAutoLock;
     private bool _vaultExists;
     private bool _isLocking;
     private Action<Action>? _uiInvoker;
@@ -60,7 +61,20 @@ public sealed class ShellViewModel : ViewModelBase
 
     // ── Observable properties ────────────────────────────────────────────────
     public string StatusMessage { get => _statusMessage; set => Set(ref _statusMessage, value); }
-    public bool IsBusy { get => _isBusy; private set => Set(ref _isBusy, value); }
+    public bool IsBusy
+    {
+        get => _isBusy;
+        private set
+        {
+            if (!Set(ref _isBusy, value))
+                return;
+            if (!value && _deferAutoLock)
+            {
+                _deferAutoLock = false;
+                LockCore();
+            }
+        }
+    }
     public bool IsUnlocked => _session?.IsUnlocked ?? false;
     public bool IsReadOnly => _session?.IsReadOnly ?? false;
     public bool PendingRollbackConfirm { get; set; }
@@ -310,8 +324,11 @@ public sealed class ShellViewModel : ViewModelBase
                 OnPropertyChanged(nameof(IsUnlocked));
                 OnPropertyChanged(nameof(IsReadOnly));
                 rollbackWarning = _session!.RollbackWarning;
-                UnlockOccurred?.Invoke();
-                CompleteBridgeUnlockIfPending(true);
+                var stayOnUnlock = IsReadOnly && !string.IsNullOrEmpty(rollbackWarning) && !confirmRollback;
+                PendingRollbackConfirm = stayOnUnlock;
+                if (!stayOnUnlock)
+                    UnlockOccurred?.Invoke();
+                CompleteBridgeUnlockIfPending(!stayOnUnlock);
             });
             return (true, rollbackWarning);
         }
@@ -357,8 +374,11 @@ public sealed class ShellViewModel : ViewModelBase
                 OnPropertyChanged(nameof(IsUnlocked));
                 OnPropertyChanged(nameof(IsReadOnly));
                 rollbackWarning = _session!.RollbackWarning;
-                UnlockOccurred?.Invoke();
-                CompleteBridgeUnlockIfPending(true);
+                var stayOnUnlock = IsReadOnly && !string.IsNullOrEmpty(rollbackWarning) && !confirmRollback;
+                PendingRollbackConfirm = stayOnUnlock;
+                if (!stayOnUnlock)
+                    UnlockOccurred?.Invoke();
+                CompleteBridgeUnlockIfPending(!stayOnUnlock);
             });
             return (true, rollbackWarning);
         }
@@ -811,18 +831,34 @@ public sealed class ShellViewModel : ViewModelBase
     private void EnsureSession()
     {
         if (_session is not null) return;
+
+        if (IsEnterprise)
+        {
+            var rollbackDir = FortivaPaths.GetRollbackStateDirectory(VaultDirectory, enterprise: true);
+            DpapiLocalStateStore.MigrateEnterpriseRollbackState(VaultDirectory, rollbackDir);
+        }
+
         _session = new VaultSession(
             VaultDirectory,
-            IsEnterprise ? DpapiScope.LocalMachine : DpapiScope.CurrentUser,
+            DpapiScope.CurrentUser,
             Policy,
             enableAudit: true,
             auditDirectory: IsEnterprise ? null : FortivaPaths.PersonalAuditDirectory,
             requireEnterpriseLicense: IsEnterprise && !IsAdmin,
-            enterpriseClient: Edition == "Enterprise");
+            enterpriseClient: Edition == "Enterprise",
+            rollbackStateDirectory: FortivaPaths.GetRollbackStateDirectory(VaultDirectory, IsEnterprise));
+        ApplyPersonalAutoLockTimeout();
         _session.AutoLockRequested += () =>
         {
-            if (IsBusy) return;
-            RunOnUi(LockCore);
+            RunOnUi(() =>
+            {
+                if (IsBusy)
+                {
+                    _deferAutoLock = true;
+                    return;
+                }
+                LockCore();
+            });
         };
     }
 

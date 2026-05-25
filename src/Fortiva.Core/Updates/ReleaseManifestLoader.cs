@@ -18,7 +18,7 @@ public sealed class ReleaseManifestLoader
         try
         {
             UpdateUrlPolicy.ValidateManifestUrl(url);
-            var json = await Http.GetStringAsync(url, cancellationToken).ConfigureAwait(false);
+            var json = await SecureUpdateHttp.GetStringAsync(url, cancellationToken).ConfigureAwait(false);
             return (Deserialize(json), FromNetwork: true);
         }
         catch
@@ -45,9 +45,4 @@ public sealed class ReleaseManifestLoader
 
     private static ReleaseManifest? Deserialize(string json)
         => JsonSerializer.Deserialize<ReleaseManifest>(json, JsonOptions);
-
-    private static readonly HttpClient Http = new()
-    {
-        Timeout = TimeSpan.FromSeconds(30)
-    };
 }

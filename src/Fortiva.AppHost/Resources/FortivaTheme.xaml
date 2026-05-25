@@ -200,6 +200,25 @@
             <SolidColorBrush x:Key="NavigationViewExpandedPaneBackground" Color="#77101820"/>
             <SolidColorBrush x:Key="NavigationViewDefaultPaneBackground" Color="#77101820"/>
             <SolidColorBrush x:Key="NavigationViewTopPaneBackground" Color="#77101820"/>
+
+            <SolidColorBrush x:Key="ContentDialogBackground" Color="#161B22"/>
+            <SolidColorBrush x:Key="ContentDialogForeground" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ContentDialogBorderBrush" Color="#6640BCF4"/>
+            <SolidColorBrush x:Key="ContentDialogTopOverlay" Color="#00000000"/>
+            <SolidColorBrush x:Key="ContentDialogSeparator" Color="#6640BCF4"/>
+
+            <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#5CC8F6"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOff" Color="#2A3440"/>
+            <SolidColorBrush x:Key="ToggleSwitchFillOffPointerOver" Color="#354050"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#0A0C10"/>
+            <SolidColorBrush x:Key="ToggleSwitchKnobFillOff" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOn" Color="#40BCF4"/>
+            <SolidColorBrush x:Key="ToggleSwitchStrokeOff" Color="#4A5564"/>
+
+            <SolidColorBrush x:Key="SliderTrackFill" Color="#2A3440"/>
+            <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#354050"/>
+            <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#404C5C"/>
+            <SolidColorBrush x:Key="SliderThumbFill" Color="#40BCF4"/>
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 

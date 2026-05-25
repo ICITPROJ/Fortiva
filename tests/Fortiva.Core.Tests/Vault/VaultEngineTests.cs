@@ -85,6 +85,29 @@ public class VaultEngineTests : IDisposable
     }
 
     [Fact]
+    public void RollbackDetection_ConfirmStillReadOnlyInParanoiaOnSecurityDowngrade()
+    {
+        var engine = new VaultEngine(_dir, DpapiScope.CurrentUser);
+        engine.CreateVault("password-rollback-test!", SecurityLevel.Paranoia);
+        var ctx = engine.Unlock("password-rollback-test!");
+        ctx.Header.SecurityLevel = SecurityLevel.Standard;
+        ctx.Header.SecurityLevelCounter = 0;
+        engine.Save(ctx);
+        ctx.Keys.Dispose();
+
+        var ctx2 = engine.Unlock("password-rollback-test!", paranoiaMode: true, confirmRollback: true);
+        try
+        {
+            Assert.True(ctx2.ReadOnly);
+            Assert.NotNull(ctx2.RollbackWarning);
+        }
+        finally
+        {
+            ctx2.Keys.Dispose();
+        }
+    }
+
+    [Fact]
     public void CreateVault_ThrowsWhenVaultAlreadyExists()
     {
         var engine = new VaultEngine(_dir, DpapiScope.CurrentUser);

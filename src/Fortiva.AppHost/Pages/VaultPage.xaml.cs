@@ -14,6 +14,8 @@ public sealed partial class VaultPage : Page
 
     private Action? _stateChangedHandler;
     private Action? _vaultLocationHandler;
+    private string _selectedCategoryKey = VaultCategoryFilter.AllKey;
+    private bool _categoryListInitialized;
 
     public VaultPage()
     {
@@ -25,7 +27,11 @@ public sealed partial class VaultPage : Page
     {
         base.OnNavigatedTo(e);
         _clipboard.RefreshPolicy(_vm.Policy, _vm.PersonalSettings.ClipboardClearSeconds);
-        _stateChangedHandler = () => DispatcherQueue.TryEnqueue(() => RefreshList());
+        _stateChangedHandler = () => DispatcherQueue.TryEnqueue(() =>
+        {
+            RefreshCategories();
+            RefreshList();
+        });
         _vm.StateChanged += _stateChangedHandler;
         _vaultLocationHandler = () => DispatcherQueue.TryEnqueue(() => RefreshList());
         _vm.VaultLocationChanged += _vaultLocationHandler;
@@ -33,6 +39,7 @@ public sealed partial class VaultPage : Page
         if (_vm.IsReadOnly && !string.IsNullOrEmpty(_vm.Session?.RollbackWarning))
             ReadOnlyBar.Message = _vm.Session.RollbackWarning +
                 " You can view entries but not edit. Use Enable editing below to confirm and unlock write access.";
+        RefreshCategories();
         RefreshList();
     }
 
@@ -72,8 +79,10 @@ public sealed partial class VaultPage : Page
     private void RefreshList()
     {
         var q = SearchBox.Text?.Trim();
-        var all = string.IsNullOrEmpty(q) ? _vm.Entries : _vm.Search(q);
-        var list = all
+        IEnumerable<VaultEntryViewModel> source = string.IsNullOrEmpty(q) ? _vm.Entries : _vm.Search(q);
+        source = VaultCategoryFilter.Apply(source, _selectedCategoryKey);
+
+        var list = source
             .OrderByDescending(e => e.IsFavorite)
             .ThenBy(e => e.Title, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -93,12 +102,59 @@ public sealed partial class VaultPage : Page
         StatVaultTrust.Text = _vm.VaultTrustChipText;
 
         var showing = list.Count;
+        var categoryLabel = GetSelectedCategoryLabel();
         CountText.Text = string.IsNullOrEmpty(q)
-            ? (total == 0 ? "No entries saved yet" : $"Showing all {showing} entries")
-            : $"Showing {showing} of {total} entries matching “{q}”";
+            ? (total == 0
+                ? "No entries saved yet"
+                : $"Showing {showing} entries in {categoryLabel}")
+            : $"Showing {showing} of {total} entries in {categoryLabel} matching “{q}”";
 
-        EmptyState.Visibility = list.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        EntryGrid.Visibility = list.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        var vaultEmpty = total == 0;
+        var categoryEmpty = !vaultEmpty && showing == 0;
+
+        EmptyState.Visibility = vaultEmpty ? Visibility.Visible : Visibility.Collapsed;
+        EmptyCategoryState.Visibility = categoryEmpty ? Visibility.Visible : Visibility.Collapsed;
+        EntryGrid.Visibility = showing > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RefreshCategories()
+    {
+        var categories = VaultCategoryFilter.BuildCategories(_vm.Entries);
+        CategoryList.SelectionChanged -= CategoryList_SelectionChanged;
+        CategoryList.ItemsSource = categories;
+
+        var selectedIndex = categories.ToList().FindIndex(c => c.Key == _selectedCategoryKey);
+        if (selectedIndex < 0)
+        {
+            _selectedCategoryKey = VaultCategoryFilter.AllKey;
+            selectedIndex = 0;
+        }
+
+        if (categories.Count > 0)
+            CategoryList.SelectedIndex = selectedIndex;
+
+        CategoryList.SelectionChanged += CategoryList_SelectionChanged;
+        _categoryListInitialized = true;
+    }
+
+    private void CategoryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_categoryListInitialized)
+            return;
+        if (CategoryList.SelectedItem is not VaultCategoryItem item)
+            return;
+        if (item.Key == _selectedCategoryKey)
+            return;
+
+        _selectedCategoryKey = item.Key;
+        RefreshList();
+    }
+
+    private string GetSelectedCategoryLabel()
+    {
+        if (CategoryList.SelectedItem is VaultCategoryItem item)
+            return item.Label.ToLowerInvariant();
+        return "all entries";
     }
 
     private void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)

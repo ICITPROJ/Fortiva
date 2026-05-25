@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
+using Fortiva.Core.Platform;
 
 namespace Fortiva.Core.BrowserBridge;
 
@@ -61,6 +62,9 @@ public static class BridgeClientValidator
 
             if (fileName.Equals("Fortiva.BrowserBridge.Host.exe", StringComparison.OrdinalIgnoreCase))
             {
+                if (!AuthenticodeVerifier.IsSigned(fullPath))
+                    return false;
+
                 var bridgeDir = Path.Combine(root, "BrowserBridge");
                 if (IsUnderDirectory(fullPath, bridgeDir) || IsUnderDirectory(fullPath, root))
                     return true;

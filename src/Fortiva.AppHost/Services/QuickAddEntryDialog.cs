@@ -3,6 +3,7 @@ using Fortiva.Core.Password;
 using Fortiva.Core.Vault;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace Fortiva.AppHost.Services;
 
@@ -24,21 +25,19 @@ public static class QuickAddEntryDialog
 
     public static async Task<Outcome> ShowAsync(XamlRoot xamlRoot, ShellViewModel vm)
     {
+        var theme = FortivaControlTheme.ResolveAppTheme();
+
         var titleBox = new TextBox { PlaceholderText = "e.g. GitHub, Work email…" };
         var usernameBox = new TextBox { PlaceholderText = "username or email (optional)" };
         var urlBox = new TextBox { PlaceholderText = "https://example.com (optional)" };
-        FortivaControlTheme.ApplyTextBox(titleBox);
-        FortivaControlTheme.ApplyTextBox(usernameBox);
-        FortivaControlTheme.ApplyTextBox(urlBox);
 
         var password = vm.GeneratePassword(PasswordGeneratorOptions.Default);
-        var passwordBox = new PasswordBox
+        var passwordBox = new TextBox
         {
-            Password = password,
-            IsEnabled = false,
-            PasswordRevealMode = PasswordRevealMode.Visible
+            Text = password,
+            IsReadOnly = true,
+            FontFamily = new FontFamily("Consolas")
         };
-        FortivaControlTheme.ApplyPasswordBox(passwordBox);
 
         var regenerateBtn = new Button
         {
@@ -56,26 +55,30 @@ public static class QuickAddEntryDialog
         regenerateBtn.Click += (_, _) =>
         {
             password = vm.GeneratePassword(PasswordGeneratorOptions.Default);
-            passwordBox.Password = password;
+            passwordBox.Text = password;
         };
 
         var intro = new TextBlock
         {
             Text = "Add a login quickly — expand with More options if you need tags, notes, or TOTP.",
             TextWrapping = TextWrapping.WrapWholeWords,
-            FontSize = 12
+            FontSize = 13
         };
-        FortivaControlTheme.ApplyMutedText(intro);
 
-        var form = new StackPanel { Spacing = 12 };
+        var titleLabel = CreateLabel("Title");
+        var usernameLabel = CreateLabel("Username / email");
+        var urlLabel = CreateLabel("URL");
+        var passwordLabel = CreateLabel("Password (auto-generated)");
+
+        var form = new StackPanel { Spacing = 12, MinWidth = 420 };
         form.Children.Add(intro);
-        form.Children.Add(CreateLabel("Title"));
+        form.Children.Add(titleLabel);
         form.Children.Add(titleBox);
-        form.Children.Add(CreateLabel("Username / email"));
+        form.Children.Add(usernameLabel);
         form.Children.Add(usernameBox);
-        form.Children.Add(CreateLabel("URL"));
+        form.Children.Add(urlLabel);
         form.Children.Add(urlBox);
-        form.Children.Add(CreateLabel("Password (auto-generated)"));
+        form.Children.Add(passwordLabel);
 
         var passwordRow = new Grid { ColumnSpacing = 8 };
         passwordRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -86,7 +89,6 @@ public static class QuickAddEntryDialog
         passwordRow.Children.Add(regenerateBtn);
         form.Children.Add(passwordRow);
 
-        var theme = FortivaControlTheme.ResolveEffectiveTheme(xamlRoot);
         var shell = FortivaDialogs.WrapDialogContent(form, theme);
 
         var dlg = new ContentDialog
@@ -101,11 +103,20 @@ public static class QuickAddEntryDialog
 
         void RefreshTheme()
         {
-            FortivaControlTheme.ApplyTextBox(titleBox);
-            FortivaControlTheme.ApplyTextBox(usernameBox);
-            FortivaControlTheme.ApplyTextBox(urlBox);
-            FortivaControlTheme.ApplyPasswordBox(passwordBox);
-            FortivaControlTheme.ApplyMutedText(intro);
+            var currentTheme = FortivaControlTheme.ResolveAppTheme();
+            FortivaThemeResources.MergeOnto(form, currentTheme);
+            form.RequestedTheme = currentTheme;
+            FortivaDialogs.ApplyThemeToTree(form, currentTheme);
+            FortivaControlTheme.ApplyBodyText(intro, form);
+            FortivaControlTheme.ApplyTextBox(titleBox, form);
+            FortivaControlTheme.ApplyTextBox(usernameBox, form);
+            FortivaControlTheme.ApplyTextBox(urlBox, form);
+            FortivaControlTheme.ApplyReadOnlyPasswordTextBox(passwordBox, form);
+            FortivaControlTheme.ApplySecondaryButton(regenerateBtn, form);
+            FortivaControlTheme.ApplySectionLabel(titleLabel, context: form);
+            FortivaControlTheme.ApplySectionLabel(usernameLabel, context: form);
+            FortivaControlTheme.ApplySectionLabel(urlLabel, context: form);
+            FortivaControlTheme.ApplySectionLabel(passwordLabel, context: form);
         }
 
         FortivaDialogs.Configure(dlg, xamlRoot, onOpened: RefreshTheme);
@@ -131,7 +142,7 @@ public static class QuickAddEntryDialog
                             Title = titleBox.Text.Trim(),
                             Username = usernameBox.Text.Trim(),
                             Url = urlBox.Text.Trim(),
-                            Password = passwordBox.Password
+                            Password = passwordBox.Text
                         }
                     };
                 }
@@ -155,7 +166,7 @@ public static class QuickAddEntryDialog
                     {
                         Title = titleBox.Text.Trim(),
                         Username = usernameBox.Text.Trim(),
-                        Password = passwordBox.Password,
+                        Password = passwordBox.Text,
                         Url = urlBox.Text.Trim()
                     });
                     return new Outcome { Result = QuickAddResult.Saved };
@@ -180,13 +191,10 @@ public static class QuickAddEntryDialog
     }
 
     private static TextBlock CreateLabel(string text)
-    {
-        var label = new TextBlock
+        => new()
         {
             Text = text,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            FontSize = 13
         };
-        FortivaControlTheme.ApplySectionLabel(label);
-        return label;
-    }
 }

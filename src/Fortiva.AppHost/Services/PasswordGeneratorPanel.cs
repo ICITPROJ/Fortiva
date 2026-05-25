@@ -38,6 +38,9 @@ public sealed class PasswordGeneratorPanel
     private readonly TextBlock _strengthLabel;
     private readonly TextBlock _errorLabel;
     private readonly Border _previewBorder;
+    private readonly Grid _ambiguousRow = null!;
+    private readonly Grid _requireEachRow = null!;
+    private readonly Border _optionsShell;
     private readonly TextBlock? _introText;
     private readonly TextBlock _previewLabel;
     private readonly IReadOnlyList<TextBlock> _sectionLabels;
@@ -132,8 +135,8 @@ public sealed class PasswordGeneratorPanel
         };
         FortivaControlTheme.ApplyTextBox(_customCharsetBox);
 
-        _ambiguousToggle = CreateOptionToggle("Exclude ambiguous (0/O, 1/l/I)", _options.ExcludeAmbiguous);
-        _requireEachToggle = CreateOptionToggle("Require at least one of each selected type", _options.RequireFromEachGroup);
+        _ambiguousToggle = CreateCharToggle(_options.ExcludeAmbiguous);
+        _requireEachToggle = CreateCharToggle(_options.RequireFromEachGroup);
 
         _previewLabel = CreateSectionLabel("Preview (select text to copy)");
         _preview = new TextBlock
@@ -184,8 +187,8 @@ public sealed class PasswordGeneratorPanel
             _customCharsetLabel.Visibility = isCustom ? Visibility.Visible : Visibility.Collapsed;
             _customCharsetBox.Visibility = isCustom ? Visibility.Visible : Visibility.Collapsed;
 
-            _ambiguousToggle.Visibility = isPassphrase || isCustom ? Visibility.Collapsed : Visibility.Visible;
-            _requireEachToggle.Visibility = isPassphrase || isPin || isCustom ? Visibility.Collapsed : Visibility.Visible;
+            _ambiguousRow.Visibility = isPassphrase || isCustom ? Visibility.Collapsed : Visibility.Visible;
+            _requireEachRow.Visibility = isPassphrase || isPin || isCustom ? Visibility.Collapsed : Visibility.Visible;
 
             if (isPin)
             {
@@ -286,8 +289,10 @@ public sealed class PasswordGeneratorPanel
         leftOptions.Children.Add(_wordCountSlider);
         leftOptions.Children.Add(_separatorLabel);
         leftOptions.Children.Add(_separatorBox);
-        leftOptions.Children.Add(_ambiguousToggle);
-        leftOptions.Children.Add(_requireEachToggle);
+        _ambiguousRow = CreateCharToggleRow("Exclude ambiguous (0/O, 1/l/I)", _ambiguousToggle);
+        _requireEachRow = CreateCharToggleRow("Require at least one of each selected type", _requireEachToggle);
+        leftOptions.Children.Add(_ambiguousRow);
+        leftOptions.Children.Add(_requireEachRow);
 
         var rightOptions = new StackPanel { Spacing = 10 };
         rightOptions.Children.Add(_charSetsHeader);
@@ -304,6 +309,14 @@ public sealed class PasswordGeneratorPanel
         Grid.SetColumn(rightOptions, 1);
         optionsGrid.Children.Add(leftOptions);
         optionsGrid.Children.Add(rightOptions);
+
+        _optionsShell = new Border
+        {
+            CornerRadius = new CornerRadius(12),
+            Padding = new Thickness(16),
+            BorderThickness = new Thickness(1),
+            Child = optionsGrid
+        };
 
         Root = new StackPanel
         {
@@ -327,9 +340,8 @@ public sealed class PasswordGeneratorPanel
         Root.Children.Add(_previewBorder);
         Root.Children.Add(_strengthLabel);
         Root.Children.Add(_errorLabel);
-        Root.Children.Add(optionsGrid);
+        Root.Children.Add(_optionsShell);
 
-        Root.ActualThemeChanged += (_, _) => ApplyThemeResources();
         _vm.ThemeChanged += ApplyThemeResources;
 
         ApplyPresetUi();
@@ -343,9 +355,13 @@ public sealed class PasswordGeneratorPanel
 
     public void ApplyThemeResources()
     {
-        var theme = FortivaControlTheme.ResolveEffectiveTheme(Root.XamlRoot, Root);
+        var theme = FortivaControlTheme.ResolveAppTheme();
         Root.RequestedTheme = theme;
         FortivaThemeResources.MergeOnto(Root, theme);
+
+        _optionsShell.RequestedTheme = theme;
+        _optionsShell.Background = FortivaControlTheme.GetBrush("FortivaSurfaceSubtleBrush", theme, Root);
+        _optionsShell.BorderBrush = FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", theme, Root);
 
         FortivaControlTheme.ApplyPreviewSurface(_previewBorder, _preview, Root);
         FortivaControlTheme.ApplyComboBox(_presetBox, Root);
@@ -397,14 +413,6 @@ public sealed class PasswordGeneratorPanel
         _charToggles.Add(toggle);
         return toggle;
     }
-
-    private static ToggleSwitch CreateOptionToggle(string label, bool isOn)
-        => new()
-        {
-            Header = label,
-            IsOn = isOn,
-            HorizontalAlignment = HorizontalAlignment.Stretch
-        };
 
     private Grid CreateCharToggleRow(string label, ToggleSwitch toggle)
     {

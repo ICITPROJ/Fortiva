@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
 using Fortiva.AppHost.ViewModels;
 using Fortiva.Core.Platform;
 using Fortiva.Core.Updates;
@@ -35,7 +36,7 @@ public sealed class UpdateService
         try
         {
             var result = await CheckAsync().ConfigureAwait(false);
-            if (result.Status == UpdateStatus.UpdateAvailable && result.Manifest is not null)
+            if (result.Status == UpdateStatus.UpdateAvailable && result.Manifest is not null && !_vm.IsUnlocked)
                 await ApplyAsync(result.Manifest, silent: true).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -85,11 +86,15 @@ public sealed class UpdateService
 
     public async Task<bool> ApplyAsync(ReleaseManifest manifest, bool silent = false)
     {
+        if (_vm.IsUnlocked)
+            throw new InvalidOperationException("Lock the vault before installing an update.");
+
         try
         {
+            var nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
             var dest = Path.Combine(
                 Path.GetTempPath(),
-                $"FortivaPersonal-{manifest.Version}-Setup.exe");
+                $"FortivaPersonal-{manifest.Version}-{nonce}-Setup.exe");
 
             await _checker.DownloadVerifiedAsync(manifest, dest).ConfigureAwait(false);
 

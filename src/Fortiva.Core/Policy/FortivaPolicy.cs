@@ -97,7 +97,7 @@ public static class PolicyEnforcer
         return policy.ClipboardClearSeconds;
     }
 
-    /// <summary>TOTP authenticator codes — enabled for Enterprise by default, off for Personal.</summary>
+    /// <summary>TOTP authenticator codes — Enterprise only; IT can disable via policy.</summary>
     public static bool CanUseTotp(bool isEnterpriseClient, FortivaPolicy? policy)
     {
         if (policy?.TotpEnabled == false)
