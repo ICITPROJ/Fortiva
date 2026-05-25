@@ -154,7 +154,7 @@ Type: filesandordirs; Name: "{localappdata}\Fortiva"
 
 
 [UninstallRun]
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Remove-Item -LiteralPath ($env:APPDATA+'\Fortiva\Personal'),($env:APPDATA+'\Fortiva'),($env:LOCALAPPDATA+'\FortivaPersonal'),($env:LOCALAPPDATA+'\Fortiva') -Recurse -Force -ErrorAction SilentlyContinue; Get-ChildItem -LiteralPath $env:TEMP -Filter 'FortivaPersonal-*-Setup.exe' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue; $parent=Join-Path $env:LOCALAPPDATA 'Programs\icmclab studio'; if ((Test-Path -LiteralPath $parent) -and -not (Get-ChildItem -LiteralPath $parent -ErrorAction SilentlyContinue)) { Remove-Item -LiteralPath $parent -Force -ErrorAction SilentlyContinue }"""; Flags: runascurrentuser waituntilterminated; RunOnceId: "FortivaPersonalUserDataCleanup"
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Remove-Item -LiteralPath ($env:APPDATA+'\Fortiva\Personal'),($env:APPDATA+'\Fortiva'),($env:LOCALAPPDATA+'\FortivaPersonal'),($env:LOCALAPPDATA+'\Fortiva') -Recurse -Force -ErrorAction SilentlyContinue; Get-ChildItem -LiteralPath $env:TEMP -Filter 'FortivaPersonal-*-Setup.exe' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue; $parent=Join-Path $env:LOCALAPPDATA 'Programs\icmclab studio'; if ((Test-Path -LiteralPath $parent) -and -not (Get-ChildItem -LiteralPath $parent -ErrorAction SilentlyContinue)) {{ Remove-Item -LiteralPath $parent -Force -ErrorAction SilentlyContinue }}"""; Flags: runascurrentuser waituntilterminated; RunOnceId: "FortivaPersonalUserDataCleanup"
 
 [Code]
 #include "FortivaPrerequisitesCode.iss"
