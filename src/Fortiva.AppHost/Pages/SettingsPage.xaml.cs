@@ -50,15 +50,21 @@ public sealed partial class SettingsPage : Page
     {
         var policy = _vm.Policy;
 
-        _autoLockSeconds = policy?.MaxAutoLockSeconds ?? _vm.PersonalSettings.AutoLockSeconds;
-        _clipboardSeconds = policy?.ClipboardClearSeconds ?? _vm.PersonalSettings.ClipboardClearSeconds;
+        _autoLockSeconds = Math.Clamp(
+            policy?.MaxAutoLockSeconds ?? _vm.PersonalSettings.AutoLockSeconds,
+            PersonalUserSettings.MinAutoLockSeconds,
+            PersonalUserSettings.MaxAutoLockSeconds);
+        _clipboardSeconds = Math.Clamp(
+            policy?.ClipboardClearSeconds ?? _vm.PersonalSettings.ClipboardClearSeconds,
+            PersonalUserSettings.MinClipboardClearSeconds,
+            PersonalUserSettings.MaxClipboardClearSeconds);
 
         // Temporarily detach events to avoid spurious updates while setting Values
         AutoLockSlider.ValueChanged -= AutoLock_Changed;
         ClipboardSlider.ValueChanged -= Clipboard_Changed;
 
-        AutoLockSlider.Value = Math.Clamp(_autoLockSeconds, 30, 900);
-        ClipboardSlider.Value = Math.Clamp(_clipboardSeconds, 5, 120);
+        AutoLockSlider.Value = _autoLockSeconds;
+        ClipboardSlider.Value = _clipboardSeconds;
 
         AutoLockSlider.ValueChanged += AutoLock_Changed;
         ClipboardSlider.ValueChanged += Clipboard_Changed;

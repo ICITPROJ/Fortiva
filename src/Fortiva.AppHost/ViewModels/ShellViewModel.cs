@@ -435,8 +435,10 @@ public sealed class ShellViewModel : ViewModelBase
     private void ApplyPersonalAutoLockTimeout()
     {
         var seconds = IsEnterprise
-            ? (Policy?.MaxAutoLockSeconds ?? 300)
+            ? (Policy?.MaxAutoLockSeconds ?? PersonalUserSettings.DefaultAutoLockSeconds)
             : _personalSettings.AutoLockSeconds;
+        if (!IsEnterprise)
+            seconds = Math.Clamp(seconds, PersonalUserSettings.MinAutoLockSeconds, PersonalUserSettings.MaxAutoLockSeconds);
         if (Policy is not null)
             seconds = PolicyEnforcer.EnforceAutoLock(seconds, Policy);
         _session?.SetAutoLockTimeout(seconds);

@@ -331,6 +331,14 @@ end;
 
 
 
+function IsFortivaUpgradeInstall: Boolean;
+begin
+  Result := RegKeyExists(HKEY_CURRENT_USER,
+    'Software\Microsoft\Windows\CurrentVersion\Uninstall\{B1C7E2A3-4D5F-4A6B-8C9D-0E1F2A3B4C5D}_is1');
+end;
+
+
+
 function InitializeSetup(): Boolean;
 var
   VaultFile: String;
@@ -341,7 +349,8 @@ begin
     Exit;
   end;
 
-  if PersonalVaultExists() then
+  { Fresh reinstall only — upgrades and silent in-app updates must keep user.prefs.json and vault data. }
+  if (not IsFortivaUpgradeInstall()) and (not WizardSilent) and PersonalVaultExists() then
 
   begin
 

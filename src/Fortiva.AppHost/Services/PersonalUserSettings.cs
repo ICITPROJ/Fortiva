@@ -6,9 +6,16 @@ namespace Fortiva.AppHost.Services;
 /// <summary>Persisted personal-edition preferences (non-secret). Stored beside vault metadata.</summary>
 public sealed class PersonalUserSettings
 {
+    public const int DefaultAutoLockSeconds = 300;
+    public const int DefaultClipboardClearSeconds = 30;
+    public const int MinAutoLockSeconds = 30;
+    public const int MaxAutoLockSeconds = 900;
+    public const int MinClipboardClearSeconds = 5;
+    public const int MaxClipboardClearSeconds = 120;
+
     public bool ParanoiaMode { get; set; }
-    public int AutoLockSeconds { get; set; } = 300;
-    public int ClipboardClearSeconds { get; set; } = 30;
+    public int AutoLockSeconds { get; set; } = DefaultAutoLockSeconds;
+    public int ClipboardClearSeconds { get; set; } = DefaultClipboardClearSeconds;
     /// <summary>Check icmclab release feed and apply verified updates (Personal only).</summary>
     public bool AutoUpdateEnabled { get; set; } = true;
     public DateTimeOffset? LastUpdateCheckUtc { get; set; }
@@ -20,18 +27,58 @@ public sealed class PersonalUserSettings
     private static string SettingsPath =>
         Path.Combine(FortivaPaths.PersonalDataRoot, "user.prefs.json");
 
+    private static string LegacySettingsPath =>
+        Path.Combine(FortivaPaths.PersonalLegacyDataRoot, "user.prefs.json");
+
     public static PersonalUserSettings Load()
     {
+        PersonalUserSettings? settings = null;
+        var loadedFromLegacy = false;
+
         try
         {
-            if (!File.Exists(SettingsPath)) return new PersonalUserSettings();
-            var json = File.ReadAllText(SettingsPath);
-            return JsonSerializer.Deserialize<PersonalUserSettings>(json) ?? new PersonalUserSettings();
+            if (File.Exists(SettingsPath))
+                settings = DeserializeFromFile(SettingsPath);
+            else if (File.Exists(LegacySettingsPath))
+            {
+                settings = DeserializeFromFile(LegacySettingsPath);
+                loadedFromLegacy = settings is not null;
+            }
         }
         catch
         {
-            return new PersonalUserSettings();
+            settings = null;
         }
+
+        settings ??= new PersonalUserSettings();
+
+        var changed = settings.EnsureDefaults();
+        if (loadedFromLegacy || changed)
+        {
+            try { settings.Save(); }
+            catch { /* best effort — in-memory defaults still apply */ }
+        }
+
+        return settings;
+    }
+
+    internal bool EnsureDefaults()
+    {
+        var changed = false;
+
+        if (AutoLockSeconds is < MinAutoLockSeconds or > MaxAutoLockSeconds)
+        {
+            AutoLockSeconds = DefaultAutoLockSeconds;
+            changed = true;
+        }
+
+        if (ClipboardClearSeconds is < MinClipboardClearSeconds or > MaxClipboardClearSeconds)
+        {
+            ClipboardClearSeconds = DefaultClipboardClearSeconds;
+            changed = true;
+        }
+
+        return changed;
     }
 
     public void Save()
@@ -45,5 +92,11 @@ public sealed class PersonalUserSettings
             File.Replace(temp, path, null);
         else
             File.Move(temp, path);
+    }
+
+    private static PersonalUserSettings? DeserializeFromFile(string path)
+    {
+        var json = File.ReadAllText(path);
+        return JsonSerializer.Deserialize<PersonalUserSettings>(json);
     }
 }

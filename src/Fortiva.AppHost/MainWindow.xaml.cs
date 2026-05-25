@@ -25,6 +25,8 @@ public sealed partial class MainWindow : Window
         // Custom title bar (before theme chrome so title-bar colors apply)
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
+        AppTitleBar.SizeChanged += (_, _) => UpdateTitleBarInsets();
+        Activated += (_, _) => UpdateTitleBarInsets();
 
         ThemeService.Apply(this, _vm.ThemePreference);
         ThemeService.ApplySystemBackdrop(this);
@@ -97,6 +99,8 @@ public sealed partial class MainWindow : Window
 
         if (_vm.PortableVaultUnavailable)
             Activated += MainWindow_ActivatedForPortablePrompt;
+
+        DispatcherQueue.TryEnqueue(UpdateTitleBarInsets);
     }
 
     private bool _portablePromptShown;
@@ -423,5 +427,15 @@ public sealed partial class MainWindow : Window
             BrandAssets.ApplyLogo(TitleBarLogo, paranoia);
             BrandAssets.ApplyWindowIcon(AppWindow, paranoia);
         });
+    }
+
+    private void UpdateTitleBarInsets()
+    {
+        if (AppTitleBar.XamlRoot?.RasterizationScale is not double scale || scale <= 0)
+            return;
+
+        var titleBar = AppWindow.TitleBar;
+        LeftPaddingColumn.Width = new GridLength(titleBar.LeftInset / scale);
+        RightPaddingColumn.Width = new GridLength(titleBar.RightInset / scale);
     }
 }
