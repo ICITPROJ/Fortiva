@@ -25,5 +25,13 @@ public class AppVersionTests
 
         var bad = new ReleaseManifest { Version = "1.0.1" };
         Assert.False(bad.IsValid);
+
+        var placeholder = new ReleaseManifest
+        {
+            Version = "1.0.0",
+            InstallerUrl = "https://example.com/setup.exe",
+            InstallerSha256 = new string('0', 64)
+        };
+        Assert.False(placeholder.IsValid);
     }
 }

@@ -76,6 +76,16 @@ jobs:
         run: ./build-installers.ps1 -Version ${{ steps.version.outputs.value }}
         timeout-minutes: 30
 
+      - name: Verify release artifacts
+        shell: pwsh
+        run: |
+          $v = '${{ steps.version.outputs.value }}'
+          $installer = "dist/installers/FortivaPersonal-$v-Setup.exe"
+          if (-not (Test-Path $installer)) { throw "Missing installer: $installer" }
+          $sizeMb = [math]::Round((Get-Item $installer).Length / 1MB, 1)
+          if ($sizeMb -lt 20) { throw "Installer too small ($sizeMb MB): $installer" }
+          Write-Host "Verified $installer ($sizeMb MB)"
+
       - name: Generate update manifest
         shell: pwsh
         env:
@@ -96,7 +106,8 @@ jobs:
           tag_name: v${{ steps.version.outputs.value }}
           name: Fortiva ${{ steps.version.outputs.value }}
           generate_release_notes: true
-          fail_on_unmatched_files: false
+          make_latest: true
+          fail_on_unmatched_files: true
           files: |
             dist/installers/FortivaPersonal-${{ steps.version.outputs.value }}-Setup.exe
             dist/installers/FortivaEnterprise-${{ steps.version.outputs.value }}-Setup.exe

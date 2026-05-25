@@ -4,12 +4,6 @@
 #ifndef AppVersion
   #define AppVersion     "1.0.0"
 #endif
-#ifndef ExtensionId
-  #define ExtensionId "BUILD_EXTENSION_ID_NOT_SET"
-#endif
-#if ExtensionId == "BUILD_EXTENSION_ID_NOT_SET"
-  #error ExtensionId must be set via /DExtensionId=... when compiling the installer
-#endif
 #define AppPublisher   "icmclab studio"
 #define AppURL         "https://studio.icmclab.cloud"
 #define AppExeName     "Fortiva.Enterprise.exe"

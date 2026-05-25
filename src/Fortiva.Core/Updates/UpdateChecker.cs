@@ -46,34 +46,28 @@ public sealed class UpdateChecker
             if (ReleaseManifestUrls.IsLocalManifestPath(resolved))
             {
                 manifest = _loader.TryLoadBundled(resolved);
-                if (manifest is null)
+                if (manifest is null || !manifest.IsValid)
                     return Fail(UpdateMessages.ManifestUnavailable);
-            }
-            else
-            {
-                (manifest, fromNetwork) = await _loader.TryLoadAsync(
-                    manifestUrl,
-                    bundledManifestPath,
-                    cancellationToken).ConfigureAwait(false);
+
+                return ReleaseManifestEvaluator.Evaluate(manifest, currentVersion, fromNetwork: true);
             }
 
-            if (manifest is null || !manifest.IsValid)
-            {
-                manifest = _loader.TryLoadBundled(bundledManifestPath);
-                fromNetwork = false;
-            }
+            (manifest, fromNetwork) = await _loader.TryLoadAsync(
+                manifestUrl,
+                bundledManifestPath,
+                cancellationToken).ConfigureAwait(false);
 
             if (manifest is null || !manifest.IsValid)
+                return Fail(UpdateMessages.ManifestUnavailable);
+
+            // Shipped placeholder manifest must not satisfy update checks when GitHub is unreachable.
+            if (!fromNetwork)
                 return Fail(UpdateMessages.ManifestUnavailable);
 
             return ReleaseManifestEvaluator.Evaluate(manifest, currentVersion, fromNetwork);
         }
         catch (Exception ex)
         {
-            var bundled = _loader.TryLoadBundled(bundledManifestPath);
-            if (bundled is not null && bundled.IsValid)
-                return ReleaseManifestEvaluator.Evaluate(bundled, currentVersion, fromNetwork: false);
-
             return Fail(UpdateMessages.ForCheckFailure(ex));
         }
     }

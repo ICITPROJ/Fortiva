@@ -44,7 +44,15 @@ public sealed class ReleaseManifest
 
         !string.IsNullOrWhiteSpace(InstallerUrl) &&
 
-        InstallerSha256.Length == 64;
+        InstallerSha256.Length == 64 &&
+
+        !IsPlaceholderSha256(InstallerSha256);
+
+
+
+    private static bool IsPlaceholderSha256(string sha)
+
+        => sha.All(static c => c is '0' or 'f' or 'F');
 
 }
 

@@ -4,7 +4,7 @@
 
   "edition": "Personal",
 
-  "version": "1.0.0",
+  "version": "1.0.2",
 
   "releasedAt": "2026-01-01T00:00:00Z",
 
@@ -12,13 +12,13 @@
 
   "maxWindowsBuildTested": 26100,
 
-  "installerUrl": "https://github.com/ICITPROJ/Fortiva/releases/download/v1.0.0/FortivaPersonal-1.0.0-Setup.exe",
+  "installerUrl": "https://github.com/ICITPROJ/Fortiva/releases/download/v1.0.2/FortivaPersonal-1.0.2-Setup.exe",
 
   "installerSha256": "0000000000000000000000000000000000000000000000000000000000000000",
 
   "installerArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS",
 
-  "releaseNotes": "Replace sha256 after running scripts/publish-release-manifest.ps1"
+  "releaseNotes": "Placeholder only — CI publish-release-manifest.ps1 writes the real SHA before upload."
 
 }
 
