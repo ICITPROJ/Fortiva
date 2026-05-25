@@ -29,6 +29,15 @@ function Find-MakePri {
     return $null
 }
 
+function Stop-FortivaDistProcesses {
+    param([string]$ExeName)
+    $procs = @(Get-Process -Name $ExeName -ErrorAction SilentlyContinue)
+    if ($procs.Count -eq 0) { return }
+    Write-Host "  Stopping $($procs.Count) running $ExeName process(es) — dist output is locked while the app runs." -ForegroundColor Yellow
+    $procs | Stop-Process -Force
+    Start-Sleep -Milliseconds 750
+}
+
 $makepri = Find-MakePri
 if (-not $makepri) {
     Write-Host "makepri.exe not in NuGet cache — restoring WinUI project packages..."
@@ -95,6 +104,7 @@ foreach ($app in $apps) {
 
     # ── Step 3: Publish (copies EXE + DLLs + WinUI runtime) ─────────────────
     Write-Host "[3/4] Publish (dotnet)..."
+    Stop-FortivaDistProcesses -ExeName $name
     $publishArgs = @(
         'publish', $proj,
         '-c', 'Release',
@@ -109,10 +119,10 @@ foreach ($app in $apps) {
         Where-Object { $_ -notmatch "^\s*$" } |
         ForEach-Object { Write-Host "  $_" }
     # --no-build skips re-building; just copies artifacts to PublishDir
-
-    # If publish still fails (e.g. GenerateAppResourcesPri), fall through to
-    # the manual PRI step below which is more reliable.
     $publishExitCode = $LASTEXITCODE
+    if ($publishExitCode -ne 0) {
+        throw "Publish failed for $name (close any running $name window and retry, or re-run build-release.ps1)"
+    }
 
     # ── Step 4: Generate resources.pri (clean, reliable) ────────────────────
     Write-Host "[4/4] Generate resources.pri..."
@@ -236,12 +246,39 @@ Write-Host "`n========================================" -ForegroundColor Green
 Write-Host "  Staging browser extension" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 
+function Copy-FilteredExtension {
+    param([string]$SourceDir, [string]$DestDir)
+    if (-not (Test-Path $SourceDir)) { throw "extension/ folder missing" }
+    Remove-Item -Recurse -Force $DestDir -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Force $DestDir | Out-Null
+    Get-ChildItem $SourceDir -File | ForEach-Object {
+        $name = $_.Name
+        if ($name -eq 'content.js') { return }
+        if ($name -like 'com.fortiva.browserbridge*.json') { return }
+        Copy-Item $_.FullName (Join-Path $DestDir $name) -Force
+    }
+    if (-not (Test-Path (Join-Path $DestDir 'manifest.json'))) {
+        throw "extension manifest.json missing after filtered copy"
+    }
+}
+
 $extSrc = Join-Path $root "extension"
 $extOut = Join-Path $root "dist\extension"
-if (-not (Test-Path $extSrc)) { throw "extension/ folder missing" }
-Remove-Item -Recurse -Force $extOut -ErrorAction SilentlyContinue
-Copy-Item $extSrc $extOut -Recurse -Force
-if (-not (Test-Path (Join-Path $extOut "manifest.json"))) {
-    throw "extension manifest.json missing after copy"
-}
+Copy-FilteredExtension -SourceDir $extSrc -DestDir $extOut
 Write-Host "  Done: $extOut" -ForegroundColor Green
+
+Write-Host "`n========================================" -ForegroundColor Green
+Write-Host "  Bundling bridge + extension into apps" -ForegroundColor Green
+Write-Host "========================================" -ForegroundColor Green
+
+$bridgeOut = Join-Path $root "dist\BrowserBridge"
+foreach ($appOut in @("dist\Fortiva.Personal", "dist\Fortiva.Enterprise")) {
+    $target = Join-Path $root $appOut
+    if (-not (Test-Path $target)) { continue }
+    $destBridge = Join-Path $target "BrowserBridge"
+    $destExt = Join-Path $target "extension"
+    Remove-Item -Recurse -Force $destBridge -ErrorAction SilentlyContinue
+    Copy-Item $bridgeOut $destBridge -Recurse -Force
+    Copy-FilteredExtension -SourceDir $extOut -DestDir $destExt
+    Write-Host "  Bundled into $appOut" -ForegroundColor Green
+}

@@ -1,39 +1,77 @@
-using Fortiva.Core.Updates;
-
-namespace Fortiva.Core.Tests.Updates;
-
-public sealed class UpdateUrlPolicyTests
-{
-    [Theory]
-    [InlineData("https://github.com/ICITPROJ/Fortiva/releases/latest/download/latest.personal.json")]
-    [InlineData("https://github.com/ICITPROJ/Fortiva/releases/download/v1.0.1/latest.personal.json")]
-    [InlineData("https://studio.icmclab.cloud/fortiva/releases/latest.personal.json")]
-    public void ValidateManifestUrl_accepts_allowed_urls(string url)
-        => UpdateUrlPolicy.ValidateManifestUrl(url);
-
-    [Theory]
-    [InlineData("https://github.com/evil/other/releases/latest/download/latest.personal.json")]
-    [InlineData("https://github.com/ICITPROJ/az-700-prep/releases/latest/download/latest.personal.json")]
-    [InlineData("https://github.com/ICITPROJ/Fortiva/releases/latest/download/evil.json")]
-    [InlineData("http://github.com/ICITPROJ/Fortiva/releases/latest/download/latest.personal.json")]
-    public void ValidateManifestUrl_rejects_untrusted_urls(string url)
-    {
-        Assert.ThrowsAny<InvalidOperationException>(() => UpdateUrlPolicy.ValidateManifestUrl(url));
-    }
-
-    [Theory]
-    [InlineData("https://github.com/ICITPROJ/Fortiva/releases/download/v1.0.0/FortivaPersonal-1.0.0-Setup.exe")]
-    [InlineData("https://github.com/ICITPROJ/Fortiva/releases/download/v2.1.3/FortivaPersonal-2.1.3-Setup.exe")]
-    [InlineData("https://studio.icmclab.cloud/fortiva/releases/1.0.0/FortivaPersonal-1.0.0-Setup.exe")]
-    public void ValidateInstallerUrl_accepts_allowed_urls(string url)
-        => UpdateUrlPolicy.ValidateInstallerUrl(url);
-
-    [Theory]
-    [InlineData("https://github.com/evil/other/releases/download/v1.0.0/FortivaPersonal-1.0.0-Setup.exe")]
-    [InlineData("https://github.com/ICITPROJ/Fortiva/releases/download/v1.0.0/FortivaEnterprise-1.0.0-Setup.exe")]
-    public void ValidateInstallerUrl_rejects_untrusted_urls(string url)
-    {
-        Assert.ThrowsAny<InvalidOperationException>(() => UpdateUrlPolicy.ValidateInstallerUrl(url));
-    }
-}
-
+using Fortiva.Core.Updates;
+
+
+
+namespace Fortiva.Core.Tests.Updates;
+
+
+
+public sealed class UpdateUrlPolicyTests
+
+{
+
+    [Theory]
+
+    [InlineData("https://github.com/ICITPROJ/Fortiva/releases/latest/download/latest.personal.json")]
+
+    [InlineData("https://github.com/ICITPROJ/Fortiva/releases/download/v1.0.1/latest.personal.json")]
+
+    [InlineData("https://studio.icmclab.cloud/fortiva/releases/latest.personal.json")]
+
+    public void ValidateManifestUrl_accepts_allowed_urls(string url)
+
+        => UpdateUrlPolicy.ValidateManifestUrl(url);
+
+
+
+    [Theory]
+
+    [InlineData("https://github.com/evil/other/releases/latest/download/latest.personal.json")]
+
+    [InlineData("https://github.com/ICITPROJ/az-700-prep/releases/latest/download/latest.personal.json")]
+
+    [InlineData("https://github.com/ICITPROJ/Fortiva/releases/latest/download/evil.json")]
+
+    [InlineData("http://github.com/ICITPROJ/Fortiva/releases/latest/download/latest.personal.json")]
+
+    public void ValidateManifestUrl_rejects_untrusted_urls(string url)
+
+    {
+
+        Assert.ThrowsAny<InvalidOperationException>(() => UpdateUrlPolicy.ValidateManifestUrl(url));
+
+    }
+
+
+
+    [Theory]
+
+    [InlineData("https://github.com/ICITPROJ/Fortiva/releases/download/v1.0.0/FortivaPersonal-1.0.0-Setup.exe")]
+
+    [InlineData("https://github.com/ICITPROJ/Fortiva/releases/download/v2.1.3/FortivaPersonal-2.1.3-Setup.exe")]
+
+    [InlineData("https://studio.icmclab.cloud/fortiva/releases/1.0.0/FortivaPersonal-1.0.0-Setup.exe")]
+
+    public void ValidateInstallerUrl_accepts_allowed_urls(string url)
+
+        => UpdateUrlPolicy.ValidateInstallerUrl(url);
+
+
+
+    [Theory]
+
+    [InlineData("https://github.com/evil/other/releases/download/v1.0.0/FortivaPersonal-1.0.0-Setup.exe")]
+
+    [InlineData("https://github.com/ICITPROJ/Fortiva/releases/download/v1.0.0/FortivaEnterprise-1.0.0-Setup.exe")]
+
+    public void ValidateInstallerUrl_rejects_untrusted_urls(string url)
+
+    {
+
+        Assert.ThrowsAny<InvalidOperationException>(() => UpdateUrlPolicy.ValidateInstallerUrl(url));
+
+    }
+
+}
+
+

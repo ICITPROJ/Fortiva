@@ -18,8 +18,8 @@
                     <StackPanel Spacing="4">
                         <!-- Step 0 - Welcome -->
                         <StackPanel x:Name="Step0" Spacing="18">
-                            <FontIcon Glyph="&#xE8D7;" FontSize="56" HorizontalAlignment="Center"
-                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                            <Image x:Name="BrandLogo" Width="88" Height="88"
+                                   HorizontalAlignment="Center" Stretch="Uniform"/>
                             <TextBlock Text="Welcome to Fortiva" Style="{StaticResource FortivaHeroTitle}"
                                        HorizontalAlignment="Center"/>
                             <TextBlock TextWrapping="WrapWholeWords" TextAlignment="Center" Opacity="0.8" FontSize="14" LineHeight="22">
@@ -73,6 +73,7 @@
                             <StackPanel Spacing="4">
                                 <TextBlock Text="Master password" FontWeight="SemiBold" FontSize="13"/>
                                 <PasswordBox x:Name="NewPasswordBox" PlaceholderText="Create a strong passphrase"
+                                             Style="{StaticResource FortivaPasswordBox}"
                                              PasswordChanged="NewPassword_Changed"/>
                                 <ProgressBar x:Name="StrengthBar" Maximum="4" Value="0" Height="6"/>
                                 <TextBlock x:Name="StrengthLabel" FontSize="11" Opacity="0.7"/>
@@ -80,7 +81,8 @@
                             </StackPanel>
                             <StackPanel Spacing="4">
                                 <TextBlock Text="Confirm master password" FontWeight="SemiBold" FontSize="13"/>
-                                <PasswordBox x:Name="ConfirmPasswordBox" PlaceholderText="Confirm your passphrase"/>
+                                <PasswordBox x:Name="ConfirmPasswordBox" PlaceholderText="Confirm your passphrase"
+                                             Style="{StaticResource FortivaPasswordBox}"/>
                             </StackPanel>
                             <InfoBar x:Name="PasswordErrorBar" IsOpen="False" Severity="Error" IsClosable="True"/>
                             <Grid ColumnSpacing="8">
@@ -152,6 +154,30 @@
                                 </Grid.ColumnDefinitions>
                             </Grid>
                         </StackPanel>
+
+                        <!-- Step 4 - Browser extension (one-time) -->
+                        <StackPanel x:Name="Step4" Visibility="Collapsed" Spacing="16">
+                            <FontIcon Glyph="&#xE774;" FontSize="48" HorizontalAlignment="Center"
+                                      Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                            <TextBlock Text="Connect your browser" FontSize="24" FontWeight="SemiBold"/>
+                            <TextBlock TextWrapping="WrapWholeWords" Opacity="0.8" FontSize="13" LineHeight="20">
+                                Fortiva can fill logins in Edge when you click the toolbar icon. Setup takes about a minute — load the extension once, then use Fill on any login page.
+                            </TextBlock>
+                            <TextBlock x:Name="BrowserExtStatusText" FontSize="12" Opacity="0.75" TextWrapping="WrapWholeWords"/>
+                            <Button x:Name="BrowserExtSetupBtn" Content="Set up browser connection"
+                                    HorizontalAlignment="Stretch"
+                                    Style="{StaticResource FortivaAccentButton}" Click="BrowserExtSetup_Click"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="BrowserExtOpenEdgeBtn" Content="Open Edge extensions" Click="BrowserExtOpenEdge_Click"/>
+                                <Button x:Name="BrowserExtOpenFolderBtn" Content="Open extension folder" Click="BrowserExtOpenFolder_Click"/>
+                            </StackPanel>
+                            <TextBlock TextWrapping="WrapWholeWords" Opacity="0.55" FontSize="11">
+                                In Edge: Developer mode → Load unpacked → choose the folder Fortiva opens for you.
+                            </TextBlock>
+                            <Button x:Name="BrowserExtContinueBtn" Content="Continue to vault"
+                                    HorizontalAlignment="Stretch"
+                                    Style="{StaticResource FortivaAccentButton}" Click="BrowserExtContinue_Click"/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
@@ -165,6 +191,8 @@
                     <Border x:Name="Dot2" Width="10" Height="6" CornerRadius="3"
                             Background="{ThemeResource ControlFillColorDefaultBrush}" Opacity="0.5"/>
                     <Border x:Name="Dot3" Width="10" Height="6" CornerRadius="3"
+                            Background="{ThemeResource ControlFillColorDefaultBrush}" Opacity="0.5"/>
+                    <Border x:Name="Dot4" Width="10" Height="6" CornerRadius="3"
                             Background="{ThemeResource ControlFillColorDefaultBrush}" Opacity="0.5"/>
                 </StackPanel>
             </Grid>

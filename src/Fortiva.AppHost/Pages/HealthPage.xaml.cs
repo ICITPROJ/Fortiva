@@ -136,6 +136,7 @@ public sealed partial class HealthPage : Page
             XamlRoot = XamlRoot
         };
 
+        FortivaDialogs.Configure(dlg, XamlRoot);
         var result = await dlg.ShowAsync();
         if (result == ContentDialogResult.None) return;
 

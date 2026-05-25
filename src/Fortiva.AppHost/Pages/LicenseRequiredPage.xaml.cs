@@ -11,6 +11,7 @@ public sealed partial class LicenseRequiredPage : Page
     public LicenseRequiredPage()
     {
         InitializeComponent();
+        BrandAssets.ApplyLogo(BrandLogo, _vm.PreferParanoiaMode);
         RefreshDetail();
     }
 

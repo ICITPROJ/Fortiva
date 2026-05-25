@@ -37,6 +37,7 @@
                 <StackPanel Grid.Row="3" Spacing="8">
                     <TextBlock Text="Master password" FontWeight="SemiBold" FontSize="13"/>
                     <PasswordBox x:Name="PasswordField"
+                                 Style="{StaticResource FortivaPasswordBox}"
                                  PlaceholderText="Enter master password"
                                  KeyDown="PasswordField_KeyDown"/>
                 </StackPanel>

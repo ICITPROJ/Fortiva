@@ -8,6 +8,7 @@ using Fortiva.Core.Updates;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Storage.Pickers;
+using Windows.System;
 
 namespace Fortiva.AppHost.Pages;
 
@@ -121,6 +122,114 @@ public sealed partial class SettingsPage : Page
 
         RefreshPortableUi();
         RefreshSharedVaultUi();
+        RefreshBrowserExtensionUi();
+    }
+
+    private void RefreshBrowserExtensionUi()
+    {
+        var show = !_vm.IsAdmin;
+        BrowserExtensionSection.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        BrowserExtensionDivider.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (!show)
+            return;
+
+        var status = BrowserExtensionSetupHelper.GetStatus(_vm);
+        if (status.IsReadyForBrowser)
+        {
+            BrowserExtensionStatusText.Text =
+                "Browser connection is ready. If you have not loaded the extension yet, open Edge extensions and choose Load unpacked using the folder below.";
+        }
+        else if (status.BridgeExecutableFound && status.ExtensionSourcePath is not null)
+        {
+            BrowserExtensionStatusText.Text =
+                "Almost ready — click Set up browser connection to register Fortiva with your browser.";
+        }
+        else
+        {
+            BrowserExtensionStatusText.Text =
+                "Extension files were not found with this install. Reinstall Fortiva or run a full release build.";
+        }
+
+        BrowserExtensionPathText.Text = status.ExtensionFilesReady
+            ? $"Extension folder: {status.ExtensionStagingPath}"
+            : status.ExtensionSourcePath is not null
+                ? $"Will copy extension from: {status.ExtensionSourcePath}"
+                : "Extension folder not prepared yet.";
+    }
+
+    private void SetupBrowserExtension_Click(object sender, RoutedEventArgs e)
+    {
+        SetupBrowserExtensionBtn.IsEnabled = false;
+        try
+        {
+            var result = BrowserExtensionSetupHelper.EnsureReady(_vm);
+            if (!result.Success)
+            {
+                ShowInfo(result.Error ?? "Browser setup failed.", InfoBarSeverity.Error);
+                RefreshBrowserExtensionUi();
+                return;
+            }
+
+            RefreshBrowserExtensionUi();
+            ShowInfo(
+                "Browser connection configured. In Edge, turn on Developer mode, click Load unpacked, and select the extension folder shown below.",
+                InfoBarSeverity.Success);
+        }
+        catch (Exception ex)
+        {
+            ShowInfo(App.DescribeException(ex), InfoBarSeverity.Error);
+            RefreshBrowserExtensionUi();
+        }
+        finally
+        {
+            SetupBrowserExtensionBtn.IsEnabled = true;
+        }
+    }
+
+    private void OpenExtensionFolder_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var setup = BrowserExtensionSetupHelper.EnsureStagingFolder(_vm);
+            if (!setup.Success)
+            {
+                ShowInfo(setup.Error ?? "Could not prepare the extension folder.", InfoBarSeverity.Error);
+                return;
+            }
+
+            BrowserExtensionSetupHelper.OpenExtensionFolder(setup.ExtensionStagingPath!);
+            RefreshBrowserExtensionUi();
+        }
+        catch (Exception ex)
+        {
+            ShowInfo(App.DescribeException(ex), InfoBarSeverity.Error);
+        }
+    }
+
+    private async void OpenEdgeExtensions_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await BrowserExtensionSetupHelper.OpenEdgeExtensionsAsync();
+        }
+        catch
+        {
+            ShowInfo("Could not open Edge. Open edge://extensions manually in your browser.", InfoBarSeverity.Warning);
+        }
+    }
+
+    private void CopyExtensionPath_Click(object sender, RoutedEventArgs e)
+    {
+        var setup = BrowserExtensionSetupHelper.EnsureStagingFolder(_vm);
+        if (!setup.Success)
+        {
+            ShowInfo(setup.Error ?? "Could not prepare the extension folder.", InfoBarSeverity.Error);
+            return;
+        }
+
+        BrowserExtensionSetupHelper.CopyPathToClipboard(setup.ExtensionStagingPath!);
+        RefreshBrowserExtensionUi();
+        ShowInfo("Extension folder path copied to clipboard.", InfoBarSeverity.Success);
     }
 
     private void RefreshSharedVaultUi()
@@ -219,6 +328,23 @@ public sealed partial class SettingsPage : Page
 
     private void RefreshAboutLogo()
         => BrandAssets.ApplyLogo(AboutLogo, _vm.PreferParanoiaMode);
+
+    private async void WebsiteLink_Click(object sender, RoutedEventArgs e)
+    {
+        if (!SafeUriLauncher.TryNormalizeHttpUri(BrandAssets.WebsiteUrl, out var uri))
+            return;
+
+        try
+        {
+            await Launcher.LaunchUriAsync(uri);
+        }
+        catch
+        {
+            SettingsInfo.Message = "Could not open the Fortiva website.";
+            SettingsInfo.Severity = InfoBarSeverity.Error;
+            SettingsInfo.IsOpen = true;
+        }
+    }
 
     private void LoadLogo()
     {
@@ -336,6 +462,7 @@ public sealed partial class SettingsPage : Page
         var panel = new StackPanel { Spacing = 8 };
         panel.Children.Add(desc);
         panel.Children.Add(pwdBox);
+        FortivaControlTheme.ApplyPasswordBox(pwdBox);
 
         var dialog = new ContentDialog
         {
@@ -346,6 +473,7 @@ public sealed partial class SettingsPage : Page
             XamlRoot            = XamlRoot
         };
 
+        FortivaDialogs.Configure(dialog, XamlRoot);
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
         if (string.IsNullOrEmpty(pwdBox.Password))
         {
@@ -413,6 +541,7 @@ public sealed partial class SettingsPage : Page
                     CloseButtonText = "Later",
                     XamlRoot = XamlRoot
                 };
+                FortivaDialogs.Configure(dlg, XamlRoot);
                 if (await dlg.ShowAsync() == ContentDialogResult.Primary && result.Manifest is not null)
                     await UpdateService.Current.ApplyAsync(result.Manifest, silent: false);
             }
@@ -470,6 +599,7 @@ public sealed partial class SettingsPage : Page
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = Content.XamlRoot
             };
+            FortivaDialogs.Configure(dialog, Content.XamlRoot);
             if (await dialog.ShowAsync() != ContentDialogResult.Primary)
                 return;
 

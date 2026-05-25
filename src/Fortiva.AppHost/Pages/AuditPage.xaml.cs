@@ -1,3 +1,4 @@
+using Fortiva.AppHost.Services;
 using Fortiva.AppHost.ViewModels;
 using Fortiva.Core.Audit;
 using Microsoft.UI;
@@ -44,7 +45,7 @@ public sealed partial class AuditPage : Page
             Text = ev.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss"),
             FontSize = 12,
             FontFamily = new FontFamily("Consolas"),
-            Opacity = 0.6,
+            Foreground = FortivaThemeResources.Body,
             VerticalAlignment = VerticalAlignment.Center
         };
         Grid.SetColumn(time, 0);
@@ -58,11 +59,10 @@ public sealed partial class AuditPage : Page
             Background = ev.EventType switch
             {
                 AuditEventType.UnlockFailure or AuditEventType.PolicyViolation =>
-                    new SolidColorBrush(Color.FromArgb(40, 220, 50, 50)),
+                    FortivaThemeResources.StatusError,
                 AuditEventType.UnlockSuccess =>
-                    new SolidColorBrush(Color.FromArgb(40, 0, 180, 80)),
-                _ =>
-                    new SolidColorBrush(Color.FromArgb(40, 100, 100, 255))
+                    FortivaThemeResources.StatusSuccess,
+                _ => FortivaThemeResources.GetBrush("AccentFillColorTertiaryBrush")
             },
             Child = new TextBlock
             {

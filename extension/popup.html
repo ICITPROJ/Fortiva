@@ -3,16 +3,63 @@
 <head>
   <meta charset="utf-8" />
   <style>
-    body { font-family: system-ui, sans-serif; min-width: 260px; padding: 12px; margin: 0; }
-    button { width: 100%; padding: 10px; font-size: 14px; cursor: pointer; }
-    p { font-size: 12px; opacity: 0.75; line-height: 1.4; }
-    #status { margin-top: 8px; font-size: 12px; }
+    :root {
+      --fortiva-bg: #0a0c10;
+      --fortiva-accent: #40BCF4;
+      --fortiva-heading: #ffffff;
+      --fortiva-body: #A0AAB2;
+      --fortiva-border: rgba(64, 188, 244, 0.35);
+    }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      min-width: 280px;
+      padding: 14px;
+      margin: 0;
+      background: var(--fortiva-bg);
+      color: var(--fortiva-body);
+    }
+    h1 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--fortiva-heading);
+      margin: 0 0 8px 0;
+    }
+    p {
+      font-size: 12px;
+      line-height: 1.45;
+      margin: 0 0 12px 0;
+    }
+    button {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      background: var(--fortiva-accent);
+      color: var(--fortiva-bg);
+    }
+    button:hover { filter: brightness(1.05); }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    #status {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--fortiva-body);
+    }
   </style>
 </head>
 <body>
-  <p>Fill login fields on the active tab using credentials from your unlocked Fortiva vault.</p>
+  <h1>Fortiva Autofill</h1>
+  <p>Manual fill only — click below when you want credentials from your unlocked Fortiva vault. Fortiva never fills on page load or when you focus a field.</p>
   <button id="fillBtn" type="button">Fill credentials on this page</button>
-  <p id="status">Ready.</p>
+  <p id="status">Ready. Keep Fortiva unlocked on this PC.</p>
+  <p id="help" style="font-size:11px;opacity:0.65;margin-top:8px;">
+    First time? In Fortiva open <strong>Settings → Browser extension</strong>, run <strong>Set up browser connection</strong>, then load the extension folder in Edge.
+  </p>
   <script src="popup.js"></script>
 </body>
 </html>

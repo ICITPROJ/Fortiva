@@ -1,9 +1,14 @@
 ; Fortiva Enterprise Client — Inno Setup installer script
 
 #define AppName        "Fortiva Enterprise"
-#define AppVersion     "1.0.0"
+#ifndef AppVersion
+  #define AppVersion     "1.0.0"
+#endif
 #ifndef ExtensionId
   #define ExtensionId "BUILD_EXTENSION_ID_NOT_SET"
+#endif
+#if ExtensionId == "BUILD_EXTENSION_ID_NOT_SET"
+  #error ExtensionId must be set via /DExtensionId=... when compiling the installer
 #endif
 #define AppPublisher   "icmclab studio"
 #define AppURL         "https://studio.icmclab.cloud"
@@ -49,14 +54,10 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\dist\BrowserBridge\*"; DestDir: "{app}\BrowserBridge"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\..\extension\*"; DestDir: "{app}\extension"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "com.fortiva.browserbridge.json"
+Source: "..\..\dist\extension\*"; DestDir: "{app}\extension"; Flags: ignoreversion recursesubdirs createallsubdirs
 #include "FortivaPrerequisitesFiles.iss"
 
-[Registry]
-Root: HKCU; Subkey: "Software\Google\Chrome\NativeMessagingHosts\com.fortiva.browserbridge.enterprise"; \
-  ValueType: string; ValueName: ""; ValueData: "{app}\extension\com.fortiva.browserbridge.enterprise.json"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Microsoft\Edge\NativeMessagingHosts\com.fortiva.browserbridge.enterprise"; \
-  ValueType: string; ValueName: ""; ValueData: "{app}\extension\com.fortiva.browserbridge.enterprise.json"; Flags: uninsdeletekey
+; Native messaging registration is handled by Fortiva on first launch (BrowserBridgeInstallService).
 
 [Icons]
 Name: "{group}\{#AppName}";           Filename: "{app}\{#AppExeName}"
@@ -171,29 +172,9 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
-var
-  BridgeExe, JsonPath, JsonContent: String;
 begin
   if CurStep <> ssPostInstall then
     Exit;
 
   FortivaPrereq_AfterInstall();
-
-  BridgeExe := ExpandConstant('{app}\BrowserBridge\Fortiva.BrowserBridge.Host.exe');
-  JsonPath := ExpandConstant('{app}\extension');
-  ForceDirectories(JsonPath);
-  JsonPath := JsonPath + '\com.fortiva.browserbridge.enterprise.json';
-
-  JsonContent :=
-    '{' + #13#10 +
-    '  "name": "com.fortiva.browserbridge.enterprise",' + #13#10 +
-    '  "description": "Fortiva local credential bridge",' + #13#10 +
-    '  "path": "' + BridgeExe + '",' + #13#10 +
-    '  "type": "stdio",' + #13#10 +
-    '  "allowed_origins": [' + #13#10 +
-    '    "chrome-extension://{#ExtensionId}/"' + #13#10 +
-    '  ]' + #13#10 +
-    '}';
-
-  SaveStringToFile(JsonPath, JsonContent, False);
 end;

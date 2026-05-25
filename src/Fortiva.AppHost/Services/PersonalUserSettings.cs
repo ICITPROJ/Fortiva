@@ -14,6 +14,8 @@ public sealed class PersonalUserSettings
     public DateTimeOffset? LastUpdateCheckUtc { get; set; }
     /// <summary>Last portable vault directory (USB). Null when using the local profile vault.</summary>
     public string? PortableVaultDirectory { get; set; }
+    /// <summary>User dismissed the one-time browser extension setup prompt.</summary>
+    public bool BrowserExtensionSetupDismissed { get; set; }
 
     private static string SettingsPath =>
         Path.Combine(FortivaPaths.PersonalDataRoot, "user.prefs.json");

@@ -134,6 +134,13 @@ public sealed class VaultEngine
                     readOnly = true;
             }
 
+            if (!readOnly && _policy?.MandatoryParanoiaMode == true && header.SecurityLevel < SecurityLevel.Paranoia)
+            {
+                readOnly = true;
+                var policyNote = "Vault security level is below organization policy (Paranoia Mode required). Editing is disabled.";
+                warning = string.IsNullOrEmpty(warning) ? policyNote : $"{warning} {policyNote}";
+            }
+
             if (!readOnly)
                 _localState.UpdateFromHeader(header);
 

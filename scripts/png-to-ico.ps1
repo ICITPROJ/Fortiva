@@ -23,7 +23,6 @@ try {
         finally { $fs.Close() }
     }
     finally {
-        [void][System.Drawing.Icon]::DestroyIcon($hIcon)
         $bmp.Dispose()
     }
 }

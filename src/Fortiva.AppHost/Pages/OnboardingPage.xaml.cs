@@ -28,8 +28,10 @@ public sealed partial class OnboardingPage : Page
         _helloProtector = new WindowsHelloKeyProtector(
             FortivaPaths.GetHelloDataDirectory(_vm.IsEnterprise),
             _vm.IsEnterprise);
-        _steps = [Step0, Step1, Step2, Step3];
-        _dots = [Dot0, Dot1, Dot2, Dot3];
+        _steps = [Step0, Step1, Step2, Step3, Step4];
+        _dots = [Dot0, Dot1, Dot2, Dot3, Dot4];
+        RefreshBrandLogo();
+        _vm.BrandAppearanceChanged += OnBrandAppearanceChanged;
         RefreshPortableHint();
         _ = CheckHelloAvailabilityAsync();
     }
@@ -86,9 +88,15 @@ public sealed partial class OnboardingPage : Page
                 HelloInfoBar.Message = "Windows Hello is not available on this device. You can continue without it.";
                 HelloInfoBar.Severity = InfoBarSeverity.Warning;
                 HelloInfoBar.IsOpen = true;
-                ShowHelloContinue();
+                ShowHelloContinue(hideSkip: _vm.IsEnterprise && _vm.Policy?.MandatoryWindowsHello == true);
             }
         });
+    }
+
+    protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        _vm.BrandAppearanceChanged -= OnBrandAppearanceChanged;
     }
 
     private void ShowHelloContinue(bool hideSkip = false)
@@ -237,6 +245,9 @@ public sealed partial class OnboardingPage : Page
             return false;
         }
 
+        if (_vm.IsPortableMode)
+            return false;
+
         if (!FortivaPaths.PersonalVaultFileExists())
             return false;
 
@@ -304,6 +315,7 @@ public sealed partial class OnboardingPage : Page
             await _vm.CreateVaultAsync(password, level).ConfigureAwait(true);
 
             DispatcherQueue.TryEnqueue(() => BusyDetail.Text = "Unlocking vault…");
+            _vm.SkipNextBrowserExtensionPrompt = true;
             var (ok, error) = await _vm.UnlockAsync(password, paranoiaMode: paranoia).ConfigureAwait(true);
             if (!ok)
             {
@@ -328,6 +340,13 @@ public sealed partial class OnboardingPage : Page
             }
 
             SetBusyOverlay(false);
+            if (!_vm.IsAdmin)
+            {
+                RefreshBrowserExtensionStep();
+                ShowStep(4);
+                return;
+            }
+
             _vm.RequestNavigationTab("Vault");
         }
         catch (Exception ex)
@@ -358,5 +377,69 @@ public sealed partial class OnboardingPage : Page
         BusyRing.IsActive = visible;
         if (title is not null) BusyTitle.Text = title;
         if (detail is not null) BusyDetail.Text = detail;
+    }
+
+    private void RefreshBrandLogo()
+        => BrandAssets.ApplyLogo(BrandLogo, _vm.PreferParanoiaMode);
+
+    private void OnBrandAppearanceChanged()
+        => RefreshBrandLogo();
+
+    private void RefreshBrowserExtensionStep()
+    {
+        var status = BrowserExtensionSetupHelper.GetStatus(_vm);
+        BrowserExtStatusText.Text = status.IsReadyForBrowser
+            ? $"Ready. Extension folder:\n{status.ExtensionStagingPath}"
+            : "Click Set up browser connection, then load that folder in Edge (Developer mode → Load unpacked).";
+    }
+
+    private void BrowserExtSetup_Click(object sender, RoutedEventArgs e)
+    {
+        BrowserExtSetupBtn.IsEnabled = false;
+        try
+        {
+            var result = BrowserExtensionSetupHelper.EnsureReady(_vm);
+            BrowserExtStatusText.Text = result.Success
+                ? $"Connection ready.\nExtension folder:\n{result.ExtensionStagingPath}\n\nOpen Edge extensions, enable Developer mode, Load unpacked, and select this folder."
+                : result.Error ?? "Setup failed.";
+        }
+        finally
+        {
+            BrowserExtSetupBtn.IsEnabled = true;
+        }
+    }
+
+    private async void BrowserExtOpenEdge_Click(object sender, RoutedEventArgs e)
+    {
+        try { await BrowserExtensionSetupHelper.OpenEdgeExtensionsAsync(); }
+        catch { BrowserExtStatusText.Text = "Open edge://extensions manually in Edge."; }
+    }
+
+    private void BrowserExtOpenFolder_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var result = BrowserExtensionSetupHelper.EnsureStagingFolder(_vm);
+            if (!result.Success)
+            {
+                BrowserExtStatusText.Text = result.Error ?? "Could not prepare extension folder.";
+                return;
+            }
+
+            BrowserExtensionSetupHelper.OpenExtensionFolder(result.ExtensionStagingPath!);
+            RefreshBrowserExtensionStep();
+        }
+        catch (Exception ex)
+        {
+            BrowserExtStatusText.Text = App.DescribeException(ex);
+        }
+    }
+
+    private void BrowserExtContinue_Click(object sender, RoutedEventArgs e)
+    {
+        _vm.SkipNextBrowserExtensionPrompt = false;
+        if (!_vm.IsEnterprise)
+            _vm.SetBrowserExtensionSetupDismissed();
+        _vm.RequestNavigationTab("Vault");
     }
 }

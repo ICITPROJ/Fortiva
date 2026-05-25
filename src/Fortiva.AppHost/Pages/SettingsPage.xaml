@@ -5,15 +5,19 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="Transparent">
 
-    <ScrollViewer>
-        <Border Style="{StaticResource FortivaGlassPanel}" Margin="24" MaxWidth="560" HorizontalAlignment="Left">
+    <ScrollViewer x:Name="PageScroll"
+                  HorizontalScrollBarVisibility="Disabled"
+                  HorizontalContentAlignment="Stretch">
+        <Border Style="{StaticResource FortivaGlassPanel}" Margin="24"
+                HorizontalAlignment="Stretch" MinWidth="320"
+                Width="{Binding ViewportWidth, ElementName=PageScroll}">
         <StackPanel Spacing="24">
             <TextBlock Text="Settings" Style="{StaticResource FortivaPageTitle}"/>
 
             <!-- Appearance -->
             <StackPanel Spacing="12">
                 <TextBlock Text="Appearance" FontSize="16" FontWeight="SemiBold" Opacity="0.7"/>
-                <ComboBox x:Name="ThemeCombo" Header="Theme" SelectionChanged="Theme_Changed">
+                <ComboBox x:Name="ThemeCombo" Header="Theme" Style="{StaticResource FortivaComboBox}" SelectionChanged="Theme_Changed">
                     <ComboBoxItem Content="Use system setting" Tag="System"/>
                     <ComboBoxItem Content="Light" Tag="Light"/>
                     <ComboBoxItem Content="Dark" Tag="Dark"/>
@@ -63,6 +67,35 @@
             </StackPanel>
 
             <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+
+            <!-- Browser extension -->
+            <StackPanel x:Name="BrowserExtensionSection" Spacing="12">
+                <TextBlock Text="Browser extension" FontSize="16" FontWeight="SemiBold" Opacity="0.7"/>
+                <TextBlock TextWrapping="WrapWholeWords" Opacity="0.7" FontSize="13">
+                    Fill logins in Edge or Chrome from your unlocked vault. Fortiva prepares the connection automatically — you only need to load the extension once in your browser.
+                </TextBlock>
+                <Border Style="{StaticResource FortivaGlassPanelGlow}" Padding="14">
+                    <StackPanel Spacing="6">
+                        <TextBlock x:Name="BrowserExtensionStatusText" FontSize="13" TextWrapping="WrapWholeWords"/>
+                        <TextBlock x:Name="BrowserExtensionPathText" FontSize="11" Opacity="0.6"
+                                   TextWrapping="WrapWholeWords" FontFamily="Consolas"/>
+                    </StackPanel>
+                </Border>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="SetupBrowserExtensionBtn" Content="Set up browser connection"
+                            Style="{StaticResource FortivaAccentButton}" Click="SetupBrowserExtension_Click"/>
+                    <Button x:Name="OpenExtensionFolderBtn" Content="Open extension folder" Click="OpenExtensionFolder_Click"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="OpenEdgeExtensionsBtn" Content="Open Edge extensions" Click="OpenEdgeExtensions_Click"/>
+                    <Button x:Name="CopyExtensionPathBtn" Content="Copy folder path" Click="CopyExtensionPath_Click"/>
+                </StackPanel>
+                <TextBlock TextWrapping="WrapWholeWords" Opacity="0.55" FontSize="11">
+                    One-time in Edge: turn on Developer mode, click Load unpacked, then choose the folder above. After that, click the Fortiva icon on a login page and use Fill credentials.
+                </TextBlock>
+            </StackPanel>
+
+            <Border x:Name="BrowserExtensionDivider" Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
 
             <!-- Change master password -->
             <StackPanel Spacing="12">
@@ -156,6 +189,8 @@
                         <TextBlock x:Name="AboutPublisher" FontSize="12" Opacity="0.6"/>
                         <TextBlock FontSize="11" Opacity="0.5" Margin="0,4,0,0"
                                    Text="Zero-knowledge. Local-first. Windows-native."/>
+                        <HyperlinkButton x:Name="WebsiteLink" Content="fortiva.studio.icmclab.cloud"
+                                         FontSize="12" Margin="0,2,0,0" Click="WebsiteLink_Click"/>
                     </StackPanel>
                 </Border>
             </StackPanel>

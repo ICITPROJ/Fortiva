@@ -38,11 +38,12 @@ Step "Release build" {
 Step "Installer compile (Personal)" {
     $iscc = "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
     if (-not (Test-Path $iscc)) { throw "ISCC not installed" }
-    & $iscc "$root\packaging\installer\FortivaPersonal.iss" | Out-Null
+    & powershell -ExecutionPolicy Bypass -File "$root\scripts\ensure-extension-key.ps1" | Out-Null
+    $extensionId = & powershell -ExecutionPolicy Bypass -File "$root\scripts\compute-extension-id.ps1"
+    & $iscc "/DExtensionId=$extensionId" "$root\packaging\installer\FortivaPersonal.iss" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "ISCC exit $LASTEXITCODE" }
-    if (-not (Test-Path "$root\dist\installers\FortivaPersonal-1.0.0-Setup.exe")) {
-        throw "Personal installer missing"
-    }
+    $installer = Get-ChildItem "$root\dist\installers\FortivaPersonal-*-Setup.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $installer) { throw "Personal installer missing" }
 }
 
 Step "Smoke launch (15s)" {

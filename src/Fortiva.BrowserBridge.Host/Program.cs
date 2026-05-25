@@ -33,6 +33,13 @@ static async Task<string> ForwardToPipeAsync(JsonElement request)
     {
         var token = await BridgeSessionAuth.RequestTokenFromBrokerAsync();
         if (string.IsNullOrEmpty(token))
+        {
+            if (!await BridgeUnlockClient.RequestUnlockAsync())
+                return JsonSerializer.Serialize(new CredentialResponse());
+            token = await BridgeSessionAuth.RequestTokenFromBrokerAsync();
+        }
+
+        if (string.IsNullOrEmpty(token))
             return JsonSerializer.Serialize(new CredentialResponse());
 
         using var client = new System.IO.Pipes.NamedPipeClientStream(

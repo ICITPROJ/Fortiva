@@ -11,12 +11,30 @@ namespace Fortiva.AppHost.Pages;
 public sealed partial class ImportExportPage : Page
 {
     private readonly ShellViewModel _vm = ShellViewModel.Current;
+    private Action? _stateChangedHandler;
 
     public ImportExportPage() => InitializeComponent();
 
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        _stateChangedHandler = () => DispatcherQueue.TryEnqueue(RefreshExportState);
+        _vm.StateChanged += _stateChangedHandler;
+        RefreshExportState();
+    }
+
+    protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        if (_stateChangedHandler is not null)
+        {
+            _vm.StateChanged -= _stateChangedHandler;
+            _stateChangedHandler = null;
+        }
+    }
+
+    private void RefreshExportState()
+    {
         var canPlaintext = PolicyEnforcer.CanExportPlaintext(_vm.Policy);
         ExportCsvBtn.IsEnabled = canPlaintext && _vm.IsUnlocked && !_vm.IsReadOnly;
         ExportEncryptedBtn.IsEnabled = _vm.IsUnlocked && !_vm.IsReadOnly;
@@ -80,6 +98,7 @@ public sealed partial class ImportExportPage : Page
     {
         if (!GuardExport()) return;
         var pwdBox = new PasswordBox { PlaceholderText = "Export password (to protect the backup file)" };
+        FortivaControlTheme.ApplyPasswordBox(pwdBox);
         var dlg = new ContentDialog
         {
             Title = "Encrypt backup",
@@ -88,6 +107,7 @@ public sealed partial class ImportExportPage : Page
             CloseButtonText = "Cancel",
             XamlRoot = Content.XamlRoot
         };
+        FortivaDialogs.Configure(dlg, Content.XamlRoot);
         if (await dlg.ShowAsync() != ContentDialogResult.Primary) return;
         if (string.IsNullOrEmpty(pwdBox.Password)) { Show("Export password required.", InfoBarSeverity.Warning); return; }
 
@@ -138,6 +158,7 @@ public sealed partial class ImportExportPage : Page
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = Content.XamlRoot
         };
+        FortivaDialogs.Configure(warn, Content.XamlRoot);
         if (await warn.ShowAsync() != ContentDialogResult.Primary) return;
 
         var picker = new FileSavePicker();

@@ -1,6 +1,7 @@
 using Fortiva.AppHost.Pages;
 using Fortiva.AppHost.Services;
 using Fortiva.AppHost.ViewModels;
+using Fortiva.Core.BrowserBridge;
 using Microsoft.UI;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Windowing;
@@ -46,7 +47,11 @@ public sealed partial class MainWindow : Window
         _vm.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(ShellViewModel.StatusMessage) or nameof(ShellViewModel.IsUnlocked))
-                DispatcherQueue.TryEnqueue(() => StatusText.Text = _vm.StatusMessage);
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (_clipboardTimer is null)
+                        StatusText.Text = _vm.StatusMessage;
+                });
         };
 
         NavAudit.Visibility = _vm.IsAdmin ? Visibility.Collapsed : Visibility.Visible;
@@ -62,6 +67,7 @@ public sealed partial class MainWindow : Window
         {
             NavVault.Visibility = NavGenerator.Visibility = NavHealth.Visibility = NavImport.Visibility = Visibility.Collapsed;
             NavLock.Visibility = Visibility.Collapsed;
+            NavAudit.Visibility = Visibility.Collapsed;
             NavigationService.Current.Navigate<LicenseRequiredPage>();
         }
         else if (_vm.IsAdmin)
@@ -72,6 +78,21 @@ public sealed partial class MainWindow : Window
             NavigationService.Current.Navigate<UnlockPage>();
 
         StatusText.Text = _vm.StatusMessage;
+
+        ClipboardService.ClipboardCopied += OnClipboardCopied;
+        _vm.BridgeUnlockRequested += OnBridgeUnlockRequested;
+        if (!_vm.IsAdmin)
+        {
+            _vm.StartBridgeUnlockListener(AppContext.BaseDirectory);
+            try
+            {
+                BrowserBridgeInstallService.EnsureInstalled(AppContext.BaseDirectory, _vm.IsEnterprise);
+            }
+            catch (Exception ex)
+            {
+                App.LogException("BrowserBridgeInstallService.EnsureInstalled", ex);
+            }
+        }
 
         if (_vm.PortableVaultUnavailable)
             Activated += MainWindow_ActivatedForPortablePrompt;
@@ -103,8 +124,14 @@ public sealed partial class MainWindow : Window
             XamlRoot = Content.XamlRoot
         };
 
+        FortivaDialogs.Configure(dialog, Content.XamlRoot);
         var result = await dialog.ShowAsync();
-        if (result == ContentDialogResult.Secondary)
+        if (result == ContentDialogResult.Primary)
+        {
+            _vm.SwitchToLocalVault();
+            OnVaultLocationChanged();
+        }
+        else if (result == ContentDialogResult.Secondary)
         {
             if (_vm.RetryPortableVaultConnection())
             {
@@ -119,6 +146,7 @@ public sealed partial class MainWindow : Window
                 CloseButtonText = "OK",
                 XamlRoot = Content.XamlRoot
             };
+            FortivaDialogs.Configure(retryDialog, Content.XamlRoot);
             await retryDialog.ShowAsync();
         }
         else if (result == ContentDialogResult.None)
@@ -265,6 +293,7 @@ public sealed partial class MainWindow : Window
             {
                 NavVault.Visibility = NavGenerator.Visibility = NavHealth.Visibility = NavImport.Visibility = Visibility.Collapsed;
                 NavLock.Visibility = Visibility.Collapsed;
+                NavAudit.Visibility = Visibility.Collapsed;
                 NavigationService.Current.Navigate<LicenseRequiredPage>();
             }
         });
@@ -300,7 +329,43 @@ public sealed partial class MainWindow : Window
             _suppressNav = true;
             try { NavView.SelectedItem = NavVault; }
             finally { _suppressNav = false; }
+
+            if (!_vm.IsAdmin && !_vm.SkipNextBrowserExtensionPrompt)
+                _ = BrowserExtensionSetupHelper.ShowFirstRunPromptAsync(Content.XamlRoot, _vm);
+            _vm.SkipNextBrowserExtensionPrompt = false;
         });
+    }
+
+    private DispatcherTimer? _clipboardTimer;
+    private int _clipboardSecondsLeft;
+    private string _statusBeforeClipboard = "";
+
+    private void OnClipboardCopied(int clearSeconds)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _clipboardTimer?.Stop();
+            _clipboardSecondsLeft = clearSeconds;
+            _statusBeforeClipboard = _vm.IsUnlocked ? _vm.StatusMessage : "Locked";
+            StatusText.Text = $"Clipboard clears in {_clipboardSecondsLeft}s";
+            _clipboardTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _clipboardTimer.Tick += ClipboardTimer_Tick;
+            _clipboardTimer.Start();
+        });
+    }
+
+    private void ClipboardTimer_Tick(object? sender, object e)
+    {
+        _clipboardSecondsLeft--;
+        if (_clipboardSecondsLeft > 0)
+        {
+            StatusText.Text = $"Clipboard clears in {_clipboardSecondsLeft}s";
+            return;
+        }
+
+        _clipboardTimer?.Stop();
+        _clipboardTimer = null;
+        StatusText.Text = _vm.StatusMessage;
     }
 
     private void PanicBtn_Click(object sender, RoutedEventArgs e)
@@ -316,6 +381,36 @@ public sealed partial class MainWindow : Window
             ThemeService.Apply(this, _vm.ThemePreference);
             ThemeService.ApplySystemBackdrop(this);
             RefreshBrandAppearance();
+        });
+    }
+
+    private void OnBridgeUnlockRequested()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                AppWindow.Show(true);
+                Activate();
+
+                if (_vm.IsUnlocked)
+                    return;
+
+                _suppressNav = true;
+                try
+                {
+                    NavView.SelectedItem = null;
+                    if (!_vm.VaultExists)
+                        NavigationService.Current.Navigate<OnboardingPage>();
+                    else
+                        NavigationService.Current.Navigate<UnlockPage>(BridgeUnlockNavigationContext.Instance);
+                }
+                finally { _suppressNav = false; }
+            }
+            catch (Exception ex)
+            {
+                App.LogException("OnBridgeUnlockRequested", ex);
+            }
         });
     }
 

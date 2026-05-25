@@ -363,26 +363,31 @@ Windows Hello does **not** replace your master password. It protects a key prote
 
 ## 11. Browser Extension
 
-The Fortiva browser extension connects to the desktop app via a local named pipe (no internet involved).
+The Fortiva browser extension connects to the desktop app via a local native messaging bridge and named pipe (no internet involved).
 
-### Installing the Extension
-1. Open Edge or Chrome and go to `chrome://extensions` (or `edge://extensions`).
-2. Enable **Developer mode** (top-right toggle).
-3. Click **Load unpacked** and select the `extension/` folder from the Fortiva installation directory.
-4. Verify the extension ID is **`llkpcnbhmhpenahlcdnbbfmkdfkgnpnj`** (stable — baked into `manifest.json` via public key).
+### One-time setup (recommended)
+1. Open **Fortiva → Settings → Browser extension**.
+2. Click **Set up browser connection** (Fortiva copies the extension to a stable folder and registers the browser bridge automatically).
+3. Click **Open Edge extensions** (or open `edge://extensions` in Chrome).
+4. Turn on **Developer mode**, click **Load unpacked**, then click **Open extension folder** in Fortiva Settings and select that folder.
+5. Done — you only do this once per PC.
 
-### Native Messaging Host
-The Fortiva installer registers the native messaging host automatically and embeds the correct extension ID in:
-`{app}\extension\com.fortiva.browserbridge.personal.json` (or `.enterprise.json`).
+The extension folder is always:
+`%LOCALAPPDATA%\FortivaPersonal\extension` (Personal) or `%LOCALAPPDATA%\FortivaEnterprise\extension` (Enterprise).
 
-No manual ID replacement is required when you install via the official setup EXE.
+Extension ID (stable): **`llkpcnbhmhpenahlcdnbbfmkdfkgnpnj`**
 
 ### Using the Extension
-1. Navigate to a website login page.
-2. Click the Fortiva icon in the browser toolbar.
-3. The extension requests credentials for the current domain from the desktop app.
-4. If the vault is locked, the desktop app comes to the foreground for you to unlock.
-5. Click a credential to auto-fill the login form.
+1. Keep Fortiva unlocked on this PC.
+2. Navigate to a website login page.
+3. Click the Fortiva icon in the browser toolbar.
+4. Click **Fill credentials on this page** (Fortiva never autofills on page load or when you focus a password field).
+5. If the vault is locked, the desktop app comes to the foreground for you to unlock.
+6. Fortiva fills empty username/password fields only if a vault entry matches the site **hostname** exactly (URL path is ignored).
+
+### Troubleshooting
+- **“Could not reach Fortiva”** — Open Settings → Browser extension and run **Set up browser connection** again. Ensure Fortiva is running and unlocked.
+- **Wrong folder when loading unpacked** — Use **Open extension folder** in Settings; do not pick the repo root or an empty directory.
 
 ---
 

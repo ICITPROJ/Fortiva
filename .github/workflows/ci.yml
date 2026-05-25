@@ -109,7 +109,6 @@ jobs:
     name: WinUI apps — build (VS)
     runs-on: windows-latest
     needs: core
-    continue-on-error: true  # VS Appx tooling required; CLI builds succeed for Core
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -124,11 +123,11 @@ jobs:
           dotnet restore src/Fortiva.Enterprise/Fortiva.Enterprise.csproj
           dotnet restore src/Fortiva.Admin/Fortiva.Admin.csproj
       - name: Build Fortiva.Personal
-        run: dotnet build src/Fortiva.Personal/Fortiva.Personal.csproj -c Release --no-restore
+        run: dotnet build src/Fortiva.Personal/Fortiva.Personal.csproj -c Release -p:Platform=x64 --no-restore
       - name: Build Fortiva.Enterprise
-        run: dotnet build src/Fortiva.Enterprise/Fortiva.Enterprise.csproj -c Release --no-restore
+        run: dotnet build src/Fortiva.Enterprise/Fortiva.Enterprise.csproj -c Release -p:Platform=x64 --no-restore
       - name: Build Fortiva.Admin
-        run: dotnet build src/Fortiva.Admin/Fortiva.Admin.csproj -c Release --no-restore
+        run: dotnet build src/Fortiva.Admin/Fortiva.Admin.csproj -c Release -p:Platform=x64 --no-restore
 
   # ── Security scan ────────────────────────────────────────────────────────────
   security:

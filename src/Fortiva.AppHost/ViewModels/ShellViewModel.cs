@@ -3,6 +3,7 @@ using System.Text;
 using Fortiva.AppHost.Services;
 using Fortiva.Core.Admin;
 using Fortiva.Core.Audit;
+using Fortiva.Core.BrowserBridge;
 using Fortiva.Core.Crypto;
 using Fortiva.Core.Hello;
 using Fortiva.Core.Licensing;
@@ -58,7 +59,7 @@ public sealed class ShellViewModel : ViewModelBase
     public bool IsLicenseValid => LicenseVerifier.IsValidAndNotExpired(License);
 
     // ── Observable properties ────────────────────────────────────────────────
-    public string StatusMessage { get => _statusMessage; private set => Set(ref _statusMessage, value); }
+    public string StatusMessage { get => _statusMessage; set => Set(ref _statusMessage, value); }
     public bool IsBusy { get => _isBusy; private set => Set(ref _isBusy, value); }
     public bool IsUnlocked => _session?.IsUnlocked ?? false;
     public bool IsReadOnly => _session?.IsReadOnly ?? false;
@@ -78,6 +79,12 @@ public sealed class ShellViewModel : ViewModelBase
         : IsSharedVaultMode ? $"Shared: {VaultDirectory}"
         : $"Local: {VaultDirectory}";
 
+    /// <summary>Short trust chip on the vault toolbar.</summary>
+    public string VaultTrustChipText =>
+        IsPortableMode ? "Portable vault"
+        : IsSharedVaultMode ? "Shared vault"
+        : "Local only";
+
     public ObservableCollection<VaultEntryViewModel> Entries { get; } = [];
 
     // ── Events ────────────────────────────────────────────────────────────────
@@ -88,6 +95,12 @@ public sealed class ShellViewModel : ViewModelBase
     public event Action? VaultLocationChanged;
     /// <summary>Request left-nav highlight without triggering navigation (e.g. toolbar shortcut).</summary>
     public event Action<string>? NavigationTabRequested;
+    /// <summary>Browser extension needs vault unlocked — bring app forward and show unlock UI.</summary>
+    public event Action? BridgeUnlockRequested;
+
+    private BridgeUnlockBroker? _bridgeUnlockBroker;
+    private readonly object _bridgeUnlockGate = new();
+    private TaskCompletionSource<bool>? _bridgeUnlockWait;
 
     // ── Constructor ───────────────────────────────────────────────────────────
     private ShellViewModel()
@@ -108,6 +121,69 @@ public sealed class ShellViewModel : ViewModelBase
     }
 
     public void RequestNavigationTab(string tag) => NavigationTabRequested?.Invoke(tag);
+
+    /// <summary>Abort a pending browser-extension unlock wait (navigation away, user cancel).</summary>
+    public void CancelBridgeUnlockIfPending() => CompleteBridgeUnlockIfPending(false);
+
+    /// <summary>Starts unlock listener for browser extension (runs while app is open, even when locked).</summary>
+    public void StartBridgeUnlockListener(string installRoot)
+    {
+        if (IsAdmin)
+            return;
+
+        _bridgeUnlockBroker?.Dispose();
+        BridgeClientValidator.ConfigureAllowedInstallRoots(installRoot);
+        _bridgeUnlockBroker = new BridgeUnlockBroker(
+            () => IsUnlocked,
+            () => VaultExists,
+            RequestUnlockFromBridgeAsync);
+        _bridgeUnlockBroker.Start();
+    }
+
+    private async Task<bool> RequestUnlockFromBridgeAsync(CancellationToken ct)
+    {
+        if (IsUnlocked)
+            return true;
+
+        if (!VaultExists)
+            return false;
+
+        TaskCompletionSource<bool> tcs;
+        var notifyUi = false;
+        lock (_bridgeUnlockGate)
+        {
+            if (_bridgeUnlockWait is not null)
+            {
+                tcs = _bridgeUnlockWait;
+            }
+            else
+            {
+                tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _bridgeUnlockWait = tcs;
+                notifyUi = true;
+            }
+        }
+
+        if (notifyUi)
+            RunOnUi(() => BridgeUnlockRequested?.Invoke());
+
+        await using var reg = ct.Register(() => CompleteBridgeUnlockIfPending(false));
+        return await tcs.Task.ConfigureAwait(false);
+    }
+
+    private void CompleteBridgeUnlockIfPending(bool success)
+    {
+        TaskCompletionSource<bool>? wait;
+        lock (_bridgeUnlockGate)
+        {
+            wait = _bridgeUnlockWait;
+            if (wait is null)
+                return;
+            _bridgeUnlockWait = null;
+        }
+
+        wait.TrySetResult(success);
+    }
 
     /// <summary>Re-read vault.fva from disk (e.g. after external install/uninstall).</summary>
     public void RefreshVaultExists()
@@ -149,6 +225,16 @@ public sealed class ShellViewModel : ViewModelBase
         _personalSettings.AutoUpdateEnabled = enabled;
         SavePersonalSettings();
     }
+
+    public void SetBrowserExtensionSetupDismissed(bool dismissed = true)
+    {
+        if (IsEnterprise) return;
+        _personalSettings.BrowserExtensionSetupDismissed = dismissed;
+        SavePersonalSettings();
+    }
+
+    /// <summary>Onboarding step 4 handles browser setup — suppress duplicate prompt on unlock.</summary>
+    public bool SkipNextBrowserExtensionPrompt { get; set; }
 
     public void SetParanoiaMode(bool enabled)
     {
@@ -225,17 +311,26 @@ public sealed class ShellViewModel : ViewModelBase
                 OnPropertyChanged(nameof(IsReadOnly));
                 rollbackWarning = _session!.RollbackWarning;
                 UnlockOccurred?.Invoke();
+                CompleteBridgeUnlockIfPending(true);
             });
             return (true, rollbackWarning);
         }
         catch (System.Security.Cryptography.CryptographicException)
         {
-            RunOnUi(() => StatusMessage = "Unlock failed.");
+            RunOnUi(() =>
+            {
+                StatusMessage = "Unlock failed.";
+                CompleteBridgeUnlockIfPending(false);
+            });
             return (false, "Incorrect master password.");
         }
         catch (Exception ex)
         {
-            RunOnUi(() => StatusMessage = "Unlock failed.");
+            RunOnUi(() =>
+            {
+                StatusMessage = "Unlock failed.";
+                CompleteBridgeUnlockIfPending(false);
+            });
             return (false, FormatError(ex));
         }
         finally { RunOnUi(() => IsBusy = false); }
@@ -263,17 +358,26 @@ public sealed class ShellViewModel : ViewModelBase
                 OnPropertyChanged(nameof(IsReadOnly));
                 rollbackWarning = _session!.RollbackWarning;
                 UnlockOccurred?.Invoke();
+                CompleteBridgeUnlockIfPending(true);
             });
             return (true, rollbackWarning);
         }
         catch (System.Security.Cryptography.CryptographicException)
         {
-            RunOnUi(() => StatusMessage = "Unlock failed.");
+            RunOnUi(() =>
+            {
+                StatusMessage = "Unlock failed.";
+                CompleteBridgeUnlockIfPending(false);
+            });
             return (false, "Windows Hello credential is invalid for this vault.");
         }
         catch (Exception ex)
         {
-            RunOnUi(() => StatusMessage = "Unlock failed.");
+            RunOnUi(() =>
+            {
+                StatusMessage = "Unlock failed.";
+                CompleteBridgeUnlockIfPending(false);
+            });
             return (false, FormatError(ex));
         }
         finally { RunOnUi(() => IsBusy = false); }
@@ -293,7 +397,9 @@ public sealed class ShellViewModel : ViewModelBase
             Entries.Clear();
             StatusMessage = "Locked";
             OnPropertyChanged(nameof(IsUnlocked));
+            StateChanged?.Invoke();
             LockOccurred?.Invoke();
+            CompleteBridgeUnlockIfPending(false);
         }
         finally { _isLocking = false; }
     }
@@ -308,7 +414,9 @@ public sealed class ShellViewModel : ViewModelBase
             Entries.Clear();
             StatusMessage = "Locked";
             OnPropertyChanged(nameof(IsUnlocked));
+            StateChanged?.Invoke();
             LockOccurred?.Invoke();
+            CompleteBridgeUnlockIfPending(false);
         }
         finally { _isLocking = false; }
     }
@@ -326,8 +434,11 @@ public sealed class ShellViewModel : ViewModelBase
 
     private void ApplyPersonalAutoLockTimeout()
     {
-        if (IsEnterprise) return;
-        var seconds = Policy?.MaxAutoLockSeconds ?? _personalSettings.AutoLockSeconds;
+        var seconds = IsEnterprise
+            ? (Policy?.MaxAutoLockSeconds ?? 300)
+            : _personalSettings.AutoLockSeconds;
+        if (Policy is not null)
+            seconds = PolicyEnforcer.EnforceAutoLock(seconds, Policy);
         _session?.SetAutoLockTimeout(seconds);
     }
 
@@ -591,6 +702,7 @@ public sealed class ShellViewModel : ViewModelBase
         ApplyVaultDirectory(vaultDirectory, portable: false);
         IsSharedVaultMode = _enterpriseSettings.SelectedVaultDirectory is not null;
         OnPropertyChanged(nameof(IsSharedVaultMode));
+        OnPropertyChanged(nameof(VaultTrustChipText));
     }
 
     public void ReloadSharedVaults()
@@ -620,9 +732,14 @@ public sealed class ShellViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsPortableMode));
         OnPropertyChanged(nameof(IsSharedVaultMode));
         OnPropertyChanged(nameof(VaultLocationLabel));
+        OnPropertyChanged(nameof(VaultTrustChipText));
         StatusMessage = portable
             ? $"Using portable vault at {directory}"
-            : "Using local vault";
+            : IsSharedVaultMode
+                ? $"Using shared vault at {directory}"
+                : IsEnterprise
+                    ? "Using organization vault"
+                    : "Using local vault";
         if (notify)
             VaultLocationChanged?.Invoke();
     }
@@ -758,6 +875,32 @@ public sealed class VaultEntryViewModel : ViewModelBase
     public bool PasswordVisible { get => _passwordVisible; private set { Set(ref _passwordVisible, value); OnPropertyChanged(nameof(MaskedPassword)); } }
 
     public string DomainDisplay => TryGetDomain(Entry.Url);
+
+    public string Subtitle
+    {
+        get
+        {
+            if (IsSecureNote) return "Secure note";
+            if (!string.IsNullOrWhiteSpace(Username) && !string.IsNullOrWhiteSpace(DomainDisplay))
+                return $"{Username} · {DomainDisplay}";
+            if (!string.IsNullOrWhiteSpace(Username)) return Username;
+            if (!string.IsNullOrWhiteSpace(DomainDisplay)) return DomainDisplay;
+            return "No username or URL";
+        }
+    }
+
+    public bool HasUsernameLine => !IsSecureNote && !string.IsNullOrWhiteSpace(Username);
+    public string UsernameLine => Username;
+    public bool HasDetailLine => !IsSecureNote && !string.IsNullOrWhiteSpace(DomainDisplay);
+    public string DetailLine => DomainDisplay;
+    public bool IsSecureNoteEntry => IsSecureNote;
+    public bool HasMissingDetails => !IsSecureNote && !HasUsernameLine && !HasDetailLine;
+
+    public bool HasTagChip => Entry.Tags.Count > 0;
+    public string TagChip => HasTagChip ? Entry.Tags[0] : "";
+    public int ExtraTagCount => Math.Max(0, Entry.Tags.Count - 1);
+    public bool HasExtraTags => ExtraTagCount > 0;
+    public string ExtraTagsLabel => HasExtraTags ? $"+{ExtraTagCount}" : "";
 
     public void RevealPasswordFor(int seconds = 5)
     {

@@ -34,6 +34,8 @@ public sealed class ClipboardService : IDisposable
         _personalClearSeconds = personalClearSeconds;
     }
 
+    public static event Action<int>? ClipboardCopied;
+
     public void CopyText(string text)
     {
         if (!IsAllowed)
@@ -44,6 +46,9 @@ public sealed class ClipboardService : IDisposable
         var dp = new DataPackage();
         dp.SetText(text);
         Clipboard.SetContent(dp);
+        var seconds = PolicyEnforcer.GetClipboardClearSeconds(_policy, personalDefault: _personalClearSeconds);
+        if (seconds > 0)
+            ClipboardCopied?.Invoke(seconds);
         ScheduleClear();
     }
 

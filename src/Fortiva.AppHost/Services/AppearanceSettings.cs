@@ -6,7 +6,7 @@ namespace Fortiva.AppHost.Services;
 /// <summary>Per-edition UI preferences stored under LocalApplicationData (not the vault).</summary>
 public sealed class AppearanceSettings
 {
-    public AppThemePreference Theme { get; set; } = AppThemePreference.System;
+    public AppThemePreference Theme { get; set; } = AppThemePreference.Dark;
 
     public static AppearanceSettings Load()
     {

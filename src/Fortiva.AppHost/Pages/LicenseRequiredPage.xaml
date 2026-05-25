@@ -7,12 +7,11 @@
     <Grid HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="480" Padding="24">
         <Border Style="{StaticResource FortivaGlassPanelGlow}" Padding="32">
             <StackPanel Spacing="16">
-                <FontIcon Glyph="&#xE785;" FontSize="48" HorizontalAlignment="Center"
-                          Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
+                <Image x:Name="BrandLogo" Width="64" Height="64" HorizontalAlignment="Center" Stretch="Uniform"/>
                 <TextBlock Text="Enterprise license required" Style="{StaticResource FortivaPageTitle}" TextAlignment="Center"/>
-                <TextBlock TextWrapping="WrapWholeWords" TextAlignment="Center" Opacity="0.8"
+                <TextBlock Style="{StaticResource FortivaBodyText}" TextAlignment="Center"
                            Text="Fortiva Enterprise requires a valid license installed by your administrator. Contact your IT team or use Fortiva Admin Console to import a license file."/>
-                <TextBlock x:Name="DetailText" TextWrapping="WrapWholeWords" TextAlignment="Center" Opacity="0.6" FontSize="12"/>
+                <TextBlock x:Name="DetailText" Style="{StaticResource FortivaMutedText}" TextAlignment="Center"/>
                 <Button x:Name="RecheckBtn" Content="Check again" HorizontalAlignment="Center"
                         Style="{StaticResource FortivaAccentButton}" Click="RecheckBtn_Click"/>
             </StackPanel>

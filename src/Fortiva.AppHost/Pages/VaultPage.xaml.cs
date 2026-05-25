@@ -3,6 +3,7 @@ using Fortiva.AppHost.ViewModels;
 using Fortiva.Core.Otp;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 
 namespace Fortiva.AppHost.Pages;
 
@@ -12,6 +13,7 @@ public sealed partial class VaultPage : Page
     private readonly ClipboardService _clipboard;
 
     private Action? _stateChangedHandler;
+    private Action? _vaultLocationHandler;
 
     public VaultPage()
     {
@@ -23,9 +25,10 @@ public sealed partial class VaultPage : Page
     {
         base.OnNavigatedTo(e);
         _clipboard.RefreshPolicy(_vm.Policy, _vm.PersonalSettings.ClipboardClearSeconds);
-        // Subscribe on each navigation; unsubscribe in OnNavigatedFrom to prevent leaks
         _stateChangedHandler = () => DispatcherQueue.TryEnqueue(() => RefreshList());
         _vm.StateChanged += _stateChangedHandler;
+        _vaultLocationHandler = () => DispatcherQueue.TryEnqueue(() => RefreshList());
+        _vm.VaultLocationChanged += _vaultLocationHandler;
         ReadOnlyBar.IsOpen = _vm.IsReadOnly;
         if (_vm.IsReadOnly && !string.IsNullOrEmpty(_vm.Session?.RollbackWarning))
             ReadOnlyBar.Message = _vm.Session.RollbackWarning +
@@ -41,27 +44,72 @@ public sealed partial class VaultPage : Page
             _vm.StateChanged -= _stateChangedHandler;
             _stateChangedHandler = null;
         }
+        if (_vaultLocationHandler is not null)
+        {
+            _vm.VaultLocationChanged -= _vaultLocationHandler;
+            _vaultLocationHandler = null;
+        }
+    }
+
+    protected override void OnKeyDown(KeyRoutedEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Handled) return;
+        if (e.Key == Windows.System.VirtualKey.N &&
+            KeyboardHelpers.IsControlDown() &&
+            !KeyboardHelpers.IsShiftDown())
+        {
+            e.Handled = true;
+            _ = QuickAddAsync();
+        }
+        else if (e.Key == Windows.System.VirtualKey.G && KeyboardHelpers.IsControlDown())
+        {
+            e.Handled = true;
+            _ = GeneratePasswordAsync();
+        }
     }
 
     private void RefreshList()
     {
         var q = SearchBox.Text?.Trim();
-        var source = string.IsNullOrEmpty(q) ? _vm.Entries : _vm.Search(q);
-        var list = source.ToList();
-        EntryList.ItemsSource = list;
-        CountText.Text = $"{list.Count} {(list.Count == 1 ? "entry" : "entries")}";
+        var all = string.IsNullOrEmpty(q) ? _vm.Entries : _vm.Search(q);
+        var list = all
+            .OrderByDescending(e => e.IsFavorite)
+            .ThenBy(e => e.Title, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        EntryGrid.ItemsSource = list;
+
+        var total = _vm.Entries.Count;
+        var favorites = _vm.Entries.Count(e => e.IsFavorite);
+        var totp = _vm.Entries.Count(e => e.HasTotp);
+
+        VaultSubtitle.Text = total == 0
+            ? "Encrypted on this device · nothing leaves your PC"
+            : $"{total} {(total == 1 ? "entry" : "entries")} · favorites first · tap a card to open";
+
+        StatFavorites.Text = $"{favorites} fav{(favorites == 1 ? "" : "s")}";
+        StatTotp.Text = $"{totp} · 2FA";
+        StatVaultTrust.Text = _vm.VaultTrustChipText;
+
+        var showing = list.Count;
+        CountText.Text = string.IsNullOrEmpty(q)
+            ? (total == 0 ? "No entries saved yet" : $"Showing all {showing} entries")
+            : $"Showing {showing} of {total} entries matching “{q}”";
+
+        EmptyState.Visibility = list.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        EntryGrid.Visibility = list.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
         => RefreshList();
 
-    private void EntryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void EntryGrid_ItemClick(object sender, ItemClickEventArgs e)
     {
-        if (EntryList.SelectedItem is VaultEntryViewModel vm)
+        if (e.ClickedItem is VaultEntryViewModel vm)
         {
             NavigationService.Current.ResetCurrent();
             NavigationService.Current.Navigate<EntryPage>(vm.Entry, animate: true);
-            EntryList.SelectedItem = null;
         }
     }
 
@@ -74,16 +122,16 @@ public sealed partial class VaultPage : Page
     private void CopyPassword_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { Tag: VaultEntryViewModel vm })
+            CopyEntryField(vm.Entry.Password, isPassword: true);
+    }
+
+    private void CopyUsername_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: VaultEntryViewModel vm })
         {
-            try
-            {
-                _clipboard.CopyPassword(vm.Entry.Password);
-                _vm.ResetAutoLock();
-            }
-            catch (InvalidOperationException ex)
-            {
-                _ = ShowInfoAsync(ex.Message);
-            }
+            if (string.IsNullOrWhiteSpace(vm.Username))
+                return;
+            CopyEntryField(vm.Username, isPassword: false);
         }
     }
 
@@ -99,8 +147,7 @@ public sealed partial class VaultPage : Page
         try
         {
             var code = TotpGenerator.Generate(vm.Entry.TotpSecret);
-            _clipboard.CopyText(code);
-            _vm.ResetAutoLock();
+            CopyEntryField(code, isPassword: false, status: "Authenticator code copied.");
         }
         catch (Exception ex)
         {
@@ -108,14 +155,72 @@ public sealed partial class VaultPage : Page
         }
     }
 
-    private void GeneratePassword_Click(object sender, RoutedEventArgs e)
+    private void CopyEntryField(string text, bool isPassword, string? status = null)
     {
-        if (!_vm.IsUnlocked) return;
-        _vm.RequestNavigationTab("Generator");
-        NavigationService.Current.Navigate<PasswordGeneratorPage>();
+        try
+        {
+            if (isPassword)
+                _clipboard.CopyPassword(text);
+            else
+                _clipboard.CopyText(text);
+            _vm.ResetAutoLock();
+            _vm.StatusMessage = status ?? "Password copied — clipboard will clear automatically.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            _ = ShowInfoAsync(ex.Message);
+        }
     }
 
-    private void AddEntry_Click(object sender, RoutedEventArgs e)
+    private async void GeneratePassword_Click(object sender, RoutedEventArgs e)
+        => await GeneratePasswordAsync();
+
+    private async Task GeneratePasswordAsync()
+    {
+        if (!_vm.IsUnlocked) return;
+        var password = await PasswordGeneratorDialog.ShowAsync(Content.XamlRoot, _vm);
+        if (password is null) return;
+
+        var create = new ContentDialog
+        {
+            Title = "Password generated",
+            Content = "Create a new vault entry with this password, or copy it to the clipboard?",
+            PrimaryButtonText = "Create entry",
+            SecondaryButtonText = "Copy only",
+            CloseButtonText = "Done",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Content.XamlRoot
+        };
+        FortivaDialogs.Configure(create, Content.XamlRoot);
+        var choice = await create.ShowAsync();
+        if (choice == ContentDialogResult.Primary)
+        {
+            NavigationService.Current.Navigate<EntryPage>(
+                new EntryDraft { Password = password }, animate: true);
+            return;
+        }
+
+        if (choice == ContentDialogResult.Secondary)
+            CopyEntryField(password, isPassword: true);
+    }
+
+    private async void AddEntry_Click(object sender, RoutedEventArgs e)
+        => await QuickAddAsync();
+
+    private async Task QuickAddAsync()
+    {
+        if (_vm.IsReadOnly) { await ShowInfoAsync("Vault is read-only."); return; }
+        var outcome = await QuickAddEntryDialog.ShowAsync(Content.XamlRoot, _vm);
+        if (outcome.Result == QuickAddEntryDialog.QuickAddResult.Saved)
+        {
+            RefreshList();
+            _vm.StatusMessage = "Entry saved.";
+        }
+        else if (outcome.Result == QuickAddEntryDialog.QuickAddResult.OpenFullForm && outcome.Draft is not null)
+            NavigationService.Current.Navigate<EntryPage>(outcome.Draft, animate: true);
+    }
+
+    private void AddEntryFull_Click(object sender, RoutedEventArgs e)
     {
         if (_vm.IsReadOnly) { _ = ShowInfoAsync("Vault is read-only."); return; }
         NavigationService.Current.Navigate<EntryPage>(null, animate: true);
@@ -130,6 +235,7 @@ public sealed partial class VaultPage : Page
             CloseButtonText = "OK",
             XamlRoot       = Content.XamlRoot
         };
+        FortivaDialogs.Configure(dlg, Content.XamlRoot);
         await dlg.ShowAsync();
     }
 }

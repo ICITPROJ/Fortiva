@@ -5,8 +5,12 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="Transparent">
 
-    <ScrollViewer>
-        <Border Style="{StaticResource FortivaGlassPanel}" Margin="24" MaxWidth="560" HorizontalAlignment="Left">
+    <ScrollViewer x:Name="PageScroll"
+                  HorizontalScrollBarVisibility="Disabled"
+                  HorizontalContentAlignment="Stretch">
+        <Border Style="{StaticResource FortivaGlassPanel}" Margin="24"
+                HorizontalAlignment="Stretch" MinWidth="320"
+                Width="{Binding ViewportWidth, ElementName=PageScroll}">
         <StackPanel Spacing="24">
             <TextBlock Text="Import / Export" Style="{StaticResource FortivaPageTitle}"/>
 

@@ -2,9 +2,13 @@
     x:Class="Fortiva.AppHost.Pages.EntryPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Background="Transparent">
+    Background="Transparent"
+    HorizontalAlignment="Stretch"
+    VerticalAlignment="Stretch"
+    SizeChanged="Page_SizeChanged">
 
-    <Grid Margin="24" RowSpacing="16" MaxWidth="600" HorizontalAlignment="Center">
+    <Grid Margin="24,20,24,16" RowSpacing="12"
+          HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -12,7 +16,7 @@
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <Grid>
+        <Grid HorizontalAlignment="Stretch">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
@@ -21,8 +25,8 @@
             <Button Background="Transparent" BorderThickness="0" Click="Back_Click" Padding="4">
                 <FontIcon Glyph="&#xE76B;" FontSize="16"/>
             </Button>
-            <TextBlock x:Name="PageTitle" Grid.Column="1" FontSize="20" FontWeight="SemiBold"
-                       VerticalAlignment="Center" Margin="8,0"/>
+            <TextBlock x:Name="PageTitle" Grid.Column="1" Style="{StaticResource FortivaPageTitle}"
+                       FontSize="20" VerticalAlignment="Center" Margin="8,0"/>
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
                 <Button x:Name="DeleteBtn" Visibility="Collapsed" Click="Delete_Click"
                         Background="Transparent" BorderThickness="0">
@@ -35,129 +39,172 @@
             </StackPanel>
         </Grid>
 
-        <!-- Form -->
-        <ScrollViewer Grid.Row="1">
-            <StackPanel Spacing="16">
-                <!-- Title -->
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Title" FontWeight="SemiBold" FontSize="13"/>
-                    <TextBox x:Name="TitleBox" PlaceholderText="e.g. GitHub, Work Email…"/>
-                </StackPanel>
+        <!-- Form — stretches to full content width -->
+        <ScrollViewer x:Name="FormScroll" Grid.Row="1"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalContentAlignment="Stretch"
+                      VerticalContentAlignment="Top">
+            <Border Style="{StaticResource FortivaGlassPanel}"
+                    HorizontalAlignment="Stretch"
+                    MinWidth="320"
+                    Width="{Binding ViewportWidth, ElementName=FormScroll}">
+                <Grid x:Name="FormGrid" ColumnSpacing="24" RowSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition x:Name="FormCol0" Width="*" MinWidth="240"/>
+                        <ColumnDefinition x:Name="FormCol1" Width="*" MinWidth="240"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                <!-- Username -->
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Username / Email" FontWeight="SemiBold" FontSize="13"/>
-                    <Grid ColumnSpacing="8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBox x:Name="UsernameBox" PlaceholderText="username or email"/>
-                        <Button Grid.Column="1" ToolTipService.ToolTip="Copy username" Click="CopyUsername_Click">
-                            <FontIcon Glyph="&#xE8C8;" FontSize="14"/>
-                        </Button>
-                    </Grid>
-                </StackPanel>
+                    <!-- Title -->
+                    <StackPanel x:Name="TitlePanel" Grid.ColumnSpan="2" Spacing="6">
+                        <TextBlock Text="Title" Style="{StaticResource FortivaFieldLabel}"/>
+                        <TextBox x:Name="TitleBox" Style="{StaticResource FortivaTextBox}"
+                                 PlaceholderText="e.g. GitHub, Work Email…"/>
+                    </StackPanel>
 
-                <!-- Password -->
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Password" FontWeight="SemiBold" FontSize="13"/>
-                    <Grid ColumnSpacing="8">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <PasswordBox x:Name="PasswordBox" PlaceholderText="password" Grid.Column="0"
-                                     PasswordRevealMode="Peek"
-                                     PasswordChanged="PasswordBox_PasswordChanged"/>
-                        <Button Grid.Column="1" ToolTipService.ToolTip="Copy password" Click="CopyPassword_Click">
-                            <FontIcon Glyph="&#xE8C8;" FontSize="14"/>
-                        </Button>
-                        <Button Grid.Column="2" ToolTipService.ToolTip="Reveal for 5 s" Click="RevealPassword_Click">
-                            <FontIcon Glyph="&#xE7B3;" FontSize="14"/>
-                        </Button>
-                        <Button Grid.Column="3" ToolTipService.ToolTip="Generate password" Click="GeneratePassword_Click">
-                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                <FontIcon Glyph="&#xE9D5;" FontSize="14"/>
-                                <TextBlock Text="Generate"/>
-                            </StackPanel>
-                        </Button>
-                    </Grid>
+                    <!-- Username -->
+                    <StackPanel x:Name="UsernamePanel" Grid.Row="1" Grid.Column="0" Spacing="6">
+                        <TextBlock Text="Username / Email" Style="{StaticResource FortivaFieldLabel}"/>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="UsernameBox" Style="{StaticResource FortivaTextBox}"
+                                     PlaceholderText="username or email"/>
+                            <Button Grid.Column="1" ToolTipService.ToolTip="Copy username" Click="CopyUsername_Click">
+                                <FontIcon Glyph="&#xE8C8;" FontSize="14"/>
+                            </Button>
+                        </Grid>
+                    </StackPanel>
 
-                    <!-- Password strength indicator -->
-                    <ProgressBar x:Name="StrengthBar" Maximum="4" Value="0" Height="4"/>
-                    <TextBlock x:Name="StrengthLabel" FontSize="11" Opacity="0.6"/>
-                </StackPanel>
+                    <!-- URL -->
+                    <StackPanel x:Name="UrlPanel" Grid.Row="1" Grid.Column="1" Spacing="6">
+                        <TextBlock Text="URL" Style="{StaticResource FortivaFieldLabel}"/>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="UrlBox" Style="{StaticResource FortivaTextBox}"
+                                     PlaceholderText="https://example.com"/>
+                            <HyperlinkButton Grid.Column="1" x:Name="VisitLink" Content="Visit" Click="VisitUrl_Click"/>
+                        </Grid>
+                    </StackPanel>
 
-                <!-- URL -->
-                <StackPanel Spacing="4">
-                    <TextBlock Text="URL" FontWeight="SemiBold" FontSize="13"/>
-                    <Grid ColumnSpacing="8">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <TextBox x:Name="UrlBox" PlaceholderText="https://example.com"/>
-                        <HyperlinkButton Grid.Column="1" x:Name="VisitLink" Content="Visit" Click="VisitUrl_Click"/>
-                    </Grid>
-                </StackPanel>
+                    <!-- Password -->
+                    <StackPanel x:Name="PasswordPanel" Grid.Row="2" Grid.ColumnSpan="2" Spacing="8">
+                        <TextBlock Text="Password" Style="{StaticResource FortivaFieldLabel}"/>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <PasswordBox x:Name="PasswordBox" Style="{StaticResource FortivaPasswordBox}"
+                                         PlaceholderText="password" Grid.Column="0"
+                                         PasswordRevealMode="Peek"
+                                         PasswordChanged="PasswordBox_PasswordChanged"/>
+                            <Button Grid.Column="1" ToolTipService.ToolTip="Copy password" Click="CopyPassword_Click">
+                                <FontIcon Glyph="&#xE8C8;" FontSize="14"/>
+                            </Button>
+                            <Button Grid.Column="2" ToolTipService.ToolTip="Reveal for 5 s" Click="RevealPassword_Click">
+                                <FontIcon Glyph="&#xE7B3;" FontSize="14"/>
+                            </Button>
+                            <Button Grid.Column="3" ToolTipService.ToolTip="Generate password" Click="GeneratePassword_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <FontIcon Glyph="&#xE9D5;" FontSize="14"/>
+                                    <TextBlock Text="Generate"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                        <ProgressBar x:Name="StrengthBar" Maximum="4" Value="0" Height="4"/>
+                        <TextBlock x:Name="StrengthLabel" Style="{StaticResource FortivaMutedText}"/>
+                    </StackPanel>
 
-                <!-- Tags -->
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Tags (comma-separated)" FontWeight="SemiBold" FontSize="13"/>
-                    <TextBox x:Name="TagsBox" PlaceholderText="work, personal, finance…"/>
-                </StackPanel>
+                    <!-- Tags -->
+                    <StackPanel x:Name="TagsPanel" Grid.Row="3" Grid.Column="0" Spacing="6">
+                        <TextBlock Text="Tags (comma-separated)" Style="{StaticResource FortivaFieldLabel}"/>
+                        <TextBox x:Name="TagsBox" Style="{StaticResource FortivaTextBox}"
+                                 PlaceholderText="work, personal, finance…"/>
+                    </StackPanel>
 
-                <!-- Notes -->
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Notes" FontWeight="SemiBold" FontSize="13"/>
-                    <TextBox x:Name="NotesBox" PlaceholderText="Optional notes…"
-                             AcceptsReturn="True" Height="100" TextWrapping="Wrap"/>
-                </StackPanel>
+                    <!-- Secure note toggle -->
+                    <StackPanel x:Name="SecureNotePanel" Grid.Row="3" Grid.Column="1" VerticalAlignment="Bottom" Padding="0,0,0,4">
+                        <ToggleSwitch x:Name="SecureNoteToggle" Header="This is a secure note (no password)"/>
+                    </StackPanel>
 
-                <!-- Secure note toggle -->
-                <ToggleSwitch x:Name="SecureNoteToggle" Header="This is a secure note (no password)"/>
+                    <!-- Notes -->
+                    <StackPanel x:Name="NotesPanel" Grid.Row="4" Grid.ColumnSpan="2" Spacing="6">
+                        <TextBlock Text="Notes" Style="{StaticResource FortivaFieldLabel}"/>
+                        <TextBox x:Name="NotesBox" Style="{StaticResource FortivaTextBox}"
+                                 PlaceholderText="Optional notes…"
+                                 AcceptsReturn="True" MinHeight="100" MaxHeight="200" TextWrapping="Wrap"/>
+                    </StackPanel>
 
-                <!-- Authenticator / TOTP (Enterprise) -->
-                <StackPanel x:Name="OtpSection" Spacing="12" Visibility="Collapsed">
-                    <TextBlock Text="Authenticator (TOTP)" FontWeight="SemiBold" FontSize="13"/>
-                    <TextBlock TextWrapping="WrapWholeWords" Opacity="0.7" FontSize="12">
-                        Paste the Base32 secret or otpauth:// URI from your identity provider setup.
-                    </TextBlock>
-                    <PasswordBox x:Name="TotpSecretBox" PlaceholderText="Base32 secret or otpauth:// URI"
-                                 PasswordChanged="TotpSecret_Changed"/>
-                    <Border CornerRadius="8" Padding="16"
-                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="Current code" FontSize="12" Opacity="0.7"/>
-                            <StackPanel Spacing="8">
-                                <TextBlock x:Name="OtpCodeText" FontSize="32" FontWeight="SemiBold"
-                                           FontFamily="Consolas"/>
-                            <ProgressBar x:Name="OtpTimerBar" Minimum="0" Maximum="30" Height="4"/>
-                            <Grid ColumnSpacing="8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock x:Name="OtpTimerLabel" Grid.Column="0" FontSize="11" Opacity="0.6"/>
-                                <Button Grid.Column="1" Click="CopyOtp_Click"
-                                        ToolTipService.ToolTip="Copy one-time code">
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
-                                        <FontIcon Glyph="&#xE8C8;" FontSize="14"/>
-                                        <TextBlock Text="Copy code"/>
-                                    </StackPanel>
-                                </Button>
-                            </Grid>
-                            </StackPanel>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </StackPanel>
+                    <!-- Authenticator / TOTP (Enterprise) -->
+                    <StackPanel x:Name="OtpSection" Grid.Row="5" Grid.ColumnSpan="2" Spacing="12" Visibility="Collapsed">
+                        <TextBlock Text="Authenticator (TOTP)" Style="{StaticResource FortivaFieldLabel}"/>
+                        <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaMutedText}">
+                            Paste the Base32 secret or otpauth:// URI from your identity provider setup.
+                        </TextBlock>
+                        <Grid x:Name="OtpGrid" ColumnSpacing="24" RowSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition x:Name="OtpCol0" Width="*" MinWidth="240"/>
+                                <ColumnDefinition x:Name="OtpCol1" Width="*" MinWidth="240"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <PasswordBox x:Name="TotpSecretBox" Style="{StaticResource FortivaPasswordBox}"
+                                         MinHeight="48" FontSize="14"
+                                         PlaceholderText="Base32 secret or otpauth:// URI"
+                                         PasswordChanged="TotpSecret_Changed"/>
+                            <Border x:Name="OtpPreviewBorder" Grid.Column="1" Style="{StaticResource FortivaMonoPreview}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Current code" Style="{StaticResource FortivaMutedText}"/>
+                                    <TextBlock x:Name="OtpCodeText" FontSize="32" FontWeight="SemiBold"
+                                               FontFamily="Consolas"/>
+                                    <ProgressBar x:Name="OtpTimerBar" Minimum="0" Maximum="30" Height="4"/>
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock x:Name="OtpTimerLabel" Grid.Column="0" Style="{StaticResource FortivaMutedText}"/>
+                                        <Button Grid.Column="1" Click="CopyOtp_Click"
+                                                ToolTipService.ToolTip="Copy one-time code">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <FontIcon Glyph="&#xE8C8;" FontSize="14"/>
+                                                <TextBlock Text="Copy code"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+            </Border>
         </ScrollViewer>
 
         <!-- Footer actions -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
             <Button Content="Cancel" Click="Back_Click"/>
-            <Button x:Name="SaveBtn" Content="Save" Style="{StaticResource FortivaAccentButton}" Click="Save_Click"/>
+            <Button x:Name="SaveBtn" Content="Save" Style="{StaticResource FortivaAccentButton}"
+                    ToolTipService.ToolTip="Save entry (Ctrl+S)" Click="Save_Click"/>
         </StackPanel>
     </Grid>
 </Page>

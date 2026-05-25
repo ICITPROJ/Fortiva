@@ -278,7 +278,12 @@ public sealed class VaultSession : IDisposable
 
     public void SuppressAutoLock() => Interlocked.Increment(ref _autoLockSuppressCount);
 
-    public void ResumeAutoLock() => Interlocked.Decrement(ref _autoLockSuppressCount);
+    public void ResumeAutoLock()
+    {
+        Interlocked.Decrement(ref _autoLockSuppressCount);
+        if (Volatile.Read(ref _autoLockSuppressCount) < 0)
+            Interlocked.Exchange(ref _autoLockSuppressCount, 0);
+    }
 
     public bool IsAutoLockSuppressed => Volatile.Read(ref _autoLockSuppressCount) > 0;
 

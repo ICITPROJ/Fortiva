@@ -15,7 +15,6 @@ public sealed partial class PasswordGeneratorPage : Page
     {
         InitializeComponent();
         _clipboard = new ClipboardService(_vm.Policy, _vm.PersonalSettings.ClipboardClearSeconds, _vm.LogPolicyViolation);
-        _vm.ThemeChanged += OnThemeChanged;
     }
 
     private void OnThemeChanged() => _panel?.ApplyThemeResources();
@@ -23,11 +22,12 @@ public sealed partial class PasswordGeneratorPage : Page
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        _vm.ThemeChanged += OnThemeChanged;
         _clipboard.RefreshPolicy(_vm.Policy, _vm.PersonalSettings.ClipboardClearSeconds);
 
         if (_panel is null)
         {
-            _panel = new PasswordGeneratorPanel(_vm);
+            _panel = new PasswordGeneratorPanel(_vm, hostMode: PasswordGeneratorHostMode.Page);
             GeneratorHost.Children.Add(_panel.Root);
         }
         else
@@ -38,29 +38,44 @@ public sealed partial class PasswordGeneratorPage : Page
         StatusBar.IsOpen = false;
     }
 
+    protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        _vm.ThemeChanged -= OnThemeChanged;
+    }
+
     private void Regenerate_Click(object sender, RoutedEventArgs e)
     {
         _panel?.Regenerate();
         StatusBar.IsOpen = false;
     }
 
-    private void Copy_Click(object sender, RoutedEventArgs e)
+    private void CopyPassword_Click(object sender, RoutedEventArgs e)
     {
         if (_panel is null || string.IsNullOrEmpty(_panel.CurrentPassword))
             return;
 
-        try
+        _clipboard.CopyPassword(_panel.CurrentPassword);
+        StatusBar.Message = "Password copied to clipboard.";
+        StatusBar.Severity = InfoBarSeverity.Success;
+        StatusBar.IsOpen = true;
+    }
+
+    /// <summary>Same as dialog primary — create entry with generated password.</summary>
+    private void UsePassword_Click(object sender, RoutedEventArgs e)
+    {
+        if (_panel is null || string.IsNullOrEmpty(_panel.CurrentPassword))
+            return;
+
+        if (_vm.IsReadOnly)
         {
-            _clipboard.CopyPassword(_panel.CurrentPassword);
-            _vm.ResetAutoLock();
-            StatusBar.Message = "Password copied. Clipboard will clear automatically.";
+            StatusBar.Message = "Vault is read-only.";
+            StatusBar.Severity = InfoBarSeverity.Warning;
             StatusBar.IsOpen = true;
+            return;
         }
-        catch (InvalidOperationException ex)
-        {
-            StatusBar.Message = ex.Message;
-            StatusBar.Severity = InfoBarSeverity.Error;
-            StatusBar.IsOpen = true;
-        }
+
+        NavigationService.Current.Navigate<EntryPage>(
+            new EntryDraft { Password = _panel.CurrentPassword }, animate: true);
     }
 }

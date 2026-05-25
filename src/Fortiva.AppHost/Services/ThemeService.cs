@@ -99,7 +99,11 @@ public static class ThemeService
             navView.RequestedTheme = theme;
 
         if (FindDescendant<Frame>(root) is { } frame)
+        {
             frame.RequestedTheme = theme;
+            if (frame.Content is FrameworkElement page)
+                page.RequestedTheme = theme;
+        }
     }
 
     private static void EnsureSystemThemeHook(FrameworkElement root)

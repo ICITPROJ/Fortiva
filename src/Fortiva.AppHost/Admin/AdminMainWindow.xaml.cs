@@ -4,12 +4,10 @@ using Fortiva.Core.Admin;
 using Fortiva.Core.Audit;
 using Fortiva.Core.Licensing;
 using Fortiva.Core.Policy;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.Storage.Pickers;
-using Windows.UI;
 
 namespace Fortiva.AppHost.Admin;
 
@@ -35,6 +33,7 @@ public sealed partial class AdminMainWindow : Page
         LoadLicenseStatus();
         LoadPolicyToUI();
         LoadSharedVaults();
+        BrandAssets.ApplyLogo(LicenseLogo, _vm.PreferParanoiaMode);
         MainTabView.SelectionChanged += MainTabView_SelectionChanged;
 #if !DEBUG
         GenerateTrialBtn.Visibility = Visibility.Collapsed;
@@ -55,14 +54,14 @@ public sealed partial class AdminMainWindow : Page
         if (lic is null)
         {
             LicenseStatus.Text = "No license installed";
-            LicenseStatusBanner.Background = new SolidColorBrush(Color.FromArgb(30, 200, 80, 0));
+            LicenseStatusBanner.Background = FortivaThemeResources.StatusWarning;
             return;
         }
         var valid = LicenseVerifier.IsValidAndNotExpired(lic);
         LicenseStatus.Text = valid ? $"Active - {lic.Document.CompanyName}" : "Invalid or expired";
         LicenseStatusBanner.Background = valid
-            ? new SolidColorBrush(Color.FromArgb(30, 0, 180, 80))
-            : new SolidColorBrush(Color.FromArgb(30, 200, 50, 50));
+            ? FortivaThemeResources.StatusSuccess
+            : FortivaThemeResources.StatusError;
         LicenseDetail.Text =
             $"Edition:  {lic.Document.Edition}\n" +
             $"Company:  {lic.Document.CompanyName}\n" +
@@ -249,6 +248,7 @@ public sealed partial class AdminMainWindow : Page
             CloseButtonText = "Cancel",
             XamlRoot = Content.XamlRoot
         };
+        FortivaDialogs.Configure(dlg, Content.XamlRoot);
         if (await dlg.ShowAsync() != ContentDialogResult.Primary) return;
         var cfg = SharedVaultStore.Load() ?? new SharedVaultConfiguration();
         cfg.Vaults.Add(new SharedVaultDefinition { Id = Guid.NewGuid(), Name = nameBox.Text, StoragePath = pathBox.Text });

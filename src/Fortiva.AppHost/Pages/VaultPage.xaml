@@ -5,7 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="Transparent">
 
-    <Grid>
+    <Grid RowSpacing="0">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
@@ -13,39 +13,73 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Header toolbar -->
-        <Border Style="{StaticResource FortivaToolbar}">
-            <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="My Vault" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center"/>
-            <AutoSuggestBox x:Name="SearchBox" Grid.Column="1"
-                            PlaceholderText="Search entries…"
-                            MinWidth="180" MaxWidth="300" Width="240" Margin="8,0"
-                            QueryIcon="Find"
-                            TextChanged="SearchBox_TextChanged"/>
-            <Button Grid.Column="2" Margin="0,0,8,0"
-                    ToolTipService.ToolTip="Open password generator" Click="GeneratePassword_Click">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <FontIcon Glyph="&#xE9D5;" FontSize="14"/>
-                    <TextBlock Text="Password generator"/>
-                </StackPanel>
-            </Button>
-            <Button Grid.Column="3" Style="{StaticResource FortivaAccentButton}" Click="AddEntry_Click">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <FontIcon Glyph="&#xE710;" FontSize="14"/>
-                    <TextBlock Text="Add entry"/>
-                </StackPanel>
-            </Button>
-            </Grid>
+        <!-- Hero + actions -->
+        <Border Grid.Row="0" Style="{StaticResource FortivaToolbar}" Padding="24,20,24,16">
+            <StackPanel Spacing="16">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="4" VerticalAlignment="Center">
+                        <TextBlock Text="My Vault" Style="{StaticResource FortivaHeroTitle}"/>
+                        <TextBlock x:Name="VaultSubtitle" Style="{StaticResource FortivaMutedText}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button ToolTipService.ToolTip="Generate a password (Ctrl+G)" Click="GeneratePassword_Click"
+                                Style="{StaticResource FortivaSecondaryButton}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE9D5;" FontSize="14"/>
+                                <TextBlock Text="Generate"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Click="AddEntry_Click" ToolTipService.ToolTip="Quick add entry (Ctrl+N)"
+                                Style="{StaticResource FortivaAccentButton}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE710;" FontSize="14"/>
+                                <TextBlock Text="Add entry"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <AutoSuggestBox x:Name="SearchBox"
+                                    PlaceholderText="Search by title, username, URL, or tag…"
+                                    QueryIcon="Find"
+                                    TextChanged="SearchBox_TextChanged"/>
+
+                    <Border Grid.Column="1" Style="{StaticResource FortivaVaultStatChip}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE734;" FontSize="12" Opacity="0.8"/>
+                            <TextBlock x:Name="StatFavorites" Style="{StaticResource FortivaMutedText}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="2" Style="{StaticResource FortivaVaultStatChip}"
+                            ToolTipService.ToolTip="Entries with authenticator (TOTP)">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE192;" FontSize="12" Opacity="0.8"/>
+                            <TextBlock x:Name="StatTotp" Style="{StaticResource FortivaMutedText}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="3" Style="{StaticResource FortivaVaultStatChip}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="&#xE72E;" FontSize="12" Opacity="0.8"/>
+                            <TextBlock x:Name="StatVaultTrust" Style="{StaticResource FortivaMutedText}"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </StackPanel>
         </Border>
 
         <!-- Read-only warning -->
-        <InfoBar x:Name="ReadOnlyBar" Grid.Row="1"
+        <InfoBar x:Name="ReadOnlyBar" Grid.Row="1" Margin="24,12,24,0"
                  Title="Read-only vault"
                  Message="A potential rollback was detected. The vault is open in read-only mode."
                  Severity="Warning" IsOpen="False" IsClosable="False">
@@ -54,68 +88,153 @@
             </InfoBar.ActionButton>
         </InfoBar>
 
-        <!-- Entry list — uses {Binding} directly against VaultEntryViewModel -->
-        <ListView x:Name="EntryList" Grid.Row="2"
-                  SelectionMode="Single"
-                  SelectionChanged="EntryList_SelectionChanged">
-            <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
-                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                    <Setter Property="Padding" Value="12,8"/>
-                </Style>
-            </ListView.ItemContainerStyle>
-            <ListView.ItemTemplate>
-                <DataTemplate>
-                    <Grid ColumnSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="40"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
+        <!-- Entry grid -->
+        <Grid Grid.Row="2" Margin="24,16,24,8">
+            <GridView x:Name="EntryGrid"
+                      SelectionMode="Single"
+                      IsItemClickEnabled="True"
+                      ItemClick="EntryGrid_ItemClick">
+                <GridView.ItemContainerStyle>
+                    <Style TargetType="GridViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+                        <Setter Property="Margin" Value="0,0,12,12"/>
+                        <Setter Property="Padding" Value="0"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="MinWidth" Value="320"/>
+                        <Setter Property="MaxWidth" Value="520"/>
+                    </Style>
+                </GridView.ItemContainerStyle>
+                <GridView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="0"/>
+                    </ItemsPanelTemplate>
+                </GridView.ItemsPanel>
+                <GridView.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource FortivaVaultCard}" HorizontalAlignment="Stretch" MinWidth="320">
+                            <Grid ColumnSpacing="12" RowSpacing="4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
 
-                        <!-- Initial avatar -->
-                        <Border Width="36" Height="36" CornerRadius="8"
-                                Background="{ThemeResource AccentFillColorTertiaryBrush}">
-                            <TextBlock Text="{Binding Initial}" FontSize="16" FontWeight="SemiBold"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"/>
+                                <Border Grid.RowSpan="2" Width="44" Height="44" CornerRadius="10"
+                                        VerticalAlignment="Top"
+                                        Background="{ThemeResource FortivaGlowPanelGradientBrush}"
+                                        BorderBrush="{ThemeResource FortivaGlassBorderBrush}"
+                                        BorderThickness="1">
+                                    <TextBlock Text="{Binding Initial}" FontSize="18" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Foreground="{ThemeResource FortivaAccentBrush}"/>
+                                </Border>
+
+                                <StackPanel Grid.Column="1" MinWidth="0" VerticalAlignment="Center" Spacing="2">
+                                    <Grid ColumnSpacing="6" MinWidth="0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold"
+                                                   FontSize="15" TextTrimming="CharacterEllipsis"
+                                                   ToolTipService.ToolTip="{Binding Title}"/>
+                                        <FontIcon Grid.Column="1" Glyph="&#xE734;" FontSize="11"
+                                                  Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVisibilityConverter}}"
+                                                  Foreground="{ThemeResource FortivaAccentBrush}"/>
+                                    </Grid>
+                                    <TextBlock Text="Secure note" Style="{StaticResource FortivaMutedText}"
+                                               Visibility="{Binding IsSecureNoteEntry, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                    <TextBlock Text="{Binding UsernameLine}" Style="{StaticResource FortivaMutedText}"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTipService.ToolTip="{Binding UsernameLine}"
+                                               Visibility="{Binding HasUsernameLine, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                    <TextBlock Text="{Binding DetailLine}" Style="{StaticResource FortivaMutedText}"
+                                               FontSize="11" Opacity="0.85"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTipService.ToolTip="{Binding DetailLine}"
+                                               Visibility="{Binding HasDetailLine, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                    <TextBlock Text="No username or URL" Style="{StaticResource FortivaMutedText}"
+                                               Visibility="{Binding HasMissingDetails, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2" Grid.RowSpan="2" Orientation="Horizontal" Spacing="0"
+                                            VerticalAlignment="Top">
+                                    <Button Tag="{Binding}"
+                                            Visibility="{Binding HasTotp, Converter={StaticResource BoolToVisibilityConverter}}"
+                                            ToolTipService.ToolTip="Copy authenticator code"
+                                            Background="Transparent" BorderThickness="0"
+                                            Width="34" Height="34" Padding="0"
+                                            Click="CopyOtp_Click">
+                                        <FontIcon Glyph="&#xE192;" FontSize="13"/>
+                                    </Button>
+                                    <Button Tag="{Binding}"
+                                            ToolTipService.ToolTip="Copy username"
+                                            Background="Transparent" BorderThickness="0"
+                                            Width="34" Height="34" Padding="0"
+                                            Click="CopyUsername_Click">
+                                        <FontIcon Glyph="&#xE779;" FontSize="13"/>
+                                    </Button>
+                                    <Button Tag="{Binding}"
+                                            ToolTipService.ToolTip="Copy password"
+                                            Background="Transparent" BorderThickness="0"
+                                            Width="34" Height="34" Padding="0"
+                                            Click="CopyPassword_Click">
+                                        <FontIcon Glyph="&#xE8C8;" FontSize="13"/>
+                                    </Button>
+                                </StackPanel>
+
+                                <StackPanel Grid.Row="1" Grid.Column="1" MinWidth="0"
+                                            Orientation="Horizontal" Spacing="6" Margin="0,6,0,0"
+                                            Visibility="{Binding HasTagChip, Converter={StaticResource BoolToVisibilityConverter}}">
+                                    <Border Style="{StaticResource FortivaTagChip}" MaxWidth="280">
+                                        <TextBlock Text="{Binding TagChip}" FontSize="11"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTipService.ToolTip="{Binding TagChip}"
+                                                   Foreground="{ThemeResource FortivaBodyBrush}"/>
+                                    </Border>
+                                    <Border Style="{StaticResource FortivaTagChip}"
+                                            Visibility="{Binding HasExtraTags, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <TextBlock Text="{Binding ExtraTagsLabel}" FontSize="11"
+                                                   Foreground="{ThemeResource FortivaMutedBrush}"/>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
                         </Border>
+                    </DataTemplate>
+                </GridView.ItemTemplate>
+            </GridView>
 
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="14"
-                                       TextTrimming="CharacterEllipsis"/>
-                            <TextBlock Text="{Binding Username}" FontSize="12" Opacity="0.6"
-                                       TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
-
-                        <!-- Copy password — Tag carries the whole VM so handler can access Password -->
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
-                            <Button Tag="{Binding}" Visibility="{Binding HasTotp, Converter={StaticResource BoolToVisibilityConverter}}"
-                                    ToolTipService.ToolTip="Copy authenticator code"
-                                    Background="Transparent" BorderThickness="0"
-                                    Width="36" Height="36" Padding="0"
-                                    Click="CopyOtp_Click">
-                                <FontIcon Glyph="&#xE192;" FontSize="14"/>
-                            </Button>
-                            <Button Tag="{Binding}"
-                                    ToolTipService.ToolTip="Copy password"
-                                    Background="Transparent" BorderThickness="0"
-                                    Width="36" Height="36" Padding="0"
-                                    Click="CopyPassword_Click">
-                                <FontIcon Glyph="&#xE8C8;" FontSize="14"/>
-                            </Button>
-                        </StackPanel>
-                    </Grid>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
+            <Border x:Name="EmptyState" Visibility="Collapsed"
+                    Style="{StaticResource FortivaGlassPanelGlow}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Padding="40,36" MaxWidth="480">
+                <StackPanel Spacing="14" HorizontalAlignment="Center">
+                    <FontIcon Glyph="&#xE8D7;" FontSize="48"
+                              Foreground="{ThemeResource FortivaAccentBrush}" Opacity="0.85"
+                              HorizontalAlignment="Center"/>
+                    <TextBlock Text="Your vault is ready" FontSize="22" FontWeight="SemiBold"
+                               HorizontalAlignment="Center"
+                               Foreground="{ThemeResource FortivaHeadingBrush}"/>
+                    <TextBlock Text="Add your first login — passwords stay on this device, encrypted and offline."
+                               TextWrapping="WrapWholeWords" TextAlignment="Center"
+                               Style="{StaticResource FortivaBodyText}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center" Margin="0,8,0,0">
+                        <Button Style="{StaticResource FortivaAccentButton}" Click="AddEntry_Click" Content="Quick add entry"/>
+                        <Button Style="{StaticResource FortivaSecondaryButton}" Click="AddEntryFull_Click" Content="Full form…"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
 
         <!-- Status bar -->
-        <Border Grid.Row="3" Padding="16,6"
-                Background="{ThemeResource FortivaAcrylicBrush}"
-                BorderBrush="{ThemeResource FortivaGlassBorderBrush}"
-                BorderThickness="0,1,0,0">
-            <TextBlock x:Name="CountText" FontSize="12" Opacity="0.6"/>
+        <Border Grid.Row="3" Style="{StaticResource FortivaToolbar}" Padding="24,8">
+            <TextBlock x:Name="CountText" Style="{StaticResource FortivaMutedText}"/>
         </Border>
     </Grid>
 </Page>

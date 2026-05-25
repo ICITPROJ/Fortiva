@@ -5,6 +5,7 @@ using Fortiva.Core.Password;
 using Fortiva.Core.Vault;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.System;
 using Windows.UI;
@@ -25,6 +26,60 @@ public sealed partial class EntryPage : Page
     {
         InitializeComponent();
         _clipboard = new ClipboardService(_vm.Policy, _vm.PersonalSettings.ClipboardClearSeconds, _vm.LogPolicyViolation);
+    }
+
+    private void Page_SizeChanged(object sender, SizeChangedEventArgs e)
+        => ApplyResponsiveLayout(e.NewSize.Width);
+
+    private void ApplyResponsiveLayout(double pageWidth)
+    {
+        var narrow = pageWidth < 720;
+
+        FormCol1.Width = narrow ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+
+        Grid.SetColumn(TitlePanel, 0);
+        Grid.SetColumnSpan(TitlePanel, 2);
+
+        Grid.SetColumn(UsernamePanel, 0);
+        Grid.SetRow(UsernamePanel, 1);
+
+        Grid.SetColumn(UrlPanel, narrow ? 0 : 1);
+        Grid.SetRow(UrlPanel, narrow ? 2 : 1);
+
+        Grid.SetColumn(PasswordPanel, 0);
+        Grid.SetRow(PasswordPanel, narrow ? 3 : 2);
+        Grid.SetColumnSpan(PasswordPanel, 2);
+
+        Grid.SetColumn(TagsPanel, 0);
+        Grid.SetRow(TagsPanel, narrow ? 4 : 3);
+
+        Grid.SetColumn(SecureNotePanel, narrow ? 0 : 1);
+        Grid.SetRow(SecureNotePanel, narrow ? 5 : 3);
+
+        Grid.SetColumn(NotesPanel, 0);
+        Grid.SetRow(NotesPanel, narrow ? 6 : 4);
+        Grid.SetColumnSpan(NotesPanel, 2);
+
+        Grid.SetColumn(OtpSection, 0);
+        Grid.SetRow(OtpSection, narrow ? 7 : 5);
+        Grid.SetColumnSpan(OtpSection, 2);
+
+        OtpCol1.Width = narrow ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
+        Grid.SetColumn(TotpSecretBox, 0);
+        Grid.SetRow(TotpSecretBox, 0);
+        Grid.SetColumn(OtpPreviewBorder, narrow ? 0 : 1);
+        Grid.SetRow(OtpPreviewBorder, narrow ? 1 : 0);
+    }
+
+    protected override void OnKeyDown(KeyRoutedEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Handled) return;
+        if (e.Key == VirtualKey.S && KeyboardHelpers.IsControlDown())
+        {
+            e.Handled = true;
+            Save_Click(SaveBtn, new RoutedEventArgs());
+        }
     }
 
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
@@ -54,13 +109,28 @@ public sealed partial class EntryPage : Page
                 : TotpSecretNormalizer.Normalize(entry.TotpSecret);
             UpdateStrength(entry.Password);
         }
+        else if (e.Parameter is EntryDraft draft)
+        {
+            ResetForNewEntry();
+            if (!string.IsNullOrWhiteSpace(draft.Title)) TitleBox.Text = draft.Title;
+            if (!string.IsNullOrWhiteSpace(draft.Username)) UsernameBox.Text = draft.Username;
+            if (!string.IsNullOrWhiteSpace(draft.Url)) UrlBox.Text = draft.Url;
+            if (!string.IsNullOrWhiteSpace(draft.Password))
+            {
+                PasswordBox.Password = draft.Password;
+                UpdateStrength(draft.Password);
+            }
+            TitleBox.Focus(FocusState.Programmatic);
+        }
         else
         {
             ResetForNewEntry();
+            TitleBox.Focus(FocusState.Programmatic);
         }
 
         ApplyReadOnlyState();
         ConfigureOtpSection();
+        ApplyResponsiveLayout(ActualWidth);
     }
 
     protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
@@ -169,7 +239,9 @@ public sealed partial class EntryPage : Page
         SecureNoteToggle.IsOn = false;
         TotpSecretBox.Password = "";
         _normalizedTotpSecret = null;
-        UpdateStrength("");
+        var generated = _vm.GeneratePassword(PasswordGeneratorOptions.Default);
+        PasswordBox.Password = generated;
+        UpdateStrength(generated);
     }
 
     private void ApplyReadOnlyState()
@@ -246,7 +318,17 @@ public sealed partial class EntryPage : Page
 
     private void CopyPassword_Click(object sender, RoutedEventArgs e)
     {
-        if (!string.IsNullOrEmpty(PasswordBox.Password)) _clipboard.CopyPassword(PasswordBox.Password);
+        if (string.IsNullOrEmpty(PasswordBox.Password)) return;
+        try
+        {
+            _clipboard.CopyPassword(PasswordBox.Password);
+            _vm.ResetAutoLock();
+            _vm.StatusMessage = "Password copied — clipboard will clear automatically.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            _ = ShowErrorAsync(ex.Message);
+        }
     }
 
     private async void VisitUrl_Click(object sender, RoutedEventArgs e)
@@ -319,6 +401,7 @@ public sealed partial class EntryPage : Page
             CloseButtonText = "Cancel",
             XamlRoot = Content.XamlRoot
         };
+        FortivaDialogs.Configure(dlg, Content.XamlRoot);
         if (await dlg.ShowAsync() == ContentDialogResult.Primary)
         {
             _vm.DeleteEntry(_existing.Id);
@@ -338,6 +421,7 @@ public sealed partial class EntryPage : Page
             CloseButtonText = "OK",
             XamlRoot = Content.XamlRoot
         };
+        FortivaDialogs.Configure(dlg, Content.XamlRoot);
         await dlg.ShowAsync();
     }
 }

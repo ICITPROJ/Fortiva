@@ -13,6 +13,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
     private readonly WindowsHelloKeyProtector _helloProtector;
     private bool _rollbackConfirmRequired;
     private bool _helloCheckComplete;
+    private bool _bridgeUnlockMode;
 
     public UnlockPage()
     {
@@ -21,6 +22,18 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
             FortivaPaths.GetHelloDataDirectory(_vm.IsEnterprise),
             _vm.IsEnterprise);
         LoadLogo();
+        _vm.BrandAppearanceChanged += OnBrandAppearanceChanged;
+    }
+
+    private void OnBrandAppearanceChanged()
+        => RefreshBrandLogo();
+
+    protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        _vm.BrandAppearanceChanged -= OnBrandAppearanceChanged;
+        if (_bridgeUnlockMode && !_vm.IsUnlocked)
+            _vm.CancelBridgeUnlockIfPending();
     }
 
     private bool HelloMandatory =>
@@ -29,6 +42,8 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+
+        _bridgeUnlockMode = e.Parameter is BridgeUnlockNavigationContext;
 
         if (_vm.IsUnlocked)
         {
@@ -96,6 +111,13 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
             else
             {
                 SubtitleText.Text = "Enter your master password to continue.";
+            }
+
+            if (_bridgeUnlockMode)
+            {
+                HeadingText.Text = "Unlock for browser autofill";
+                SubtitleText.Text = "Your browser extension needs credentials for this site. " +
+                                    "Unlock with your master password or Windows Hello, then return to the browser.";
             }
 
             _helloCheckComplete = true;

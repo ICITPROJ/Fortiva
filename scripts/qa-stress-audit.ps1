@@ -2,6 +2,7 @@
 param(
     [int]$SmokeIterations = 30,
     [int]$InstallCycles = 3,
+    [string]$Version = "1.0.0",
     [switch]$SkipBuild,
     [switch]$SkipInstall
 )
@@ -35,7 +36,7 @@ function Step($name, [scriptblock]$action) {
 }
 
 $exe = Join-Path $root 'dist\Fortiva.Personal\Fortiva.Personal.exe'
-$installer = Join-Path $root 'dist\installers\FortivaPersonal-1.0.0-Setup.exe'
+$installer = Join-Path $root "dist\installers\FortivaPersonal-$Version-Setup.exe"
 . (Join-Path $PSScriptRoot 'FortivaPersonalPaths.ps1')
 
 Step "Release build" {
@@ -58,7 +59,7 @@ Step "Personal installer compile" {
     if ($LASTEXITCODE -ne 0) { throw "fetch-installer-prerequisites failed" }
     $iscc = "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
     if (-not (Test-Path $iscc)) { throw "ISCC not installed" }
-    & $iscc @(Get-IsccArgs) (Join-Path $root 'packaging\installer\FortivaPersonal.iss') | Out-Null
+    & $iscc @(Get-IsccArgs) "/DAppVersion=$Version" (Join-Path $root 'packaging\installer\FortivaPersonal.iss') | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
     if (-not (Test-Path $installer)) { throw "Installer missing" }
 }
@@ -68,11 +69,11 @@ Step "Enterprise + Admin installer compile" {
     $iscc = "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
     if (-not (Test-Path $iscc)) { throw "ISCC not installed" }
     foreach ($iss in @('FortivaEnterprise.iss', 'FortivaAdmin.iss')) {
-        & $iscc @(Get-IsccArgs) (Join-Path $root "packaging\installer\$iss") | Out-Null
+        & $iscc @(Get-IsccArgs) "/DAppVersion=$Version" (Join-Path $root "packaging\installer\$iss") | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "ISCC failed for $iss" }
     }
-    $ent = Join-Path $root 'dist\installers\FortivaEnterprise-1.0.0-Setup.exe'
-    $adm = Join-Path $root 'dist\installers\FortivaAdmin-1.0.0-Setup.exe'
+    $ent = Join-Path $root "dist\installers\FortivaEnterprise-$Version-Setup.exe"
+    $adm = Join-Path $root "dist\installers\FortivaAdmin-$Version-Setup.exe"
     if (-not (Test-Path $ent)) { throw "Enterprise installer missing" }
     if (-not (Test-Path $adm)) { throw "Admin installer missing" }
 }
@@ -110,11 +111,29 @@ Step "Browser bridge publish audit" {
 
 Step "Browser extension staging audit" {
     $extDir = Join-Path $root 'dist\extension'
-    $required = @('manifest.json', 'background.js', 'content.js', 'popup.html', 'popup.js')
+    $required = @('manifest.json', 'background.js', 'popup.html', 'popup.js')
     if (-not (Test-Path $extDir)) { throw "dist\extension missing - rebuild required" }
     foreach ($f in $required) {
         $p = Join-Path $extDir $f
         if (-not (Test-Path $p)) { throw "Extension file missing: $f" }
+    }
+    if (Test-Path (Join-Path $extDir 'content.js')) {
+        throw "content.js must not be shipped — fill is on-demand via popup only"
+    }
+    $manifest = Get-Content (Join-Path $extDir 'manifest.json') -Raw | ConvertFrom-Json
+    if ($null -ne $manifest.content_scripts -and $manifest.content_scripts.Count -gt 0) {
+        throw "Extension must not register passive content_scripts (no Dashlane-style autofill)"
+    }
+    $manifestJson = Get-Content (Join-Path $extDir 'manifest.json') -Raw
+    if ($manifestJson -notmatch '"scripting"') {
+        throw "manifest.json must include scripting permission for on-demand fill"
+    }
+    $popupJs = Get-Content (Join-Path $extDir 'popup.js') -Raw
+    if ($popupJs -notmatch 'executeScript') {
+        throw "popup.js must fill via chrome.scripting.executeScript only"
+    }
+    if ($popupJs -match "addEventListener\s*\(\s*['\`"]focus") {
+        throw "popup.js must not listen for focus events on page fields"
     }
     $bg = Get-Content (Join-Path $extDir 'background.js') -Raw
     if ($bg -notmatch 'browserbridge\.personal' -or $bg -notmatch 'browserbridge\.enterprise') {
@@ -137,11 +156,20 @@ Step "Published output asset audit" {
         $p = Join-Path $root "dist\Fortiva.Personal\Assets\$a"
         if (-not (Test-Path $p)) { throw "Missing in publish: $a" }
     }
+    $bundledExt = Join-Path $root 'dist\Fortiva.Personal\extension\manifest.json'
+    $bundledBridge = Join-Path $root 'dist\Fortiva.Personal\BrowserBridge\Fortiva.BrowserBridge.Host.exe'
+    if (-not (Test-Path $bundledExt)) { throw "Personal publish missing bundled extension" }
+    if (-not (Test-Path $bundledBridge)) { throw "Personal publish missing bundled BrowserBridge" }
 }
 
 Step "Core unit tests (full suite)" {
     dotnet test (Join-Path $root 'tests\Fortiva.Core.Tests\Fortiva.Core.Tests.csproj') --verbosity minimal
     if ($LASTEXITCODE -ne 0) { throw "unit tests failed" }
+}
+
+Step "AppHost unit tests" {
+    dotnet test (Join-Path $root 'tests\Fortiva.AppHost.Tests\Fortiva.AppHost.Tests.csproj') -c Release --verbosity minimal
+    if ($LASTEXITCODE -ne 0) { throw "AppHost tests failed" }
 }
 
 Step "Script tests" {
