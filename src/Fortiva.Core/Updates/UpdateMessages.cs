@@ -8,6 +8,9 @@ public static class UpdateMessages
     public const string ManifestUnavailable =
         "Could not verify updates right now. Check your internet connection and try again later.";
 
+    public static string ManifestUnavailableWithManualInstall =>
+        $"{ManifestUnavailable} If this keeps happening, install the latest build once from {ReleaseManifestUrls.ReleasesLatestPage}.";
+
     public static string ForCheckFailure(Exception ex)
     {
         var root = Unwrap(ex);

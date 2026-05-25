@@ -69,8 +69,14 @@ public static class ReleaseManifestUrls
 
 
     public static string PersonalLatest =>
-
         $"https://github.com/{GitHubRepository}/releases/latest/download/{ManifestFileName}";
+
+    /// <summary>Fallback manifest on main (no release-asset CDN redirect).</summary>
+    public static string PersonalLatestRaw =>
+        $"https://raw.githubusercontent.com/{GitHubRepository}/main/packaging/releases/{ManifestFileName}";
+
+    public static string ReleasesLatestPage =>
+        $"https://github.com/{GitHubRepository}/releases/latest";
 
 
 

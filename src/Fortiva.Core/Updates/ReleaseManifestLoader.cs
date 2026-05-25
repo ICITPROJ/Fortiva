@@ -14,18 +14,32 @@ public sealed class ReleaseManifestLoader
         string? bundledManifestPath = null,
         CancellationToken cancellationToken = default)
     {
-        var url = ReleaseManifestUrls.ResolvePersonalLatest(manifestUrl);
-        try
+        var primary = ReleaseManifestUrls.ResolvePersonalLatest(manifestUrl);
+        foreach (var candidate in CandidateManifestUrls(primary))
         {
-            UpdateUrlPolicy.ValidateManifestUrl(url);
-            var json = await SecureUpdateHttp.GetStringAsync(url, cancellationToken).ConfigureAwait(false);
-            return (Deserialize(json), FromNetwork: true);
+            try
+            {
+                UpdateUrlPolicy.ValidateManifestUrl(candidate);
+                var json = await SecureUpdateHttp.GetStringAsync(candidate, cancellationToken).ConfigureAwait(false);
+                var manifest = Deserialize(json);
+                if (manifest is not null && manifest.IsValid)
+                    return (manifest, FromNetwork: true);
+            }
+            catch
+            {
+                /* try next URL */
+            }
         }
-        catch
-        {
-            var bundled = TryLoadBundled(bundledManifestPath);
-            return bundled is null ? (null, false) : (bundled, FromNetwork: false);
-        }
+
+        var bundled = TryLoadBundled(bundledManifestPath);
+        return bundled is null ? (null, false) : (bundled, FromNetwork: false);
+    }
+
+    private static IEnumerable<string> CandidateManifestUrls(string primary)
+    {
+        yield return primary;
+        if (!string.Equals(primary, ReleaseManifestUrls.PersonalLatestRaw, StringComparison.OrdinalIgnoreCase))
+            yield return ReleaseManifestUrls.PersonalLatestRaw;
     }
 
     public ReleaseManifest? TryLoadBundled(string? bundledManifestPath)

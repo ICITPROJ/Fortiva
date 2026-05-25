@@ -18,6 +18,8 @@ public sealed class UpdateUrlPolicyTests
 
     [InlineData("https://release-assets.githubusercontent.com/github-production-release-asset/1247749405/abc/latest.personal.json")]
 
+    [InlineData("https://raw.githubusercontent.com/ICITPROJ/Fortiva/main/packaging/releases/latest.personal.json")]
+
     [InlineData("https://studio.icmclab.cloud/fortiva/releases/latest.personal.json")]
 
     public void ValidateManifestUrl_accepts_allowed_urls(string url)

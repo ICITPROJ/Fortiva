@@ -42,7 +42,7 @@ public sealed class UpdateChecker
             {
                 manifest = _loader.TryLoadBundled(resolved);
                 if (manifest is null || !manifest.IsValid)
-                    return Fail(UpdateMessages.ManifestUnavailable);
+                    return Fail(UpdateMessages.ManifestUnavailableWithManualInstall);
 
                 return ReleaseManifestEvaluator.Evaluate(manifest, currentVersion, fromNetwork: false);
             }
@@ -53,11 +53,11 @@ public sealed class UpdateChecker
                 cancellationToken).ConfigureAwait(false);
 
             if (manifest is null || !manifest.IsValid)
-                return Fail(UpdateMessages.ManifestUnavailable);
+                return Fail(UpdateMessages.ManifestUnavailableWithManualInstall);
 
             // Shipped placeholder manifest must not satisfy update checks when GitHub is unreachable.
             if (!fromNetwork)
-                return Fail(UpdateMessages.ManifestUnavailable);
+                return Fail(UpdateMessages.ManifestUnavailableWithManualInstall);
 
             return ReleaseManifestEvaluator.Evaluate(manifest, currentVersion, fromNetwork);
         }

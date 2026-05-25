@@ -61,6 +61,9 @@ public static class UpdateUrlPolicy
         if (IsAllowedGitHubReleaseCdnManifest(uri))
             return;
 
+        if (IsAllowedGitHubRawManifest(uri))
+            return;
+
         if (IsAllowedLegacyManifest(uri))
             return;
 
@@ -103,6 +106,16 @@ public static class UpdateUrlPolicy
     private static bool IsAllowedGitHubReleaseCdnManifest(Uri uri)
         => IsGitHubReleaseCdn(uri) &&
            string.Equals(ExtractGitHubAssetFileName(uri), ReleaseManifestUrls.ManifestFileName, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsAllowedGitHubRawManifest(Uri uri)
+    {
+        if (!string.Equals(uri.Host, "raw.githubusercontent.com", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        RequireHttps(uri);
+        var expectedPath = $"/{ReleaseManifestUrls.GitHubRepository}/main/packaging/releases/{ReleaseManifestUrls.ManifestFileName}";
+        return string.Equals(uri.AbsolutePath, expectedPath, StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool IsAllowedGitHubReleaseCdnInstaller(Uri uri)
         => IsGitHubReleaseCdn(uri) &&
