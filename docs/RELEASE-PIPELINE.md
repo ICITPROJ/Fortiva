@@ -2,7 +2,7 @@
 
 Automated path from **`git push origin main`** → **GitHub Release** → **Personal auto-update**.
 
-For system context see [`ARCHITECTURE.md`](ARCHITECTURE.md). For client-side update behaviour see [`UPDATE-STRATEGY.md`](UPDATE-STRATEGY.md).
+For system context see [`ARCHITECTURE.md`](ARCHITECTURE.md). For client-side update behaviour see [`UPDATE-STRATEGY.md`](UPDATE-STRATEGY.md). For how users discover and download Fortiva see [`DISTRIBUTION-MARKETING.md`](DISTRIBUTION-MARKETING.md).
 
 ---
 

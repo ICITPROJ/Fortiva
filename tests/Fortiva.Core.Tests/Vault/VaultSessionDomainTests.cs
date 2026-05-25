@@ -93,4 +93,48 @@ public class VaultSessionDomainTests : IDisposable
         var parent = session.ResolveForDomain(new CredentialRequest { Domain = "example.com" });
         Assert.False(parent.Found);
     }
+
+    [Fact]
+    public void ResolveForDomain_ReturnsTitle_AndMultipleMatches()
+    {
+        var engine = new VaultEngine(_dir, DpapiScope.CurrentUser);
+        engine.CreateVault("multi-match-test!", SecurityLevel.Standard);
+        var session = new VaultSession(_dir, DpapiScope.CurrentUser);
+        session.Unlock("multi-match-test!");
+
+        session.AddEntry(new VaultEntry
+        {
+            Title = "Work GitHub",
+            Username = "work@corp.com",
+            Password = "pw1",
+            Url = "https://github.com/login"
+        });
+        session.AddEntry(new VaultEntry
+        {
+            Title = "Personal GitHub",
+            Username = "me@home.com",
+            Password = "pw2",
+            Url = "https://github.com/login"
+        });
+
+        var multi = session.ResolveForDomain(new CredentialRequest
+        {
+            Domain = "github.com",
+            Url = "https://github.com/login"
+        });
+        Assert.False(multi.Found);
+        Assert.Equal("multiple_matches", multi.Error);
+        Assert.Equal(2, multi.Matches!.Count);
+
+        var personal = multi.Matches!.First(m => m.Title == "Personal GitHub");
+        var picked = session.ResolveForDomain(new CredentialRequest
+        {
+            Domain = "github.com",
+            Url = "https://github.com/login",
+            EntryId = personal.Id
+        });
+        Assert.True(picked.Found);
+        Assert.Equal("Personal GitHub", picked.Title);
+        Assert.Equal("me@home.com", picked.Username);
+    }
 }

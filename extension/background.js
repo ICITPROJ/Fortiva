@@ -13,19 +13,49 @@ function sendNativeMessage(message, callback, index = 0) {
       sendNativeMessage(message, callback, index + 1);
       return;
     }
-    callback(response || { found: false });
+    callback(response || null);
+  });
+}
+
+function nativeRequest(message) {
+  return new Promise((resolve) => {
+    sendNativeMessage(message, (response) => resolve(response));
   });
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message?.type !== "get_credentials") {
-    sendResponse({ found: false });
+  if (!message?.type) {
+    sendResponse(null);
     return;
   }
-  const domain = message.domain || "";
-  sendNativeMessage(
-    { command: "get_credentials", payload: { domain, url: message.url } },
-    (response) => sendResponse(response || { found: false })
-  );
+
+  if (message.type === "ping") {
+    nativeRequest({ command: "ping" }).then((response) =>
+      sendResponse(response || { ok: false, status: "setup_required" })
+    );
+    return true;
+  }
+
+  if (message.type === "list_credentials") {
+    nativeRequest({
+      command: "list_credentials",
+      payload: { domain: message.domain || "", url: message.url },
+    }).then(sendResponse);
+    return true;
+  }
+
+  if (message.type === "get_credentials") {
+    nativeRequest({
+      command: "get_credentials",
+      payload: {
+        domain: message.domain || "",
+        url: message.url,
+        entryId: message.entryId || undefined,
+      },
+    }).then(sendResponse);
+    return true;
+  }
+
+  sendResponse(null);
   return true;
 });

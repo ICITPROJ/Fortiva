@@ -1,65 +1,163 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <style>
     :root {
-      --fortiva-bg: #0a0c10;
-      --fortiva-accent: #40BCF4;
-      --fortiva-heading: #ffffff;
-      --fortiva-body: #A0AAB2;
-      --fortiva-border: rgba(64, 188, 244, 0.35);
+      --bg: #0a0c10;
+      --surface: #12161c;
+      --accent: #40BCF4;
+      --accent-dim: rgba(64, 188, 244, 0.15);
+      --heading: #ffffff;
+      --body: #a0aab2;
+      --muted: #6b7785;
+      --ok: #3dd68c;
+      --warn: #f5b942;
+      --err: #f07178;
+      --border: rgba(255, 255, 255, 0.08);
     }
+    * { box-sizing: border-box; }
     body {
       font-family: "Segoe UI", system-ui, sans-serif;
-      min-width: 280px;
-      padding: 14px;
+      width: 320px;
       margin: 0;
-      background: var(--fortiva-bg);
-      color: var(--fortiva-body);
+      padding: 0;
+      background: var(--bg);
+      color: var(--body);
     }
-    h1 {
+    .header {
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .header h1 {
       font-size: 15px;
       font-weight: 600;
-      color: var(--fortiva-heading);
-      margin: 0 0 8px 0;
+      color: var(--heading);
+      margin: 0 0 4px;
     }
-    p {
+    .site {
       font-size: 12px;
-      line-height: 1.45;
-      margin: 0 0 12px 0;
+      color: var(--muted);
+      word-break: break-all;
     }
-    button {
+    .site strong { color: var(--accent); font-weight: 600; }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+    .status-pill.ready { color: var(--ok); border-color: rgba(61, 214, 140, 0.35); }
+    .status-pill.locked { color: var(--warn); border-color: rgba(245, 185, 66, 0.35); }
+    .status-pill.setup { color: var(--err); border-color: rgba(240, 113, 120, 0.35); }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: currentColor;
+    }
+    .body { padding: 14px 16px 16px; }
+    .hint {
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--muted);
+      margin: 0 0 12px;
+    }
+    #matchList {
+      display: none;
+      margin: 0 0 12px;
+      padding: 0;
+      list-style: none;
+      max-height: 160px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+    }
+    #matchList.visible { display: block; }
+    .match-item {
+      display: block;
       width: 100%;
+      text-align: left;
       padding: 10px 12px;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      background: transparent;
+      color: var(--heading);
+      cursor: pointer;
+      font: inherit;
+    }
+    .match-item:last-child { border-bottom: none; }
+    .match-item:hover, .match-item.selected {
+      background: var(--accent-dim);
+    }
+    .match-title { font-size: 13px; font-weight: 600; display: block; }
+    .match-user { font-size: 11px; color: var(--muted); margin-top: 2px; display: block; }
+    .primary-btn {
+      width: 100%;
+      padding: 11px 14px;
       font-size: 14px;
       font-weight: 600;
       cursor: pointer;
       border: none;
-      border-radius: 8px;
-      background: var(--fortiva-accent);
-      color: var(--fortiva-bg);
+      border-radius: 10px;
+      background: var(--accent);
+      color: var(--bg);
     }
-    button:hover { filter: brightness(1.05); }
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    #status {
-      margin-top: 10px;
+    .primary-btn:hover:not(:disabled) { filter: brightness(1.06); }
+    .primary-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    #statusBox {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
       font-size: 12px;
-      color: var(--fortiva-body);
+      line-height: 1.45;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      min-height: 42px;
     }
+    #statusBox.success { color: var(--ok); border-color: rgba(61, 214, 140, 0.35); }
+    #statusBox.warn { color: var(--warn); border-color: rgba(245, 185, 66, 0.35); }
+    #statusBox.error { color: var(--err); border-color: rgba(240, 113, 120, 0.35); }
+    #statusBox.loading { color: var(--body); }
+    .footer {
+      padding: 0 16px 14px;
+      font-size: 10px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .footer a { color: var(--accent); text-decoration: none; }
   </style>
 </head>
 <body>
-  <h1>Fortiva Autofill</h1>
-  <p>Manual fill only — click below when you want credentials from your unlocked Fortiva vault. Fortiva never fills on page load or when you focus a field.</p>
-  <button id="fillBtn" type="button">Fill credentials on this page</button>
-  <p id="status">Ready. Keep Fortiva unlocked on this PC.</p>
-  <p id="help" style="font-size:11px;opacity:0.65;margin-top:8px;">
-    First time? In Fortiva open <strong>Settings → Browser extension</strong> and click <strong>Connect browser</strong>.
-  </p>
+  <div class="header">
+    <h1>Fortiva</h1>
+    <div class="site" id="siteLine">Checking this page…</div>
+    <div class="status-pill setup" id="connPill">
+      <span class="status-dot"></span>
+      <span id="connText">Connecting…</span>
+    </div>
+  </div>
+
+  <div class="body">
+    <p class="hint" id="actionHint">
+      Click the button when you are on a login form. Fortiva only fills when you ask — never automatically.
+    </p>
+
+    <ul id="matchList" aria-label="Choose a saved login"></ul>
+
+    <button class="primary-btn" id="fillBtn" type="button" disabled>Fill login on this page</button>
+
+    <div id="statusBox" class="loading">Checking Fortiva…</div>
+  </div>
+
+  <div class="footer">
+    First time? Open Fortiva → <strong>Settings → Browser extension</strong> → <strong>Connect browser</strong>.
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>

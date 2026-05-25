@@ -20,11 +20,53 @@ while (true)
         offset += await stdin.ReadAsync(msgBuf.AsMemory(offset, len - offset));
     var json = Encoding.UTF8.GetString(msgBuf);
     var doc = JsonDocument.Parse(json);
-    var response = await ForwardToPipeAsync(doc.RootElement);
+    var response = await HandleMessageAsync(doc.RootElement);
     var respBytes = Encoding.UTF8.GetBytes(response);
     var header = BitConverter.GetBytes(respBytes.Length);
     await stdout.WriteAsync(header);
     await stdout.WriteAsync(respBytes);
+}
+
+static async Task<string> HandleMessageAsync(JsonElement request)
+{
+    var command = request.TryGetProperty("command", out var cmd) ? cmd.GetString() : "";
+    if (string.Equals(command, "ping", StringComparison.OrdinalIgnoreCase))
+        return BridgeJson.Serialize(await PingAsync());
+
+    return await ForwardToPipeAsync(request);
+}
+
+static async Task<BridgeStatusResponse> PingAsync()
+{
+    try
+    {
+        var token = await BridgeSessionAuth.RequestTokenFromBrokerAsync();
+        if (!string.IsNullOrEmpty(token))
+        {
+            return new BridgeStatusResponse
+            {
+                Ok = true,
+                Status = "ready",
+                Message = "Fortiva is unlocked and ready."
+            };
+        }
+
+        return new BridgeStatusResponse
+        {
+            Ok = false,
+            Status = "locked",
+            Message = "Unlock Fortiva on this PC to fill logins."
+        };
+    }
+    catch
+    {
+        return new BridgeStatusResponse
+        {
+            Ok = false,
+            Status = "setup_required",
+            Message = "Run Connect browser in Fortiva Settings."
+        };
+    }
 }
 
 static async Task<string> ForwardToPipeAsync(JsonElement request)
@@ -35,12 +77,12 @@ static async Task<string> ForwardToPipeAsync(JsonElement request)
         if (string.IsNullOrEmpty(token))
         {
             if (!await BridgeUnlockClient.RequestUnlockAsync())
-                return JsonSerializer.Serialize(new CredentialResponse());
+                return BridgeJson.Serialize(new CredentialResponse { Error = "cancelled" });
             token = await BridgeSessionAuth.RequestTokenFromBrokerAsync();
         }
 
         if (string.IsNullOrEmpty(token))
-            return JsonSerializer.Serialize(new CredentialResponse());
+            return BridgeJson.Serialize(new CredentialResponse { Error = "locked" });
 
         using var client = new System.IO.Pipes.NamedPipeClientStream(
             ".", BrowserBridgeServer.PipeName, System.IO.Pipes.PipeDirection.InOut);
@@ -56,12 +98,12 @@ static async Task<string> ForwardToPipeAsync(JsonElement request)
         if (request.TryGetProperty("payload", out var payload))
             envelope["payload"] = payload;
 
-        await writer.WriteLineAsync(JsonSerializer.Serialize(envelope));
+        await writer.WriteLineAsync(JsonSerializer.Serialize(envelope, BridgeJson.Options));
         var line = await reader.ReadLineAsync();
-        return line ?? "{}";
+        return line ?? BridgeJson.Serialize(new CredentialResponse { Error = "locked" });
     }
     catch
     {
-        return JsonSerializer.Serialize(new CredentialResponse());
+        return BridgeJson.Serialize(new CredentialResponse { Error = "setup_required" });
     }
 }

@@ -72,7 +72,8 @@
             <StackPanel x:Name="BrowserExtensionSection" Spacing="12">
                 <TextBlock Text="Browser extension" FontSize="16" FontWeight="SemiBold" Opacity="0.7"/>
                 <TextBlock TextWrapping="WrapWholeWords" Opacity="0.7" FontSize="13">
-                    Fill logins from your unlocked vault on any website. One click in Fortiva prepares everything — you only confirm Load unpacked once in Edge or Chrome.
+                    On any login page, click the Fortiva icon in Edge or Chrome and choose Fill login.
+                    Fortiva prepares the connection for you — one quick browser step the first time.
                 </TextBlock>
                 <Border Style="{StaticResource FortivaGlassPanelGlow}" Padding="14">
                     <StackPanel Spacing="6">
@@ -85,7 +86,7 @@
                         HorizontalAlignment="Left"
                         Style="{StaticResource FortivaAccentButton}" Click="ConnectBrowser_Click"/>
                 <TextBlock TextWrapping="WrapWholeWords" Opacity="0.55" FontSize="11">
-                    After connecting, open any login page, click the Fortiva toolbar icon, and choose Fill credentials. Fortiva never autofills without your click.
+                    Fortiva never fills a form unless you click Fill. Keep the app unlocked while browsing.
                 </TextBlock>
             </StackPanel>
 

@@ -226,15 +226,43 @@ public sealed class VaultSession : IDisposable
     {
         lock (_payloadLock)
         {
-            if (_context is null) return new CredentialResponse();
+            if (_context is null)
+                return new CredentialResponse { Error = "locked" };
 
             var requestHost = ResolveRequestHost(req);
-            if (string.IsNullOrEmpty(requestHost)) return new CredentialResponse();
+            if (string.IsNullOrEmpty(requestHost))
+                return new CredentialResponse { Error = "no_match" };
 
-            var match = _context.Payload.Entries
-                .Where(e => !e.IsSecureNote && !string.IsNullOrEmpty(e.Url))
-                .FirstOrDefault(e => EntryHostMatches(e.Url, requestHost));
-            if (match is null) return new CredentialResponse();
+            var matches = ListMatchesForHost(requestHost);
+            if (matches.Count == 0)
+                return new CredentialResponse { Error = "no_match" };
+
+            VaultEntry? match = null;
+            if (req.EntryId is { } entryId)
+            {
+                match = _context.Payload.Entries.FirstOrDefault(e => e.Id == entryId);
+            }
+            else if (matches.Count == 1)
+            {
+                match = matches[0].Entry;
+            }
+            else
+            {
+                return new CredentialResponse
+                {
+                    Found = false,
+                    Error = "multiple_matches",
+                    Matches = matches.Select(m => new CredentialMatchSummary
+                    {
+                        Id = m.Entry.Id,
+                        Title = m.Entry.Title,
+                        Username = m.Entry.Username
+                    }).ToList()
+                };
+            }
+
+            if (match is null || !EntryHostMatches(match.Url, requestHost))
+                return new CredentialResponse { Error = "no_match" };
 
             _audit?.Log(AuditEventType.BrowserBridgeAccess,
                 $"Browser bridge credential served for host {requestHost} (entry {match.Id})");
@@ -242,11 +270,49 @@ public sealed class VaultSession : IDisposable
             return new CredentialResponse
             {
                 Found = true,
+                Title = match.Title,
                 Username = match.Username,
                 Password = match.Password,
                 PasskeyCredentialId = match.PasskeyCredentialId
             };
         }
+    }
+
+    public IReadOnlyList<CredentialMatchSummary> ListMatchesForDomain(CredentialRequest req)
+    {
+        lock (_payloadLock)
+        {
+            if (_context is null) return [];
+
+            var requestHost = ResolveRequestHost(req);
+            if (string.IsNullOrEmpty(requestHost)) return [];
+
+            return ListMatchesForHost(requestHost)
+                .Select(m => new CredentialMatchSummary
+                {
+                    Id = m.Entry.Id,
+                    Title = m.Entry.Title,
+                    Username = m.Entry.Username
+                })
+                .ToList();
+        }
+    }
+
+    private List<(VaultEntry Entry, int Score)> ListMatchesForHost(string requestHost)
+    {
+        return _context!.Payload.Entries
+            .Where(e => !e.IsSecureNote && !string.IsNullOrEmpty(e.Url))
+            .Where(e => EntryHostMatches(e.Url, requestHost))
+            .Select(e => (Entry: e, Score: MatchScore(e, requestHost)))
+            .OrderByDescending(x => x.Score)
+            .ThenBy(x => x.Entry.Title, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static int MatchScore(VaultEntry entry, string requestHost)
+    {
+        var host = ExtractHost(entry.Url);
+        return string.Equals(host, requestHost, StringComparison.OrdinalIgnoreCase) ? 2 : 0;
     }
 
     private static string ResolveRequestHost(CredentialRequest req)
@@ -351,7 +417,7 @@ public sealed class VaultSession : IDisposable
         _tokenBroker = new BridgeTokenBroker(_bridgeSessionToken);
         _tokenBroker.Start();
         BridgeClientValidator.ConfigureAllowedInstallRoots(AppContext.BaseDirectory);
-        _bridge = new BrowserBridgeServer(ResolveForDomain, _bridgeSessionToken);
+        _bridge = new BrowserBridgeServer(ResolveForDomain, ListMatchesForDomain, _bridgeSessionToken);
         _bridge.Start();
 
         _autoLock?.Dispose();

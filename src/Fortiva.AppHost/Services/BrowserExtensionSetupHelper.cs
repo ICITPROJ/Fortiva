@@ -116,14 +116,14 @@ public static class BrowserExtensionSetupHelper
 
         var dialog = new ContentDialog
         {
-            Title = "Connect your browser?",
+            Title = "Use Fortiva in your browser?",
             Content = new TextBlock
             {
                 TextWrapping = TextWrapping.WrapWholeWords,
                 Text =
-                    "Fill logins from Fortiva with one click on any website.\n\n" +
-                    "Fortiva will prepare everything automatically. You only confirm " +
-                    "Load unpacked once in your browser (about 30 seconds)."
+                    "Fill saved logins with one click on any website.\n\n" +
+                    "Setup takes about 30 seconds: Fortiva opens your browser and guides you through " +
+                    "one-time extension loading. After that, click the Fortiva icon on login pages."
             },
             PrimaryButtonText = "Connect browser",
             CloseButtonText = "Later",
@@ -142,12 +142,12 @@ public static class BrowserExtensionSetupHelper
     public static string FormatStatusMessage(BrowserBridgeInstallStatus status)
     {
         if (!status.BridgeExecutableFound || status.ExtensionSourcePath is null)
-            return "Extension files were not found with this install. Reinstall Fortiva.";
+            return "Extension files missing — reinstall Fortiva.";
 
         if (!status.IsReadyForBrowser)
-            return "Almost ready — click Connect browser to finish one-time setup.";
+            return "One-time setup needed — click Connect browser below (~30 seconds).";
 
-        return "Fortiva is linked to your browser. Load the extension once (Connect browser) if you have not already.";
+        return "Connected. On any login page, click the Fortiva icon in your browser toolbar and choose Fill.";
     }
 
     public static SupportedBrowser DetectPreferredBrowser()
@@ -254,15 +254,17 @@ public static class BrowserExtensionSetupHelper
     {
         var browserName = browser == SupportedBrowser.Chrome ? "Chrome" : "Edge";
         var steps = autoLoaded
-            ? $"Fortiva opened {browserName} with the extension loaded.\n\n" +
-              "If you see the Fortiva icon in the toolbar, you are done.\n\n" +
-              "Otherwise: Developer mode ON → Load unpacked → select the folder (path copied to clipboard):\n" +
-              extensionPath
-            : $"{browserName} extensions and the extension folder are open.\n\n" +
-              "Two quick steps:\n" +
-              "1. Turn on Developer mode\n" +
-              "2. Click Load unpacked and select the folder that opened\n\n" +
-              "The folder path is also on your clipboard.";
+            ? $"✓ Fortiva opened {browserName} with the extension loaded.\n\n" +
+              "Try it now:\n" +
+              "1. Open any login page\n" +
+              "2. Click the Fortiva icon in the toolbar\n" +
+              "3. Click Fill login on this page\n\n" +
+              "Keep Fortiva unlocked on this PC while you browse."
+            : $"Almost done — finish in {browserName}:\n\n" +
+              "1. Turn on Developer mode (top-right)\n" +
+              "2. Click Load unpacked\n" +
+              "3. Select the folder that opened (path is on your clipboard)\n\n" +
+              "Then open a login page and click the Fortiva toolbar icon.";
 
         var dialog = new ContentDialog
         {

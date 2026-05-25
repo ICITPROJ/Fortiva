@@ -10,6 +10,14 @@ public sealed class CredentialRequest
 {
     public string Domain { get; set; } = "";
     public string? Url { get; set; }
+    public Guid? EntryId { get; set; }
+}
+
+public sealed class CredentialMatchSummary
+{
+    public Guid Id { get; set; }
+    public string Title { get; set; } = "";
+    public string Username { get; set; } = "";
 }
 
 public sealed class CredentialResponse
@@ -17,7 +25,17 @@ public sealed class CredentialResponse
     public bool Found { get; set; }
     public string Username { get; set; } = "";
     public string Password { get; set; } = "";
+    public string? Title { get; set; }
     public string? PasskeyCredentialId { get; set; }
+    public string? Error { get; set; }
+    public IReadOnlyList<CredentialMatchSummary>? Matches { get; set; }
+}
+
+public sealed class BridgeStatusResponse
+{
+    public bool Ok { get; set; }
+    public string Status { get; set; } = "setup_required";
+    public string? Message { get; set; }
 }
 
 public sealed class BrowserBridgeMessage
@@ -35,19 +53,19 @@ public sealed class BrowserBridgeServer : IDisposable
 {
     public const string PipeName = "Fortiva.BrowserBridge";
 
-    private static readonly JsonSerializerOptions BridgeJson = new()
-    {
-        PropertyNameCaseInsensitive = true
-    };
-
     private readonly Func<CredentialRequest, CredentialResponse> _credentialResolver;
+    private readonly Func<CredentialRequest, IReadOnlyList<CredentialMatchSummary>> _matchLister;
     private readonly string _sessionToken;
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
 
-    public BrowserBridgeServer(Func<CredentialRequest, CredentialResponse> credentialResolver, string sessionToken)
+    public BrowserBridgeServer(
+        Func<CredentialRequest, CredentialResponse> credentialResolver,
+        Func<CredentialRequest, IReadOnlyList<CredentialMatchSummary>> matchLister,
+        string sessionToken)
     {
         _credentialResolver = credentialResolver;
+        _matchLister = matchLister;
         _sessionToken = sessionToken;
     }
 
@@ -102,25 +120,39 @@ public sealed class BrowserBridgeServer : IDisposable
         var line = await reader.ReadLineAsync(ct);
         if (line is null) return;
 
-        var msg = JsonSerializer.Deserialize<BrowserBridgeMessage>(line, BridgeJson);
+        var msg = BridgeJson.Deserialize<BrowserBridgeMessage>(line);
         if (msg is null || !IsAuthorized(msg))
         {
-            await writer.WriteLineAsync(JsonSerializer.Serialize(new CredentialResponse()).AsMemory(), ct);
+            await writer.WriteLineAsync(BridgeJson.Serialize(new CredentialResponse { Error = "locked" }).AsMemory(), ct);
             return;
         }
 
-        if (msg.Command == "get_credentials" && msg.Payload.HasValue)
+        if (msg.Payload.HasValue)
         {
-            var req = JsonSerializer.Deserialize<CredentialRequest>(msg.Payload.Value.GetRawText(), BridgeJson);
+            var req = BridgeJson.Deserialize<CredentialRequest>(msg.Payload.Value.GetRawText());
             if (req is not null)
             {
-                var resp = _credentialResolver(req);
-                await writer.WriteLineAsync(JsonSerializer.Serialize(resp).AsMemory(), ct);
-                return;
+                if (msg.Command == "get_credentials")
+                {
+                    await writer.WriteLineAsync(BridgeJson.Serialize(_credentialResolver(req)).AsMemory(), ct);
+                    return;
+                }
+
+                if (msg.Command == "list_credentials")
+                {
+                    var matches = _matchLister(req);
+                    await writer.WriteLineAsync(BridgeJson.Serialize(new CredentialResponse
+                    {
+                        Found = matches.Count > 0,
+                        Matches = matches,
+                        Error = matches.Count == 0 ? "no_match" : null
+                    }).AsMemory(), ct);
+                    return;
+                }
             }
         }
 
-        await writer.WriteLineAsync(JsonSerializer.Serialize(new CredentialResponse()).AsMemory(), ct);
+        await writer.WriteLineAsync(BridgeJson.Serialize(new CredentialResponse()).AsMemory(), ct);
     }
 
     private bool IsAuthorized(BrowserBridgeMessage msg)
