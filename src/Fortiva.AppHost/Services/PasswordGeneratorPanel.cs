@@ -355,26 +355,37 @@ public sealed class PasswordGeneratorPanel
         rightOptions.Children.Add(_customCharsetLabel);
         rightOptions.Children.Add(_customCharsetBox);
 
-        var optionsGrid = new Grid { ColumnSpacing = 32 };
-        optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 240 });
-        optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 240 });
-        Grid.SetColumn(leftOptions, 0);
-        Grid.SetColumn(rightOptions, 1);
-        optionsGrid.Children.Add(leftOptions);
-        optionsGrid.Children.Add(rightOptions);
+        FrameworkElement optionsContent;
+        if (hostMode == PasswordGeneratorHostMode.Page)
+        {
+            var optionsStack = new StackPanel { Spacing = 20 };
+            optionsStack.Children.Add(leftOptions);
+            optionsStack.Children.Add(rightOptions);
+            optionsContent = optionsStack;
+        }
+        else
+        {
+            var optionsGrid = new Grid { ColumnSpacing = 32 };
+            optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 200 });
+            optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 200 });
+            Grid.SetColumn(leftOptions, 0);
+            Grid.SetColumn(rightOptions, 1);
+            optionsGrid.Children.Add(leftOptions);
+            optionsGrid.Children.Add(rightOptions);
+            optionsContent = optionsGrid;
+        }
 
         _optionsShell = new Border
         {
             CornerRadius = new CornerRadius(14),
             Padding = new Thickness(20, 18, 20, 18),
             BorderThickness = new Thickness(1),
-            Child = optionsGrid
+            Child = optionsContent
         };
 
         Root = new StackPanel
         {
             Spacing = 16,
-            MinWidth = 580,
             HorizontalAlignment = HorizontalAlignment.Stretch
         };
 

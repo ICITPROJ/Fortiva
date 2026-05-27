@@ -63,7 +63,7 @@ public sealed class VaultTagPickerPanel
         addRow.Children.Add(_newTagBox);
         addRow.Children.Add(_addBtn);
 
-        Root = new StackPanel { Spacing = 10 };
+        Root = new StackPanel { Spacing = 10, HorizontalAlignment = HorizontalAlignment.Stretch };
         _chipScroll.Content = _chipPanel;
         Root.Children.Add(_chipScroll);
         Root.Children.Add(addRow);

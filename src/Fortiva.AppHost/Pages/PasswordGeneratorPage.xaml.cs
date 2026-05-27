@@ -29,6 +29,7 @@ public sealed partial class PasswordGeneratorPage : Page
         if (_panel is null)
         {
             _panel = new PasswordGeneratorPanel(_vm, hostMode: PasswordGeneratorHostMode.Page, clipboard: _clipboard);
+            _panel.Root.HorizontalAlignment = HorizontalAlignment.Stretch;
             GeneratorHost.Children.Add(_panel.Root);
         }
         else
