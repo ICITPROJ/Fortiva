@@ -29,4 +29,29 @@ public class BrowserBridgeJsonTests
         Assert.Equal("getCredential", msg.Command);
         Assert.Equal("abc", msg.SessionToken);
     }
+
+    [Fact]
+    public async Task ReadBoundedLineAsync_ReadsNormalLine()
+    {
+        using var reader = new StringReader("{\"command\":\"x\"}\n{\"command\":\"y\"}\n");
+        var line = await BridgeJson.ReadBoundedLineAsync(reader);
+        Assert.Equal("{\"command\":\"x\"}", line);
+    }
+
+    [Fact]
+    public async Task ReadBoundedLineAsync_ReturnsNull_WhenOverCap()
+    {
+        var huge = new string('a', BridgeJson.MaxRequestBytes + 10); // no newline, exceeds cap
+        using var reader = new StringReader(huge);
+        var line = await BridgeJson.ReadBoundedLineAsync(reader);
+        Assert.Null(line);
+    }
+
+    [Fact]
+    public async Task ReadBoundedLineAsync_ReturnsNull_AtEndOfStream()
+    {
+        using var reader = new StringReader("");
+        var line = await BridgeJson.ReadBoundedLineAsync(reader);
+        Assert.Null(line);
+    }
 }

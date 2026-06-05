@@ -82,32 +82,42 @@ public static class VaultSerializer
     {
         if (data.Length > VaultConstants.MaxVaultFileBytes)
             throw new InvalidDataException("Vault file exceeds maximum allowed size.");
-        using var ms = new MemoryStream(data.ToArray());
-        using var br = new BinaryReader(ms, Encoding.UTF8, leaveOpen: true);
-        var magic = Encoding.UTF8.GetString(ReadBytes(br));
-        if (magic != VaultConstants.Magic)
-            throw new InvalidDataException("Invalid vault magic.");
-        var header = new VaultHeader
+        try
         {
-            FormatVersion = br.ReadByte(),
-            MinSupportedVersion = br.ReadByte()
-        };
-        if (header.FormatVersion < VaultConstants.MinSupportedVersion)
-            throw new InvalidDataException($"Vault version {header.FormatVersion} is not supported.");
+            using var ms = new MemoryStream(data.ToArray());
+            using var br = new BinaryReader(ms, Encoding.UTF8, leaveOpen: true);
+            var magic = Encoding.UTF8.GetString(ReadBytes(br));
+            if (magic != VaultConstants.Magic)
+                throw new InvalidDataException("Invalid vault magic.");
+            var header = new VaultHeader
+            {
+                FormatVersion = br.ReadByte(),
+                MinSupportedVersion = br.ReadByte()
+            };
+            if (header.FormatVersion < VaultConstants.MinSupportedVersion)
+                throw new InvalidDataException($"Vault version {header.FormatVersion} is not supported.");
 
-        header.KdfParameters = Argon2Parameters.FromBytes(ReadBytes(br));
-        header.SecurityLevel = (SecurityLevel)br.ReadByte();
-        header.VaultId = new Guid(br.ReadBytes(16));
-        header.CreatedAt = new DateTimeOffset(br.ReadInt64(), TimeSpan.Zero);
-        header.LastModifiedAt = new DateTimeOffset(br.ReadInt64(), TimeSpan.Zero);
-        header.RevisionCounter = br.ReadUInt64();
-        header.SecurityLevelCounter = br.ReadUInt64();
-        header.Salt = ReadBytes(br);
-        header.WrappedVaultKey = ReadBytes(br);
-        header.HeaderMac = ReadBytes(br);
-        var encEntries = ReadBytes(br);
-        var encIntegrity = ReadBytes(br);
-        return (header, encEntries, encIntegrity);
+            header.KdfParameters = Argon2Parameters.FromBytes(ReadBytes(br));
+            header.SecurityLevel = (SecurityLevel)br.ReadByte();
+            var guidBytes = br.ReadBytes(16);
+            if (guidBytes.Length != 16)
+                throw new InvalidDataException("Vault file is truncated.");
+            header.VaultId = new Guid(guidBytes);
+            header.CreatedAt = new DateTimeOffset(br.ReadInt64(), TimeSpan.Zero);
+            header.LastModifiedAt = new DateTimeOffset(br.ReadInt64(), TimeSpan.Zero);
+            header.RevisionCounter = br.ReadUInt64();
+            header.SecurityLevelCounter = br.ReadUInt64();
+            header.Salt = ReadBytes(br);
+            header.WrappedVaultKey = ReadBytes(br);
+            header.HeaderMac = ReadBytes(br);
+            var encEntries = ReadBytes(br);
+            var encIntegrity = ReadBytes(br);
+            return (header, encEntries, encIntegrity);
+        }
+        catch (Exception ex) when (ex is EndOfStreamException or ArgumentException or OverflowException)
+        {
+            throw new InvalidDataException("Vault file is corrupted or truncated.", ex);
+        }
     }
 
     public static (byte[] entriesBlob, byte[] integrityBlob) EncryptPayload(KeyHierarchy keys, VaultPayload payload)

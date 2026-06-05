@@ -147,11 +147,11 @@ public static class PasswordGenerator
         if (length <= 0 || charset.Length == 0)
             throw new ArgumentException("Invalid generation parameters.");
 
+        // GetInt32 uses rejection sampling internally, so each character is uniformly
+        // distributed. A raw `randomByte % charset.Length` would introduce modulo bias.
         var result = new StringBuilder(length);
-        var bytes = new byte[length];
-        RandomNumberGenerator.Fill(bytes);
         for (var i = 0; i < length; i++)
-            result.Append(charset[bytes[i] % charset.Length]);
+            result.Append(charset[RandomNumberGenerator.GetInt32(0, charset.Length)]);
         return result.ToString();
     }
 

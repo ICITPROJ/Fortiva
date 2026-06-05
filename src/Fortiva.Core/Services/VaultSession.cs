@@ -198,6 +198,26 @@ public sealed class VaultSession : IDisposable
             _engine.Save(_context!);
     }
 
+    /// <summary>
+    /// Two-way merge of this (active) vault with another unlocked vault. Both vaults are written
+    /// with the converged entry set; the active session's in-memory entries are updated in place.
+    /// </summary>
+    public VaultSyncResult SyncWith(VaultEngine otherEngine, VaultUnlockContext otherContext)
+    {
+        EnsureWritable();
+        ArgumentNullException.ThrowIfNull(otherEngine);
+        ArgumentNullException.ThrowIfNull(otherContext);
+
+        VaultSyncResult result;
+        lock (_payloadLock)
+            result = VaultSynchronizer.SyncTwoWay(_engine, _context!, otherEngine, otherContext);
+
+        _audit?.Log(AuditEventType.ConfigurationChange,
+            $"Vault sync completed (+{result.Local.Added} ~{result.Local.Updated} -{result.Local.Removed}, total {result.MergedTotal})");
+        StateChanged?.Invoke();
+        return result;
+    }
+
     public IReadOnlyList<VaultEntry> AllEntries()
     {
         lock (_payloadLock)

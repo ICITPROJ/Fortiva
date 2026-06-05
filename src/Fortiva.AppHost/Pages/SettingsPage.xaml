@@ -168,6 +168,12 @@
                     <Button x:Name="PortableBtn" Content="Open or create vault on USB…" Click="Portable_Click"/>
                     <Button x:Name="LocalVaultBtn" Content="Use local vault" Click="LocalVault_Click" Visibility="Collapsed"/>
                 </StackPanel>
+                <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13">
+                    Sync merges entries both ways between your active vault and its counterpart
+                    (local ⇄ USB). The newest edit of each entry wins, and deletions are propagated.
+                    A snapshot of each vault is kept so you can roll back.
+                </TextBlock>
+                <Button x:Name="SyncBtn" Content="Sync with counterpart vault…" Click="Sync_Click"/>
             </StackPanel>
 
             <!-- Vault info -->

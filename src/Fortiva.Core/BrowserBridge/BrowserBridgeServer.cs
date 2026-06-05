@@ -119,8 +119,8 @@ public sealed class BrowserBridgeServer : IDisposable
     {
         using var reader = new StreamReader(server, Encoding.UTF8, leaveOpen: true);
         using var writer = new StreamWriter(server, Encoding.UTF8, leaveOpen: true) { AutoFlush = true };
-        var line = await reader.ReadLineAsync(ct);
-        if (line is null) return;
+        var line = await BridgeJson.ReadBoundedLineAsync(reader, ct);
+        if (string.IsNullOrEmpty(line)) return;
 
         var msg = BridgeJson.Deserialize<BrowserBridgeMessage>(line);
         if (msg is null || !IsAuthorized(msg))

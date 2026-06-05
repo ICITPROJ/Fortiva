@@ -49,7 +49,7 @@ public sealed class BridgeTokenBroker : IDisposable
     {
         using var reader = new StreamReader(server, Encoding.UTF8, leaveOpen: true);
         using var writer = new StreamWriter(server, Encoding.UTF8, leaveOpen: true) { AutoFlush = true };
-        var line = await reader.ReadLineAsync(ct);
+        var line = await BridgeJson.ReadBoundedLineAsync(reader, ct);
         if (line is null || !string.Equals(line.Trim(), "GET", StringComparison.OrdinalIgnoreCase))
             return;
         await writer.WriteLineAsync(_sessionToken.AsMemory(), ct);

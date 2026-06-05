@@ -121,18 +121,31 @@ public static class UpdateUrlPolicy
         => IsGitHubReleaseCdn(uri) &&
            PersonalInstallerName.IsMatch(ExtractGitHubAssetFileName(uri));
 
+    /// <summary>
+    /// Silent-install switches that carry no free-form value. Value-bearing switches such as
+    /// /DIR=, /LOG=, or /LOADINF= are intentionally excluded — a tampered/compromised manifest
+    /// must not be able to redirect the installer to attacker-controlled paths or INF files.
+    /// </summary>
+    private static readonly HashSet<string> AllowedInstallerSwitches = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "/VERYSILENT",
+        "/SILENT",
+        "/SUPPRESSMSGBOXES",
+        "/NORESTART",
+        "/CLOSEAPPLICATIONS",
+        "/NOCLOSEAPPLICATIONS",
+        "/FORCECLOSEAPPLICATIONS",
+        "/RESTARTAPPLICATIONS",
+        "/NOICONS"
+    };
+
     private static bool IsAllowedInstallerToken(string token)
     {
-        if (!token.StartsWith("/", StringComparison.Ordinal))
+        // Reject anything carrying a value (contains '=') — only bare silent switches are allowed.
+        if (token.Contains('=', StringComparison.Ordinal))
             return false;
-
-        var key = token.Split('=')[0];
-        return PersonalInstallerArgPrefix.IsMatch(key);
+        return AllowedInstallerSwitches.Contains(token);
     }
-
-    private static readonly Regex PersonalInstallerArgPrefix = new(
-        @"^/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$",
-        RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static bool IsAllowedGitHubManifest(Uri uri)
         => IsAllowedGitHubReleaseAsset(uri, ReleaseManifestUrls.ManifestFileName);

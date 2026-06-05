@@ -266,6 +266,12 @@ public sealed partial class SettingsPage : Page
         LocalVaultBtn.IsEnabled = allowed;
         LocalVaultBtn.Visibility = _vm.IsPortableMode ? Visibility.Visible : Visibility.Collapsed;
 
+        var canSync = allowed && _vm.CanSyncWithCounterpart;
+        SyncBtn.IsEnabled = canSync;
+        SyncBtn.Visibility = allowed && !string.IsNullOrWhiteSpace(_vm.CounterpartVaultDirectory)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
         if (_vm.IsPortableMode)
         {
             PortableStatusText.Text = _vm.VaultLocationLabel;
@@ -631,6 +637,77 @@ public sealed partial class SettingsPage : Page
         catch (Exception ex)
         {
             ShowInfo(ex.Message, InfoBarSeverity.Error);
+        }
+    }
+
+    private async void Sync_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_vm.IsUnlocked) { ShowInfo("Unlock the vault before syncing."); return; }
+        if (_vm.IsReadOnly) { ShowInfo("Vault is read-only. Confirm rollback on the unlock screen first.", InfoBarSeverity.Warning); return; }
+
+        var other = _vm.CounterpartVaultDirectory;
+        if (string.IsNullOrWhiteSpace(other))
+        {
+            ShowInfo("Set up a USB/portable vault location first, then sync.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        var counterpartLabel = _vm.IsPortableMode ? "your local vault" : "the USB vault";
+        var pwdBox = new PasswordBox { PlaceholderText = $"Master password for {counterpartLabel}" };
+        var desc = new TextBlock
+        {
+            Text = $"Enter the master password for {counterpartLabel} ({other}). " +
+                   "Entries will be merged both ways; the newest edit of each entry wins.",
+            TextWrapping = Microsoft.UI.Xaml.TextWrapping.WrapWholeWords,
+            Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 12)
+        };
+        FortivaControlTheme.ApplyBodyText(desc);
+        var panel = new StackPanel { Spacing = 8 };
+        panel.Children.Add(desc);
+        panel.Children.Add(pwdBox);
+        FortivaControlTheme.ApplyPasswordBox(pwdBox);
+
+        var dialog = new ContentDialog
+        {
+            Title = "Sync vaults",
+            Content = panel,
+            PrimaryButtonText = "Sync",
+            SecondaryButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot
+        };
+        FortivaDialogs.Configure(dialog, XamlRoot);
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        if (string.IsNullOrEmpty(pwdBox.Password))
+        {
+            ShowInfo("Master password is required to sync.", InfoBarSeverity.Error);
+            return;
+        }
+
+        SyncBtn.IsEnabled = false;
+        try
+        {
+            var result = await _vm.SyncWithPortableAsync(pwdBox.Password);
+            ShowInfo(
+                $"Sync complete. This vault: +{result.Local.Added} added, {result.Local.Updated} updated, " +
+                $"{result.Local.Removed} removed. {result.MergedTotal} entries total.",
+                InfoBarSeverity.Success);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            ShowInfo("Master password for the counterpart vault is incorrect.", InfoBarSeverity.Error);
+        }
+        catch (System.Security.Cryptography.CryptographicException)
+        {
+            ShowInfo("Master password for the counterpart vault is incorrect.", InfoBarSeverity.Error);
+        }
+        catch (Exception ex)
+        {
+            ShowInfo(App.DescribeException(ex), InfoBarSeverity.Error);
+        }
+        finally
+        {
+            RefreshPortableUi();
         }
     }
 

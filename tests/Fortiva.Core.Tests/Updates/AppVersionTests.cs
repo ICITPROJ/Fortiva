@@ -72,4 +72,15 @@ public class AppVersionTests
         var manifest = new ReleaseManifest { InstallerArgs = "/VERYSILENT & calc.exe" };
         Assert.Equal(UpdateUrlPolicy.DefaultInstallerArgs, UpdateUrlPolicy.ResolveInstallerArgs(manifest));
     }
+
+    [Theory]
+    [InlineData("/LOADINF=\\\\attacker\\share\\evil.inf")]
+    [InlineData("/DIR=C:\\attacker")]
+    [InlineData("/LOG=C:\\x\\out.log")]
+    [InlineData("/VERYSILENT /DIR=C:\\attacker")]
+    public void ResolveInstallerArgs_rejects_value_bearing_switches(string args)
+    {
+        var manifest = new ReleaseManifest { InstallerArgs = args };
+        Assert.Equal(UpdateUrlPolicy.DefaultInstallerArgs, UpdateUrlPolicy.ResolveInstallerArgs(manifest));
+    }
 }

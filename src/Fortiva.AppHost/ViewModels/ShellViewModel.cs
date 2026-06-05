@@ -715,6 +715,78 @@ public sealed class ShellViewModel : ViewModelBase
         ApplyVaultDirectory(FortivaPaths.PersonalVaultDirectory, portable: false);
     }
 
+    /// <summary>Directory of the "other" vault that the active vault would sync against.</summary>
+    public string? CounterpartVaultDirectory =>
+        IsPortableMode
+            ? FortivaPaths.PersonalVaultDirectory
+            : _personalSettings.PortableVaultDirectory;
+
+    public bool CanSyncWithCounterpart =>
+        !IsEnterprise && !IsAdmin && IsUnlocked && !IsReadOnly &&
+        PolicyEnforcer.CanUsePortableMode(Policy) &&
+        !string.IsNullOrWhiteSpace(CounterpartVaultDirectory);
+
+    /// <summary>
+    /// Two-way sync between the active vault and its counterpart (local ⇄ USB). If the counterpart
+    /// vault does not yet exist it is created with the supplied password (effectively cloning the
+    /// active vault onto it). The counterpart's own master password is required to unlock it.
+    /// </summary>
+    public async Task<VaultSyncResult> SyncWithPortableAsync(string counterpartPassword)
+    {
+        if (IsEnterprise || IsAdmin)
+            throw new InvalidOperationException("Vault sync is only available in Fortiva Personal.");
+        if (!PolicyEnforcer.CanUsePortableMode(Policy))
+            throw new InvalidOperationException("Portable mode is forbidden by policy.");
+
+        var session = RequireSession();
+        if (session.IsReadOnly)
+            throw new InvalidOperationException("The active vault is read-only and cannot be synced.");
+
+        var otherDir = CounterpartVaultDirectory;
+        if (string.IsNullOrWhiteSpace(otherDir))
+            throw new InvalidOperationException("No USB/portable vault location is configured to sync with.");
+
+        otherDir = Path.GetFullPath(otherDir);
+        if (string.Equals(otherDir, Path.GetFullPath(VaultDirectory), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The counterpart vault is the same as the active vault.");
+
+        if (IsPortableMode)
+        {
+            // Active vault is the USB; its directory must still be reachable.
+            if (!Directory.Exists(VaultDirectory))
+                throw new DirectoryNotFoundException("The portable vault drive is no longer connected.");
+        }
+        else if (!Directory.Exists(otherDir))
+        {
+            throw new DirectoryNotFoundException(
+                "The USB/portable vault drive is not connected. Reconnect it and try again.");
+        }
+
+        var level = session.Context?.Header.SecurityLevel ?? SecurityLevel.Standard;
+
+        return await Task.Run(() =>
+        {
+            session.SuppressAutoLock();
+            VaultUnlockContext? otherContext = null;
+            try
+            {
+                var otherEngine = new VaultEngine(otherDir, DpapiScope.CurrentUser, Policy);
+                if (!otherEngine.VaultExists)
+                    otherEngine.CreateVault(counterpartPassword, level);
+
+                otherContext = otherEngine.Unlock(counterpartPassword);
+                var result = session.SyncWith(otherEngine, otherContext);
+                RunOnUi(RefreshEntries);
+                return result;
+            }
+            finally
+            {
+                otherContext?.Keys.Dispose();
+                session.ResumeAutoLock();
+            }
+        }).ConfigureAwait(false);
+    }
+
     private void TryRestorePortableVault()
     {
         var saved = _personalSettings.PortableVaultDirectory;

@@ -69,11 +69,12 @@ public static class Argon2Kdf
         if (existingSalt is null)
             RandomNumberGenerator.Fill(salt);
 
+        var passwordBytes = System.Text.Encoding.UTF8.GetBytes(password);
         var config = new Argon2Config
         {
             Type = Argon2Type.HybridAddressing,
             Version = Argon2Version.Nineteen,
-            Password = System.Text.Encoding.UTF8.GetBytes(password),
+            Password = passwordBytes,
             Salt = salt,
             Threads = parameters.Parallelism,
             MemoryCost = parameters.MemoryKb,
@@ -82,9 +83,16 @@ public static class Argon2Kdf
             HashLength = parameters.OutputSizeBytes
         };
 
-        using var argon2 = new Argon2(config);
-        using var secureHash = argon2.Hash();
-        var hash = secureHash.Buffer.ToArray();
-        return (hash, salt);
+        try
+        {
+            using var argon2 = new Argon2(config);
+            using var secureHash = argon2.Hash();
+            var hash = secureHash.Buffer.ToArray();
+            return (hash, salt);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(passwordBytes);
+        }
     }
 }

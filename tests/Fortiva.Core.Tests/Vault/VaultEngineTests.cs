@@ -108,6 +108,39 @@ public class VaultEngineTests : IDisposable
     }
 
     [Fact]
+    public void RepeatedSaves_KeepVaultConsistent_NoLeftoverTempOrBackup()
+    {
+        var engine = new VaultEngine(_dir, DpapiScope.CurrentUser);
+        engine.CreateVault("repeated-save-password-1!", SecurityLevel.Standard);
+
+        for (var i = 0; i < 25; i++)
+        {
+            var ctx = engine.Unlock("repeated-save-password-1!");
+            try
+            {
+                engine.AddEntry(ctx, new VaultEntry { Title = "Entry " + i, Password = "p" + i });
+            }
+            finally
+            {
+                ctx.Keys.Dispose();
+            }
+        }
+
+        var verify = engine.Unlock("repeated-save-password-1!");
+        try
+        {
+            Assert.Equal(25, verify.Payload.Entries.Count);
+        }
+        finally
+        {
+            verify.Keys.Dispose();
+        }
+
+        Assert.False(File.Exists(Path.Combine(_dir, VaultConstants.VaultFileName + VaultConstants.TempSuffix)));
+        Assert.False(File.Exists(Path.Combine(_dir, VaultConstants.VaultFileName + ".bak")));
+    }
+
+    [Fact]
     public void CreateVault_ThrowsWhenVaultAlreadyExists()
     {
         var engine = new VaultEngine(_dir, DpapiScope.CurrentUser);

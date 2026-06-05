@@ -61,7 +61,7 @@ public sealed class BridgeUnlockBroker : IDisposable
         using var reader = new StreamReader(server, Encoding.UTF8, leaveOpen: true);
         using var writer = new StreamWriter(server, Encoding.UTF8, leaveOpen: true) { AutoFlush = true };
 
-        var line = await reader.ReadLineAsync(ct);
+        var line = await BridgeJson.ReadBoundedLineAsync(reader, ct);
         var response = await ProcessUnlockRequestAsync(line, ct);
         await writer.WriteLineAsync(response.AsMemory(), ct);
     }

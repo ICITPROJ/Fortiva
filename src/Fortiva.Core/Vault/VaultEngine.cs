@@ -342,11 +342,62 @@ public sealed class VaultEngine
         using (var fs = new FileStream(temp, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
             fs.Flush(flushToDisk: true);
         if (File.Exists(_snapshots.VaultPath))
-            File.Replace(temp, _snapshots.VaultPath, null);
+            ReplaceFileWithFallback(temp, _snapshots.VaultPath);
         else
             File.Move(temp, _snapshots.VaultPath);
         if (!suppressSnapshot)
             _snapshots.RotateSnapshotAfterSave();
+    }
+
+    /// <summary>
+    /// Atomically replaces <paramref name="destination"/> with <paramref name="temp"/>.
+    /// Uses <see cref="File.Replace"/> on NTFS; falls back to a backup-and-move on file systems
+    /// that don't support ReplaceFile (FAT32/exFAT on removable/portable drives), which would
+    /// otherwise throw and break saving a portable vault on a USB stick.
+    /// </summary>
+    private static void ReplaceFileWithFallback(string temp, string destination)
+    {
+        try
+        {
+            File.Replace(temp, destination, destinationBackupFileName: null);
+            return;
+        }
+        catch (Exception ex) when (ex is IOException or PlatformNotSupportedException or UnauthorizedAccessException)
+        {
+            // ReplaceFile is unsupported on this volume — fall back below.
+        }
+
+        var backup = destination + ".bak";
+        try
+        {
+            if (File.Exists(backup))
+                File.Delete(backup);
+            // Preserve the current vault as a backup until the new file is in place.
+            File.Move(destination, backup);
+            try
+            {
+                File.Move(temp, destination);
+            }
+            catch
+            {
+                // Restore the original vault if swapping in the new file failed.
+                if (!File.Exists(destination) && File.Exists(backup))
+                    File.Move(backup, destination);
+                throw;
+            }
+            File.Delete(backup);
+        }
+        catch
+        {
+            if (File.Exists(temp))
+                TryDelete(temp);
+            throw;
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try { File.Delete(path); } catch { /* best effort */ }
     }
 
     private Argon2Parameters ResolveKdf(Argon2Parameters requested, SecurityLevel level)
