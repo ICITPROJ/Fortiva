@@ -10,15 +10,27 @@ public static class ProcessMitigation
         if (!OperatingSystem.IsWindows())
             return;
 
+        // Each policy is isolated so one unsupported/failed call can't skip the rest.
+        TryEnablePolicy(ProcessMitigationPolicy.ProcessExtensionPointDisable, 1);
+        TryEnablePolicy(ProcessMitigationPolicy.ProcessRedirectionTrustPolicy, 1);
+
+        // NOTE: ProcessSignaturePolicy (MicrosoftSignedOnly / StoreSignedOnly) is intentionally
+        // NOT enabled. It forces every later-loaded module to carry a Microsoft/Store signature,
+        // which our own (Authenticode- or un-signed) dependencies can never satisfy. Enabling it
+        // blocks lazily-loaded assemblies such as Isopoh.Cryptography.Argon2 during vault
+        // create/unlock with ERROR_INVALID_IMAGE_HASH (0x80070241). Do not re-add unless Fortiva
+        // ships as a Microsoft Store package whose entire dependency closure is store-signed.
+    }
+
+    private static void TryEnablePolicy(ProcessMitigationPolicy policy, uint flags)
+    {
         try
         {
-            EnablePolicy(ProcessMitigationPolicy.ProcessExtensionPointDisable, 1);
-            EnablePolicy(ProcessMitigationPolicy.ProcessSignaturePolicy, 1);
-            EnablePolicy(ProcessMitigationPolicy.ProcessRedirectionTrustPolicy, 1);
+            EnablePolicy(policy, flags);
         }
         catch
         {
-            /* unsupported on older builds */
+            /* unsupported on older builds / best-effort hardening */
         }
     }
 
@@ -41,7 +53,6 @@ public static class ProcessMitigation
     private enum ProcessMitigationPolicy
     {
         ProcessExtensionPointDisable = 6,
-        ProcessSignaturePolicy = 8,
         ProcessRedirectionTrustPolicy = 12
     }
 
