@@ -7,6 +7,6 @@
   "maxWindowsBuildTested": 26100,
   "installerUrl": "https://github.com/ICITPROJ/Fortiva/releases/download/v1.0.22/FortivaPersonal-1.0.22-Setup.exe",
   "installerSha256": "70588b48a6c607b3f04137c1a78c64c124b49d662892cb12e1089f762729d020",
-  "installerArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS",
+  "installerArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /FORCECLOSEAPPLICATIONS",
   "releaseNotes": "Fortiva Personal 1.0.22"
 }

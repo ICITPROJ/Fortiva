@@ -527,7 +527,9 @@ public sealed partial class SettingsPage : Page
                     Title = "Install update?",
                     Content = new TextBlock
                     {
-                        Text = $"{result.Message}\n\nFortiva will close and install the update. Your vault stays in place, and an encrypted backup copy is saved locally before install (last {PreUpdateVaultBackup.MaxRetainedBackups} kept in %LocalAppData%\\FortivaPersonal\\pre-update-backups).",
+                        Text = $"{result.Message}\n\nFortiva will close, install the update silently, and reopen automatically. "
+                            + "Your vault, Windows Hello, and settings stay in place. "
+                            + $"An encrypted backup copy is saved locally before install (last {PreUpdateVaultBackup.MaxRetainedBackups} kept in %LocalAppData%\\FortivaPersonal\\pre-update-backups).",
                         TextWrapping = TextWrapping.WrapWholeWords
                     },
                     PrimaryButtonText = "Install now",

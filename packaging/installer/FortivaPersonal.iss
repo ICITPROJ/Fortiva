@@ -84,7 +84,7 @@ ArchitecturesAllowed=x64compatible
 
 CloseApplications=yes
 
-CloseApplicationsFilter={#AppExeName}
+CloseApplicationsFilter={#AppExeName},Fortiva.BrowserBridge.Host.exe
 
 RestartApplications=no
 
@@ -493,6 +493,10 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
+  { In-app updates run /VERYSILENT while Fortiva may still be exiting — ensure a clean upgrade. }
+  if (CurStep = ssInstall) and WizardSilent then
+    KillFortivaProcesses();
+
   if CurStep <> ssPostInstall then
     Exit;
 

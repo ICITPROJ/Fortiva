@@ -39,7 +39,7 @@ public static class UpdateUrlPolicy
         @"filename=""?([^"";]+)""?",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    public const string DefaultInstallerArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS";
+    public const string DefaultInstallerArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /FORCECLOSEAPPLICATIONS";
 
     /// <summary>Returns manifest installer args when every token is an allowed Inno Setup switch; otherwise the default.</summary>
     public static string ResolveInstallerArgs(ReleaseManifest manifest)

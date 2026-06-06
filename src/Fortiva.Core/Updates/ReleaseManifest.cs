@@ -28,7 +28,7 @@ public sealed class ReleaseManifest
 
     public string InstallerSha256 { get; set; } = "";
 
-    public string InstallerArgs { get; set; } = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS";
+    public string InstallerArgs { get; set; } = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /FORCECLOSEAPPLICATIONS";
 
     public string? ReleaseNotes { get; set; }
 

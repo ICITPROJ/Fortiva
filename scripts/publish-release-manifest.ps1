@@ -84,7 +84,7 @@ $manifest = [ordered]@{
 
     installerSha256 = $hash
 
-    installerArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS"
+    installerArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /FORCECLOSEAPPLICATIONS"
 
     releaseNotes = "Fortiva Personal $Version"
 

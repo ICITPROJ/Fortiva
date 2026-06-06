@@ -129,19 +129,17 @@ public sealed class UpdateService
             // failure leaves the user unlocked with a visible error instead of silently locking.
             // Locking scrubs secrets and releases the vault file before the installer runs.
             await EnsureVaultLockedAsync().ConfigureAwait(false);
+            TryStopBridgeHost();
 
             var installer = Process.Start(new ProcessStartInfo
             {
                 FileName = dest,
                 Arguments = UpdateUrlPolicy.ResolveInstallerArgs(manifest),
-                UseShellExecute = true
+                UseShellExecute = true,
+                WorkingDirectory = Path.GetTempPath()
             });
 
-            // Confirm the installer is actually running before we exit. If it failed to start (or
-            // died immediately with an error), do NOT quit the app — surface the failure instead so
-            // the user is not left with no running Fortiva and no explanation.
-            await Task.Delay(750).ConfigureAwait(false);
-            if (installer is null || (installer.HasExited && installer.ExitCode != 0))
+            if (!await ConfirmInstallerStartedAsync(installer).ConfigureAwait(false))
             {
                 throw new InvalidOperationException(
                     "The updater did not start correctly. Your current version is unchanged. "
@@ -175,6 +173,45 @@ public sealed class UpdateService
 
         if (_vm.IsUnlocked)
             throw new InvalidOperationException("Could not lock the vault before updating. Lock the vault and try again.");
+    }
+
+    /// <summary>Stops the browser bridge so the installer can replace files under {app}.</summary>
+    internal static void TryStopBridgeHost()
+    {
+        foreach (var process in Process.GetProcessesByName("Fortiva.BrowserBridge.Host"))
+        {
+            try { process.Kill(entireProcessTree: true); }
+            catch { /* best effort */ }
+        }
+    }
+
+    /// <summary>
+    /// Waits briefly for the Inno Setup process to stay alive (started successfully).
+    /// Returns false if the process never started or exited immediately with an error.
+    /// </summary>
+    internal static async Task<bool> ConfirmInstallerStartedAsync(Process? installer)
+    {
+        if (installer is null)
+            return false;
+
+        for (var i = 0; i < 30; i++)
+        {
+            await Task.Delay(100).ConfigureAwait(false);
+            try
+            {
+                if (!installer.HasExited)
+                    return true;
+                if (installer.ExitCode != 0)
+                    return false;
+            }
+            catch
+            {
+                // Process handle may be unavailable after exit — treat as started if we got past launch.
+                return i > 0;
+            }
+        }
+
+        return true;
     }
 
     internal static string ResolveInstalledExePath()

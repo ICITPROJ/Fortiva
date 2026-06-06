@@ -36,6 +36,22 @@ Personal users should **not** need to contact icmclab for routine Microsoft patc
 
 4. Toggle **Settings → Automatic updates** to disable (manual check remains).
 
+### In-app update lifecycle (Personal)
+
+Manual **Check for updates → Install now** and the 24-hour auto-update path share the same pipeline:
+
+1. Download installer from GitHub → verify **SHA-256** against `latest.personal.json`.
+2. Copy vault + Hello sidecars to `%LocalAppData%\FortivaPersonal\pre-update-backups\` (best effort).
+3. **Lock vault** (scrub secrets from memory).
+4. Stop `Fortiva.BrowserBridge.Host.exe` if running.
+5. Launch Inno Setup with `/VERYSILENT /FORCECLOSEAPPLICATIONS` and exit Fortiva.
+6. Installer upgrades files under `%LocalAppData%\Programs\icmclab studio\Fortiva Personal\`.
+7. Installer **relaunches** `Fortiva.Personal.exe` when setup was silent (`ShouldLaunchAfterSilentInstall`).
+
+**Preserved across updates:** `vault.fva`, snapshots, `local.state`, Hello blobs, `user.prefs.json`, extension staging under `%LocalAppData%\FortivaPersonal\`, browser native-messaging registration (refreshed on next launch).
+
+**Not preserved in-place:** files under the app install directory (replaced by the new build). User data never lives there.
+
 
 
 This is the **only** network call Fortiva Personal makes by design.
