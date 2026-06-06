@@ -141,6 +141,11 @@ foreach ($entry in $scripts) {
 
     if ($Version) { $isccArgs += "/DAppVersion=$Version" }
 
+    if ($s -eq 'FortivaEnterprise') {
+        $isccArgs += "/DExtensionId=$extensionId"
+        $isccArgs += "/DExtensionUpdateUrl=https://github.com/ICITPROJ/Fortiva/releases/latest/download/fortiva-extension-updates.xml"
+    }
+
 
 
     $log = Join-Path $env:TEMP "fortiva-$s-iscc.log"

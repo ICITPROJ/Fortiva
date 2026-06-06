@@ -142,6 +142,12 @@ jobs:
         shell: pwsh
         run: ./build-release.ps1 -Version ${{ needs.prepare.outputs.version }}
 
+      - name: Pack browser extension CRX (Enterprise force-install)
+        shell: pwsh
+        env:
+          EXTENSION_PRIVATE_KEY_PEM: ${{ secrets.EXTENSION_PRIVATE_KEY_PEM }}
+        run: ./scripts/pack-extension-crx.ps1 -Version ${{ needs.prepare.outputs.version }}
+
       # Authenticode signing. No-op until CODESIGN_PFX_BASE64 / CODESIGN_PFX_PASSWORD repo secrets
       # are configured (the script self-skips). See docs/CODESIGNING.md. Published EXEs are signed
       # BEFORE installers bundle them; installers are signed BEFORE the manifest hashes them.
@@ -195,6 +201,8 @@ jobs:
             packaging/releases/latest.personal.json
             dist/installers/FortivaEnterprise-${{ needs.prepare.outputs.version }}-Setup.exe
             dist/installers/FortivaAdmin-${{ needs.prepare.outputs.version }}-Setup.exe
+            dist/extension/FortivaAutofill.crx
+            dist/extension/fortiva-extension-updates.xml
 
       - name: Sync version files on main
         if: github.ref == 'refs/heads/main'

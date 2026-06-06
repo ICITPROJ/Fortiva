@@ -7,6 +7,12 @@
 #define AppPublisher   "icmclab studio"
 #define AppURL         "https://fortiva.studio.icmclab.cloud"
 #define AppExeName     "Fortiva.Enterprise.exe"
+#ifndef ExtensionId
+  #define ExtensionId    "llkpcnbhmhpenahlcdnbbfmkdfkgnpnj"
+#endif
+#ifndef ExtensionUpdateUrl
+  #define ExtensionUpdateUrl "https://github.com/ICITPROJ/Fortiva/releases/latest/download/fortiva-extension-updates.xml"
+#endif
 #define SourceDir      "..\..\dist\Fortiva.Enterprise"
 #define OutputDir      "..\..\dist\installers"
 
@@ -51,7 +57,21 @@ Source: "..\..\dist\BrowserBridge\*"; DestDir: "{app}\BrowserBridge"; Flags: ign
 Source: "..\..\dist\extension\*"; DestDir: "{app}\extension"; Flags: ignoreversion recursesubdirs createallsubdirs
 #include "FortivaPrerequisitesFiles.iss"
 
-; Native messaging registration is handled by Fortiva on first launch (BrowserBridgeInstallService).
+[Registry]
+; Enterprise: force-install browser extension via IT policy (Chrome + Edge).
+Root: HKLM; Subkey: "SOFTWARE\Policies\Google\Chrome\ExtensionInstallForcelist"; \
+    ValueType: string; ValueName: "1"; \
+    ValueData: "{#ExtensionId};{#ExtensionUpdateUrl}"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "SOFTWARE\Policies\Microsoft\Edge\ExtensionInstallForcelist"; \
+    ValueType: string; ValueName: "1"; \
+    ValueData: "{#ExtensionId};{#ExtensionUpdateUrl}"; Flags: uninsdeletevalue
+; HKLM native messaging host (written at install — see CurStepChanged).
+Root: HKLM; Subkey: "SOFTWARE\Google\Chrome\NativeMessagingHosts\com.fortiva.browserbridge.enterprise"; \
+    ValueType: string; ValueData: "{app}\NativeMessaging\com.fortiva.browserbridge.enterprise.json"; \
+    Flags: uninsdeletekey
+Root: HKLM; Subkey: "SOFTWARE\Microsoft\Edge\NativeMessagingHosts\com.fortiva.browserbridge.enterprise"; \
+    ValueType: string; ValueData: "{app}\NativeMessaging\com.fortiva.browserbridge.enterprise.json"; \
+    Flags: uninsdeletekey
 
 [Icons]
 Name: "{group}\{#AppName}";           Filename: "{app}\{#AppExeName}"
@@ -165,10 +185,32 @@ begin
   end;
 end;
 
+procedure WriteEnterpriseNativeMessagingManifest();
+var
+  ManifestDir, ManifestPath, BridgePath, Json: String;
+begin
+  ManifestDir := ExpandConstant('{app}\NativeMessaging');
+  ForceDirectories(ManifestDir);
+  ManifestPath := ManifestDir + '\com.fortiva.browserbridge.enterprise.json';
+  BridgePath := ExpandConstant('{app}\BrowserBridge\Fortiva.BrowserBridge.Host.exe');
+  Json :=
+    '{' + #13#10 +
+    '  "name": "com.fortiva.browserbridge.enterprise",' + #13#10 +
+    '  "description": "Fortiva local credential bridge",' + #13#10 +
+    '  "path": "' + BridgePath + '",' + #13#10 +
+    '  "type": "stdio",' + #13#10 +
+    '  "allowed_origins": [' + #13#10 +
+    '    "chrome-extension://{#ExtensionId}/"' + #13#10 +
+    '  ]' + #13#10 +
+    '}';
+  SaveStringToFile(ManifestPath, Json, False);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep <> ssPostInstall then
     Exit;
 
   FortivaPrereq_AfterInstall();
+  WriteEnterpriseNativeMessagingManifest();
 end;

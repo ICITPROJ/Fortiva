@@ -367,10 +367,13 @@ The Fortiva browser extension connects to the desktop app via a local native mes
 
 ### One-time setup (recommended)
 1. Open **Fortiva → Settings → Browser extension**.
-2. Click **Set up browser connection** (Fortiva copies the extension to a stable folder and registers the browser bridge automatically).
-3. Click **Open Edge extensions** (or open `edge://extensions` in Chrome).
-4. Turn on **Developer mode**, click **Load unpacked**, then click **Open extension folder** in Fortiva Settings and select that folder.
-5. Done — you only do this once per PC.
+2. Click **Connect browser** (Fortiva copies the extension to a stable folder and registers the browser bridge automatically).
+3. If your browser is **closed**, Fortiva opens it with the extension already loaded.
+4. If your browser is **already open**, Fortiva offers to **close it and reopen with the extension** — or you can set up manually.
+5. **Manual fallback:** turn on **Developer mode**, click **Load unpacked**, and select the **extension** folder Fortiva opened (path is on your clipboard).
+6. **Enterprise (IT-managed):** the installer can force-install the extension via policy — restart Chrome or Edge after install.
+
+Done — you only do this once per PC (Personal) or once per managed deployment (Enterprise).
 
 The extension folder is always:
 `%LOCALAPPDATA%\FortivaPersonal\extension` (Personal) or `%LOCALAPPDATA%\FortivaEnterprise\extension` (Enterprise).

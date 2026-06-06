@@ -129,19 +129,23 @@ GitHub Release (latest)
 
 ## Browser extension architecture
 
-One-click setup from the app; Chromium still requires a one-time **Load unpacked** (platform limitation).
+One-click setup from the app. **Personal:** auto-load via `--load-extension` when the browser
+is closed, or prompt to close-and-relaunch; manual **Load unpacked** remains the fallback.
+**Enterprise:** installer sets `ExtensionInstallForcelist` + HKLM native messaging (IT-managed).
 
 ```text
 App launch / Connect browser
         │
         ▼
 BrowserBridgeInstallService
-  • copy extension/ → %LOCALAPPDATA%\FortivaPersonal\extension
+  • copy extension/ → %LOCALAPPDATA%\Fortiva{Personal|Enterprise}\extension
   • write native-messaging JSON
   • register HKCU Chrome + Edge keys
+  • Enterprise: HKLM native messaging under Program Files (installer + repair on launch)
         │
         ▼
-User: Load unpacked (or --load-extension if browser closed)
+Personal: --load-extension / close-browser prompt / Load unpacked
+Enterprise: policy force-install from GitHub CRX + updates.xml
         │
         ▼
 popup.js → background.js → native host → pipe → VaultSession

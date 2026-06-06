@@ -38,7 +38,8 @@ public static class BrowserBridgeInstallService
         var extensionReady = Directory.Exists(staging)
             && File.Exists(Path.Combine(staging, "manifest.json"));
         var bridgeReady = !string.IsNullOrEmpty(bridgePath) && File.Exists(bridgePath);
-        var registered = IsNativeHostRegistered(hostName, manifestPath);
+        var registered = IsNativeHostRegistered(hostName, manifestPath, enterprise);
+        var forceInstall = enterprise && BrowserExtensionPolicyService.IsForceInstallConfigured();
 
         return new BrowserBridgeInstallStatus(
             extensionReady,
@@ -49,7 +50,8 @@ public static class BrowserBridgeInstallService
             extensionSource,
             manifestPath,
             hostName,
-            extensionReady ? TryReadExtensionId(staging) : null);
+            extensionReady ? TryReadExtensionId(staging) : null,
+            forceInstall);
     }
 
     public static BrowserBridgeInstallResult EnsureInstalled(string appBaseDirectory, bool enterprise)
@@ -88,6 +90,9 @@ public static class BrowserBridgeInstallService
         File.WriteAllText(manifestPath, manifestJson);
 
         RegisterNativeHost(hostName, manifestPath);
+
+        if (enterprise)
+            TryRegisterMachineNativeHost(appBaseDirectory, hostName, extensionId);
 
         return BrowserBridgeInstallResult.Ok(stagingPath, bridgePath, extensionId, hostName, manifestPath);
     }
@@ -193,42 +198,118 @@ public static class BrowserBridgeInstallService
         }
     }
 
-    private static void RegisterNativeHost(string hostName, string manifestPath)
-    {
-        var fullManifest = Path.GetFullPath(manifestPath);
-        foreach (var subKey in NativeHostRegistrySubKeys(hostName))
-            WriteRegistryDefault(subKey, fullManifest);
-    }
-
-    private static bool IsNativeHostRegistered(string hostName, string expectedManifestPath)
+    private static bool IsNativeHostRegistered(string hostName, string expectedManifestPath, bool enterprise)
     {
         var expected = Path.GetFullPath(expectedManifestPath);
-        foreach (var subKey in NativeHostRegistrySubKeys(hostName))
+        if (UserNativeHostMatches(hostName, expected))
+            return File.Exists(expected);
+
+        if (!enterprise)
+            return false;
+
+        var machineManifest = ResolveMachineNativeMessagingManifestPath(hostName);
+        return machineManifest is not null
+            && BrowserExtensionPolicyService.IsNativeHostRegisteredMachineWide(hostName, machineManifest);
+    }
+
+    private static bool UserNativeHostMatches(string hostName, string expectedManifestPath)
+    {
+        foreach (var subKey in UserNativeHostRegistrySubKeys(hostName))
         {
-            var current = ReadRegistryDefault(subKey);
-            if (!string.Equals(current, expected, StringComparison.OrdinalIgnoreCase))
+            var current = ReadRegistryDefault(Registry.CurrentUser, subKey);
+            if (!string.Equals(current, expectedManifestPath, StringComparison.OrdinalIgnoreCase))
                 return false;
         }
 
-        return File.Exists(expected);
+        return true;
     }
 
-    private static IEnumerable<string> NativeHostRegistrySubKeys(string hostName)
+    internal static string? ResolveMachineNativeMessagingManifestPath(string hostName)
+    {
+        foreach (var programFiles in new[]
+                 {
+                     Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                     Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)
+                 })
+        {
+            if (string.IsNullOrEmpty(programFiles))
+                continue;
+
+            var candidate = Path.Combine(
+                programFiles,
+                "icmclab studio",
+                "Fortiva Enterprise",
+                "NativeMessaging",
+                hostName + ".json");
+            if (File.Exists(candidate))
+                return candidate;
+        }
+
+        return null;
+    }
+
+    private static void TryRegisterMachineNativeHost(string appBaseDirectory, string hostName, string extensionId)
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var machineManifest = ResolveMachineNativeMessagingManifestPath(hostName);
+        if (machineManifest is not null
+            && BrowserExtensionPolicyService.IsNativeHostRegisteredMachineWide(hostName, machineManifest))
+            return;
+
+        var bridgePath = ResolveBridgeExecutable(appBaseDirectory);
+        if (string.IsNullOrEmpty(bridgePath) || !File.Exists(bridgePath))
+            return;
+
+        var installRoot = Path.GetDirectoryName(Path.GetDirectoryName(bridgePath));
+        if (string.IsNullOrEmpty(installRoot))
+            return;
+
+        var manifestPath = Path.Combine(installRoot, "NativeMessaging", hostName + ".json");
+        if (!Directory.Exists(Path.GetDirectoryName(manifestPath)!))
+            return;
+
+        try
+        {
+            var manifestJson = BuildManifestJson(hostName, bridgePath, extensionId);
+            File.WriteAllText(manifestPath, manifestJson);
+            foreach (var subKey in BrowserExtensionPolicyService.MachineNativeHostRegistrySubKeys(hostName))
+                WriteRegistryDefault(Registry.LocalMachine, subKey, Path.GetFullPath(manifestPath));
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Installer registers HKLM when elevated; non-admin launch cannot repair machine keys.
+        }
+        catch (System.Security.SecurityException)
+        {
+            // Same as above on locked-down systems.
+        }
+    }
+
+    private static IEnumerable<string> UserNativeHostRegistrySubKeys(string hostName)
     {
         yield return $@"Software\Google\Chrome\NativeMessagingHosts\{hostName}";
         yield return $@"Software\Microsoft\Edge\NativeMessagingHosts\{hostName}";
     }
 
-    private static void WriteRegistryDefault(string subKey, string value)
+    private static void RegisterNativeHost(string hostName, string manifestPath)
     {
-        using var key = Registry.CurrentUser.CreateSubKey(subKey, writable: true)
+        var fullManifest = Path.GetFullPath(manifestPath);
+        foreach (var subKey in UserNativeHostRegistrySubKeys(hostName))
+            WriteRegistryDefault(Registry.CurrentUser, subKey, fullManifest);
+    }
+
+    private static void WriteRegistryDefault(RegistryKey root, string subKey, string value)
+    {
+        using var key = root.CreateSubKey(subKey, writable: true)
             ?? throw new InvalidOperationException($"Could not write registry key: {subKey}");
         key.SetValue(string.Empty, value);
     }
 
-    private static string? ReadRegistryDefault(string subKey)
+    private static string? ReadRegistryDefault(RegistryKey root, string subKey)
     {
-        using var key = Registry.CurrentUser.OpenSubKey(subKey);
+        using var key = root.OpenSubKey(subKey);
         return key?.GetValue(string.Empty) as string;
     }
 }
@@ -242,7 +323,8 @@ public sealed record BrowserBridgeInstallStatus(
     string? ExtensionSourcePath,
     string NativeMessagingManifestPath,
     string HostName,
-    string? ExtensionId)
+    string? ExtensionId,
+    bool ExtensionForceInstallConfigured = false)
 {
     public bool IsReadyForBrowser => ExtensionFilesReady && BridgeExecutableFound && NativeHostRegistered;
 }

@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<gupdate xmlns='http://www.google.com/update2/response' protocol='3.0'>
+  <app appid='llkpcnbhmhpenahlcdnbbfmkdfkgnpnj'>
+    <updatecheck codebase='__CRX_URL__' version='__VERSION__' />
+  </app>
+</gupdate>

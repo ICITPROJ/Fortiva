@@ -4,7 +4,6 @@ using Fortiva.Core.BrowserBridge;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.ApplicationModel.DataTransfer;
-using Windows.System;
 
 namespace Fortiva.AppHost.Services;
 
@@ -17,18 +16,27 @@ public static class BrowserExtensionSetupHelper
         Chrome
     }
 
+    public enum ExtensionConnectMode
+    {
+        Manual,
+        AutoLoaded,
+        PolicyManaged
+    }
+
     public sealed record BrowserConnectResult(
         bool Success,
         string? ExtensionPath,
         SupportedBrowser Browser,
-        bool AutoLoadAttempted,
+        ExtensionConnectMode Mode,
         string? Error)
     {
-        public static BrowserConnectResult Ok(string path, SupportedBrowser browser, bool autoLoadAttempted)
-            => new(true, path, browser, autoLoadAttempted, null);
+        public bool AutoLoadAttempted => Mode == ExtensionConnectMode.AutoLoaded;
+
+        public static BrowserConnectResult Ok(string path, SupportedBrowser browser, ExtensionConnectMode mode)
+            => new(true, path, browser, mode, null);
 
         public static BrowserConnectResult Fail(string? error)
-            => new(false, null, SupportedBrowser.Edge, false, error);
+            => new(false, null, SupportedBrowser.Edge, ExtensionConnectMode.Manual, error);
     }
 
     public static BrowserBridgeInstallStatus GetStatus(ShellViewModel vm)
@@ -59,22 +67,42 @@ public static class BrowserExtensionSetupHelper
 
     public static void OpenExtensionFolder(string path)
     {
+        if (!Directory.Exists(path))
+            throw new DirectoryNotFoundException($"Extension folder not found: {path}");
+
         Process.Start(new ProcessStartInfo
         {
-            FileName = path,
+            FileName = "explorer.exe",
+            Arguments = $"\"{path}\"",
             UseShellExecute = true
         });
     }
 
-    public static async Task OpenEdgeExtensionsAsync()
-        => await OpenBrowserExtensionsAsync(SupportedBrowser.Edge);
+    public static Task OpenEdgeExtensionsAsync()
+        => OpenBrowserExtensionsAsync(SupportedBrowser.Edge);
 
-    public static async Task OpenBrowserExtensionsAsync(SupportedBrowser browser)
+    /// <summary>
+    /// Opens the browser extensions management page. Uses the browser executable directly because
+    /// <c>Launcher.LaunchUriAsync</c> cannot open internal <c>edge://</c> / <c>chrome://</c> URLs.
+    /// </summary>
+    public static Task OpenBrowserExtensionsAsync(SupportedBrowser browser)
     {
-        var uri = browser == SupportedBrowser.Chrome
+        var extensionsUrl = browser == SupportedBrowser.Chrome
             ? "chrome://extensions/"
-            : "microsoft-edge://extensions";
-        await Launcher.LaunchUriAsync(new Uri(uri));
+            : "edge://extensions/";
+
+        var exe = ResolveBrowserExecutable(browser);
+        if (exe is null)
+            throw new InvalidOperationException($"{browser} was not found on this PC.");
+
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = exe,
+            Arguments = extensionsUrl,
+            UseShellExecute = true
+        });
+
+        return Task.CompletedTask;
     }
 
     public static void CopyPathToClipboard(string path)
@@ -85,7 +113,7 @@ public static class BrowserExtensionSetupHelper
     }
 
     /// <summary>
-    /// One-click setup: register native messaging, copy path, open browser + folder, guide the user.
+    /// One-click setup: register native messaging, then auto-load, policy-managed, or guided manual steps.
     /// </summary>
     public static async Task<BrowserConnectResult> ConnectBrowserAsync(ShellViewModel vm, XamlRoot xamlRoot)
     {
@@ -94,19 +122,43 @@ public static class BrowserExtensionSetupHelper
             return BrowserConnectResult.Fail(setup.Error ?? "Browser setup failed.");
 
         var path = setup.ExtensionStagingPath!;
+        var browser = DetectPreferredBrowser();
+
+        if (vm.IsEnterprise && BrowserExtensionPolicyService.IsForceInstallConfigured())
+        {
+            await ShowPolicyManagedWizardAsync(xamlRoot, browser);
+            return BrowserConnectResult.Ok(path, browser, ExtensionConnectMode.PolicyManaged);
+        }
+
         CopyPathToClipboard(path);
 
-        var browser = DetectPreferredBrowser();
-        var autoLoadAttempted = TryLaunchBrowserWithExtension(browser, path);
+        var mode = ExtensionConnectMode.Manual;
+        if (TryLaunchBrowserWithExtension(browser, path))
+        {
+            mode = ExtensionConnectMode.AutoLoaded;
+        }
+        else if (IsBrowserRunning(browser))
+        {
+            var choice = await PromptCloseBrowserForAutoInstallAsync(xamlRoot, browser);
+            if (choice == CloseBrowserChoice.Cancel)
+                return BrowserConnectResult.Fail("Browser setup cancelled.");
 
-        if (!autoLoadAttempted)
+            if (choice == CloseBrowserChoice.CloseAndInstall && TryCloseBrowser(browser))
+            {
+                await Task.Delay(2000);
+                if (TryLaunchBrowserWithExtension(browser, path))
+                    mode = ExtensionConnectMode.AutoLoaded;
+            }
+        }
+
+        if (mode != ExtensionConnectMode.AutoLoaded)
         {
             try { await OpenBrowserExtensionsAsync(browser); } catch { /* user can open manually */ }
             OpenExtensionFolder(path);
         }
 
-        await ShowConnectWizardAsync(xamlRoot, path, browser, autoLoadAttempted);
-        return BrowserConnectResult.Ok(path, browser, autoLoadAttempted);
+        await ShowConnectWizardAsync(xamlRoot, path, browser, mode);
+        return BrowserConnectResult.Ok(path, browser, mode);
     }
 
     public static async Task ShowFirstRunPromptAsync(XamlRoot xamlRoot, ShellViewModel vm)
@@ -147,6 +199,9 @@ public static class BrowserExtensionSetupHelper
         if (!status.IsReadyForBrowser)
             return "One-time setup needed — click Connect browser below (~30 seconds).";
 
+        if (status.ExtensionForceInstallConfigured)
+            return "IT policy will install the browser extension. Restart Chrome or Edge if it is not visible yet.";
+
         return "Connected. On any login page, click the Fortiva icon in your browser toolbar and choose Fill.";
     }
 
@@ -174,6 +229,42 @@ public static class BrowserExtensionSetupHelper
     {
         var processName = browser == SupportedBrowser.Edge ? "msedge" : "chrome";
         return Process.GetProcessesByName(processName).Length > 0;
+    }
+
+    public static bool TryCloseBrowser(SupportedBrowser browser)
+    {
+        var processName = browser == SupportedBrowser.Edge ? "msedge" : "chrome";
+        try
+        {
+            foreach (var process in Process.GetProcessesByName(processName))
+            {
+                try
+                {
+                    if (process.MainWindowHandle != IntPtr.Zero)
+                        process.CloseMainWindow();
+                }
+                catch
+                {
+                    /* best effort */
+                }
+            }
+
+            Thread.Sleep(1500);
+            if (!IsBrowserRunning(browser))
+                return true;
+
+            foreach (var process in Process.GetProcessesByName(processName))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
+            }
+
+            Thread.Sleep(500);
+            return !IsBrowserRunning(browser);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public static bool TryLaunchBrowserWithExtension(SupportedBrowser browser, string extensionPath)
@@ -246,35 +337,114 @@ public static class BrowserExtensionSetupHelper
         }
     }
 
+    private enum CloseBrowserChoice
+    {
+        CloseAndInstall,
+        Manual,
+        Cancel
+    }
+
+    private static async Task<CloseBrowserChoice> PromptCloseBrowserForAutoInstallAsync(
+        XamlRoot xamlRoot,
+        SupportedBrowser browser)
+    {
+        var browserName = browser == SupportedBrowser.Chrome ? "Chrome" : "Edge";
+        var dialog = new ContentDialog
+        {
+            Title = $"{browserName} is already open",
+            Content = new TextBlock
+            {
+                TextWrapping = TextWrapping.WrapWholeWords,
+                Text =
+                    $"{browserName} is running, so Fortiva cannot install the extension automatically.\n\n" +
+                    "Close the browser and let Fortiva reopen it with the extension loaded? " +
+                    "Unsaved work in other tabs may be lost — Edge and Chrome usually restore tabs on restart.\n\n" +
+                    "Or choose manual setup (Developer mode → Load unpacked) if you prefer."
+            },
+            PrimaryButtonText = $"Close {browserName} and install",
+            SecondaryButtonText = "Set up manually instead",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = xamlRoot
+        };
+        FortivaDialogs.Configure(dialog, xamlRoot);
+
+        return await dialog.ShowAsync() switch
+        {
+            ContentDialogResult.Primary => CloseBrowserChoice.CloseAndInstall,
+            ContentDialogResult.Secondary => CloseBrowserChoice.Manual,
+            _ => CloseBrowserChoice.Cancel
+        };
+    }
+
+    private static async Task ShowPolicyManagedWizardAsync(XamlRoot xamlRoot, SupportedBrowser browser)
+    {
+        var browserName = browser == SupportedBrowser.Chrome ? "Chrome" : "Edge";
+        var dialog = new ContentDialog
+        {
+            Title = "Browser extension managed by IT",
+            Content = new TextBlock
+            {
+                TextWrapping = TextWrapping.WrapWholeWords,
+                Text =
+                    "This PC is configured to install the Fortiva browser extension automatically " +
+                    $"via organization policy.\n\n" +
+                    $"1. Restart {browserName} if the Fortiva icon is not in the toolbar\n" +
+                    "2. Open any login page\n" +
+                    "3. Click the Fortiva icon and choose Fill login\n\n" +
+                    "Keep Fortiva unlocked on this PC while you browse."
+            },
+            PrimaryButtonText = $"Open {browserName} extensions",
+            CloseButtonText = "Done",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = xamlRoot
+        };
+        FortivaDialogs.Configure(dialog, xamlRoot);
+
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        {
+            try { await OpenBrowserExtensionsAsync(browser); } catch { /* optional */ }
+        }
+    }
+
     private static async Task ShowConnectWizardAsync(
         XamlRoot xamlRoot,
         string extensionPath,
         SupportedBrowser browser,
-        bool autoLoaded)
+        ExtensionConnectMode mode)
     {
         var browserName = browser == SupportedBrowser.Chrome ? "Chrome" : "Edge";
-        var steps = autoLoaded
-            ? $"✓ Fortiva opened {browserName} with the extension loaded.\n\n" +
-              "Try it now:\n" +
-              "1. Open any login page\n" +
-              "2. Click the Fortiva icon in the toolbar\n" +
-              "3. Click Fill login on this page\n\n" +
-              "Keep Fortiva unlocked on this PC while you browse."
-            : $"Almost done — finish in {browserName}:\n\n" +
-              "1. Turn on Developer mode (top-right)\n" +
-              "2. Click Load unpacked\n" +
-              "3. Select the folder that opened (path is on your clipboard)\n\n" +
-              "Then open a login page and click the Fortiva toolbar icon.";
+        var steps = mode switch
+        {
+            ExtensionConnectMode.AutoLoaded =>
+                $"✓ Fortiva opened {browserName} with the extension loaded.\n\n" +
+                "Try it now:\n" +
+                "1. Open any login page\n" +
+                "2. Click the Fortiva icon in the toolbar\n" +
+                "3. Click Fill login on this page\n\n" +
+                "Keep Fortiva unlocked on this PC while you browse.",
+            ExtensionConnectMode.PolicyManaged =>
+                "IT policy will install the extension. Restart your browser if needed, then use the Fortiva toolbar icon on login pages.",
+            _ =>
+                $"Almost done — finish in {browserName}:\n\n" +
+                "1. Turn on Developer mode (top-right)\n" +
+                "2. Click Load unpacked\n" +
+                "3. Select the folder that opened (path is on your clipboard)\n\n" +
+                "Tip: choose the **extension** subfolder (contains manifest.json), not the parent Fortiva folder.\n\n" +
+                "Then open a login page and click the Fortiva toolbar icon."
+        };
 
         var dialog = new ContentDialog
         {
-            Title = autoLoaded ? "Extension loaded" : "Finish in your browser",
+            Title = mode == ExtensionConnectMode.AutoLoaded ? "Extension loaded" : "Finish in your browser",
             Content = new TextBlock
             {
                 Text = steps,
                 TextWrapping = TextWrapping.WrapWholeWords
             },
-            PrimaryButtonText = autoLoaded ? "Got it" : $"Open {browserName} extensions again",
+            PrimaryButtonText = mode == ExtensionConnectMode.AutoLoaded
+                ? "Got it"
+                : $"Open {browserName} extensions",
             SecondaryButtonText = "Open extension folder",
             CloseButtonText = "Done",
             DefaultButton = ContentDialogButton.Primary,
@@ -283,7 +453,7 @@ public static class BrowserExtensionSetupHelper
         FortivaDialogs.Configure(dialog, xamlRoot);
 
         var result = await dialog.ShowAsync();
-        if (result == ContentDialogResult.Primary && !autoLoaded)
+        if (result == ContentDialogResult.Primary && mode == ExtensionConnectMode.Manual)
         {
             try { await OpenBrowserExtensionsAsync(browser); } catch { /* optional */ }
         }

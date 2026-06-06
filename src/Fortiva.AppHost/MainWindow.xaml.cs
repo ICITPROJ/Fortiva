@@ -489,8 +489,25 @@ public sealed partial class MainWindow : Window
         if (AppTitleBar.XamlRoot?.RasterizationScale is not double scale || scale <= 0)
             return;
 
-        var titleBar = AppWindow.TitleBar;
-        LeftPaddingColumn.Width = new GridLength(titleBar.LeftInset / scale);
-        RightPaddingColumn.Width = new GridLength(titleBar.RightInset / scale);
+        try
+        {
+            var titleBar = AppWindow.TitleBar;
+            var left = titleBar.LeftInset / scale;
+            var right = titleBar.RightInset / scale;
+            // Insets can be NaN/negative briefly when the window deactivates (e.g. user switches
+            // to Edge for extension setup). GridLength throws and was crashing the whole app.
+            if (!IsValidTitleBarInset(left) || !IsValidTitleBarInset(right))
+                return;
+
+            LeftPaddingColumn.Width = new GridLength(left);
+            RightPaddingColumn.Width = new GridLength(right);
+        }
+        catch (Exception ex)
+        {
+            App.LogException("UpdateTitleBarInsets", ex);
+        }
     }
+
+    private static bool IsValidTitleBarInset(double value)
+        => double.IsFinite(value) && value >= 0 && value <= 10_000;
 }

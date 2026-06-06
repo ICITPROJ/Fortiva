@@ -174,9 +174,15 @@ public sealed partial class SettingsPage : Page
             }
 
             var browser = result.Browser == BrowserExtensionSetupHelper.SupportedBrowser.Chrome ? "Chrome" : "Edge";
-            var msg = result.AutoLoadAttempted
-                ? $"Fortiva opened {browser} with the extension. Click the Fortiva icon on a login page to fill credentials."
-                : $"Fortiva opened {browser} and the extension folder. Turn on Developer mode, click Load unpacked, and select the folder that opened.";
+            var msg = result.Mode switch
+            {
+                BrowserExtensionSetupHelper.ExtensionConnectMode.AutoLoaded =>
+                    $"Fortiva opened {browser} with the extension. Click the Fortiva icon on a login page to fill credentials.",
+                BrowserExtensionSetupHelper.ExtensionConnectMode.PolicyManaged =>
+                    "IT policy will install the browser extension. Restart Chrome or Edge if the Fortiva icon is not visible yet.",
+                _ =>
+                    $"Fortiva opened {browser} and the extension folder. Turn on Developer mode, click Load unpacked, and select the folder that opened."
+            };
             ShowInfo(msg, InfoBarSeverity.Success);
         }
         catch (Exception ex)
