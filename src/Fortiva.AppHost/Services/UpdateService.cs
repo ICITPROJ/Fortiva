@@ -95,20 +95,6 @@ public sealed class UpdateService
 
     public async Task<bool> ApplyAsync(ReleaseManifest manifest, bool silent = false)
     {
-        // The manual "Install now" path is only reachable from Settings, which requires an
-        // unlocked vault. Previously this threw, so pressing Install appeared to do nothing.
-        // Lock the vault first instead: locking scrubs secrets and releases the vault file
-        // before the installer replaces the app binaries. Lock() dispatches to the UI thread,
-        // so wait for it to take effect before continuing.
-        if (_vm.IsUnlocked)
-        {
-            _vm.Lock();
-            for (var i = 0; i < 150 && _vm.IsUnlocked; i++)
-                await Task.Delay(20).ConfigureAwait(false);
-            if (_vm.IsUnlocked)
-                throw new InvalidOperationException("Could not lock the vault before updating. Lock the vault and try again.");
-        }
-
         try
         {
             var nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(8)).ToLowerInvariant();
@@ -138,6 +124,12 @@ public sealed class UpdateService
             if (!AuthenticodeVerifier.IsSigned(dest))
                 throw new InvalidOperationException("Installer is not Authenticode-signed.");
 
+            // The manual "Install now" path is reached from Settings while the vault is unlocked.
+            // Lock here — only once download + verification have succeeded — so a download/verify
+            // failure leaves the user unlocked with a visible error instead of silently locking.
+            // Locking scrubs secrets and releases the vault file before the installer runs.
+            await EnsureVaultLockedAsync().ConfigureAwait(false);
+
             Process.Start(new ProcessStartInfo
             {
                 FileName = dest,
@@ -158,6 +150,23 @@ public sealed class UpdateService
             _vm.RecordUpdateApplyFailure(UpdateMessages.ForApplyFailure(ex));
             throw;
         }
+    }
+
+    /// <summary>
+    /// Locks the vault and waits for it to take effect. <see cref="ShellViewModel.Lock"/> dispatches
+    /// to the UI thread, so we poll briefly rather than assuming it completes synchronously.
+    /// </summary>
+    private async Task EnsureVaultLockedAsync()
+    {
+        if (!_vm.IsUnlocked)
+            return;
+
+        _vm.Lock();
+        for (var i = 0; i < 150 && _vm.IsUnlocked; i++)
+            await Task.Delay(20).ConfigureAwait(false);
+
+        if (_vm.IsUnlocked)
+            throw new InvalidOperationException("Could not lock the vault before updating. Lock the vault and try again.");
     }
 
     internal static string ResolveInstalledExePath()
