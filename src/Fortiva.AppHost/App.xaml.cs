@@ -39,8 +39,46 @@ public partial class App : Application
     private static void App_UnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
     {
         LogException("App_UnhandledException", e.Exception);
+        // Tell the user what happened (and where the log is) before the process terminates, instead
+        // of the window silently disappearing. We still let the app terminate afterwards because the
+        // managed state may be corrupt — a password manager should not soldier on in an unknown state.
+        ShowFatalErrorDialog(e.Exception);
         e.Handled = false;
     }
+
+    private static void ShowFatalErrorDialog(Exception ex)
+    {
+        try
+        {
+            var logPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                CrashLogFolderName, "fortiva-crash.log");
+            var message =
+                "Fortiva ran into an unexpected error and needs to close.\n\n"
+                + DescribeException(ex)
+                + "\n\nYour vault is encrypted on disk and is not affected. "
+                + "Details were saved to:\n" + logPath;
+            MessageBoxW(MainWindowHandle, message, "Fortiva", MB_OK | MB_ICONERROR | MB_TOPMOST);
+        }
+        catch
+        {
+            /* never let the error reporter throw */
+        }
+    }
+
+    private static string CrashLogFolderName => Edition switch
+    {
+        "Enterprise" => "FortivaEnterprise",
+        "Admin" => "FortivaAdmin",
+        _ => "FortivaPersonal"
+    };
+
+    private const uint MB_OK = 0x0;
+    private const uint MB_ICONERROR = 0x10;
+    private const uint MB_TOPMOST = 0x40000;
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int MessageBoxW(IntPtr hWnd, string text, string caption, uint type);
 
     private static void CurrentDomain_UnhandledException(object sender, System.UnhandledExceptionEventArgs e)
     {
@@ -52,15 +90,9 @@ public partial class App : Application
     {
         try
         {
-            var folder = Edition switch
-            {
-                "Enterprise" => "FortivaEnterprise",
-                "Admin"      => "FortivaAdmin",
-                _            => "FortivaPersonal"
-            };
             var logPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                folder, "fortiva-crash.log");
+                CrashLogFolderName, "fortiva-crash.log");
             Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
             File.AppendAllText(logPath, $"[{DateTime.Now:O}] {context}\n{ex}\n\n");
         }

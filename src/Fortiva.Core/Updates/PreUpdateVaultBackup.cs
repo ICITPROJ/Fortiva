@@ -20,7 +20,10 @@ public static class PreUpdateVaultBackup
     private static readonly string[] SidecarFileNames =
     [
         "hello.keyprotect",
-        "hello.binding"
+        "hello.binding",
+        // Rollback state lives alongside the Personal vault. Backing it up keeps a restored
+        // pre-update backup writable instead of tripping the missing-state rollback warning.
+        "local.state"
     ];
 
     public sealed class Result

@@ -63,7 +63,7 @@ If the goal is more discovery without Store constraints, **winget + a clear down
 Everything should converge on one flow:
 
 ```text
-Marketing site (Fortiva-Website / studio.icmclab.cloud)
+Marketing site: https://fortiva.studio.icmclab.cloud/ (privacy: /privacy.html, terms: /terms.html)
         │
         ▼
   “Download for Windows”

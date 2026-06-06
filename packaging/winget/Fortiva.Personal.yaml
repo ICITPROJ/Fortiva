@@ -2,7 +2,7 @@ PackageIdentifier: Fortiva.Personal
 PackageVersion: 1.0.0
 PackageLocale: en-US
 Publisher: icmclab studio
-PublisherUrl: https://studio.icmclab.cloud
+PublisherUrl: https://fortiva.studio.icmclab.cloud/
 PackageName: Fortiva
 ShortDescription: Zero-knowledge, local-first Windows password manager
 Description: >-
@@ -13,7 +13,7 @@ Description: >-
   secure notes, password health reports, and portable USB mode.
 
 License: Proprietary
-LicenseUrl: https://studio.icmclab.cloud/fortiva/license
+LicenseUrl: https://fortiva.studio.icmclab.cloud/terms.html
 Tags:
   - password-manager
   - security

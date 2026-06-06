@@ -1,5 +1,5 @@
 # Fortiva — User Manual
-### Published by icmclab studio · Version 1.0.0
+### Published by icmclab studio
 
 ---
 
@@ -555,5 +555,6 @@ Windows Hello must be configured in **Windows Settings → Accounts → Sign-in 
 
 ---
 
-*Fortiva v1.0.0 — Published by icmclab studio — https://studio.icmclab.cloud*  
-*For support, visit https://studio.icmclab.cloud/support*
+*Fortiva — Published by icmclab studio — https://fortiva.studio.icmclab.cloud/*  
+*Privacy: https://fortiva.studio.icmclab.cloud/privacy.html · Terms: https://fortiva.studio.icmclab.cloud/terms.html*  
+*Support: contact@studio.icmclab.cloud*

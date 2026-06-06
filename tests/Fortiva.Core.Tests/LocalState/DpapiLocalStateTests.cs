@@ -22,11 +22,18 @@ public sealed class DpapiLocalStateTests
 
         try
         {
+            // Outside Paranoia Mode the missing-state case must be confirmable (not forced read-only)
+            // so legitimate reinstall / new-PC / restore scenarios can recover.
             var result = store.CheckRollback(header, paranoiaMode: false);
             Assert.True(result.IsSuspicious);
-            Assert.True(result.ForceReadOnly);
+            Assert.False(result.ForceReadOnly);
             Assert.Contains(result.Warnings, w => w.Contains("local.state", StringComparison.OrdinalIgnoreCase));
             Assert.True(result.RequiresConfirmation);
+
+            // Paranoia Mode keeps the strict behavior (forced read-only until state is restored).
+            var paranoid = store.CheckRollback(header, paranoiaMode: true);
+            Assert.True(paranoid.IsSuspicious);
+            Assert.True(paranoid.ForceReadOnly);
         }
         finally
         {

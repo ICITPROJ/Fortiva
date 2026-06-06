@@ -60,12 +60,20 @@ public sealed class DpapiLocalStateStore
         {
             if (header.RevisionCounter > 1)
             {
+                // Missing local.state on an established vault is ambiguous: it happens both on a
+                // genuine rollback attack AND on the far more common legitimate cases (reinstall,
+                // new PC, restored backup). Outside Paranoia Mode we surface the warning and let the
+                // user confirm, which re-establishes local.state on a successful unlock. Forcing
+                // read-only here previously locked legitimate users out permanently, since
+                // local.state was never recreated.
                 return new RollbackCheckResult
                 {
                     IsSuspicious = true,
-                    Warnings = ["Local rollback state (local.state) is missing for an established vault."],
+                    Warnings = ["Local rollback state (local.state) is missing for an established vault. "
+                        + "This is expected after reinstalling, moving to a new PC, or restoring a backup. "
+                        + "Confirm to continue and re-establish local protection."],
                     RequiresConfirmation = true,
-                    ForceReadOnly = true
+                    ForceReadOnly = paranoiaMode
                 };
             }
 

@@ -64,7 +64,9 @@ git push origin main
 
 
 
-CI auto-bumps the patch version from the latest git tag, builds installers, **Authenticode-signs** published EXEs and installers (when `CODESIGN_PFX_*` secrets are configured), verifies signatures, publishes `latest.personal.json`, and creates the GitHub Release. **Manual git tags are optional** (override only).
+CI auto-bumps the patch version from the latest git tag, builds installers, publishes `latest.personal.json`, and creates the GitHub Release. **Manual git tags are optional** (override only).
+
+Code signing: Personal installers currently ship **unsigned** (see `docs/CODESIGNING.md`). The release workflow Authenticode-signs and verifies the published EXEs/installers only when the `CODESIGN_PFX_*` secrets are configured and the signing step is enabled; until then, first-run installs show a Windows SmartScreen "Unknown publisher" prompt. Update integrity does not depend on Authenticode — installers are verified by SHA-256 against the signed manifest over HTTPS.
 
 Legacy update host `studio.icmclab.cloud` is accepted only until **2026-09-01 UTC**; GitHub Releases is the canonical feed.
 

@@ -231,6 +231,18 @@ public sealed class VaultIntegrationTests : IDisposable
     }
 
     [Fact]
+    public void CsvImport_RejectsOverLongField_InsteadOfTruncating()
+    {
+        var hugePassword = new string('x', 70 * 1024);
+        var csv = "name,username,password,url,notes\n" +
+                  $"Site,user,{hugePassword},https://example.com,note";
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(csv));
+        var ex = Assert.Throws<InvalidDataException>(() => CsvImporter.ImportFromCsv(stream));
+        Assert.Contains("password", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("row 2", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void RapidLockUnlock_100Cycles_Stable()
     {
         var engine = new VaultEngine(_dir, DpapiScope.CurrentUser);

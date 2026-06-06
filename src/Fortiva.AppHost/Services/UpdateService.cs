@@ -130,17 +130,25 @@ public sealed class UpdateService
             // Locking scrubs secrets and releases the vault file before the installer runs.
             await EnsureVaultLockedAsync().ConfigureAwait(false);
 
-            Process.Start(new ProcessStartInfo
+            var installer = Process.Start(new ProcessStartInfo
             {
                 FileName = dest,
                 Arguments = UpdateUrlPolicy.ResolveInstallerArgs(manifest),
                 UseShellExecute = true
             });
 
-            _vm.ClearUpdateApplyFailure();
-
-            // Give the installer a moment to start, then exit so files are not locked.
+            // Confirm the installer is actually running before we exit. If it failed to start (or
+            // died immediately with an error), do NOT quit the app — surface the failure instead so
+            // the user is not left with no running Fortiva and no explanation.
             await Task.Delay(750).ConfigureAwait(false);
+            if (installer is null || (installer.HasExited && installer.ExitCode != 0))
+            {
+                throw new InvalidOperationException(
+                    "The updater did not start correctly. Your current version is unchanged. "
+                    + "Please download and run the latest installer manually.");
+            }
+
+            _vm.ClearUpdateApplyFailure();
             App.ExitForUpdate();
             return true;
         }

@@ -1,0 +1,91 @@
+Fortiva End User License Agreement (EULA)
+==========================================
+
+Copyright (c) icmclab studio. All rights reserved.
+
+Last updated: 2026-06-06
+
+IMPORTANT — READ CAREFULLY: This End User License Agreement ("Agreement") is a
+legal agreement between you (either an individual or a single entity, "you")
+and icmclab studio ("Licensor") for the Fortiva software product, which
+includes the desktop application(s) (Fortiva Personal, Fortiva Enterprise,
+Fortiva Admin), the browser extension and native messaging host, associated
+media, and documentation (collectively, the "Software").
+
+By installing, copying, or otherwise using the Software, you agree to be bound
+by the terms of this Agreement. If you do not agree, do not install or use the
+Software.
+
+1. LICENSE GRANT
+   Subject to your compliance with this Agreement:
+   (a) Fortiva Personal is licensed to you free of charge for personal,
+       non-commercial use on devices that you own or control.
+   (b) Fortiva Enterprise and Fortiva Admin are licensed only under a valid,
+       paid license issued by Licensor, and only for the number of seats and
+       the term specified in that license.
+   This is a license, not a sale. Licensor retains all right, title, and
+   interest in and to the Software.
+
+2. RESTRICTIONS
+   You may not, except to the extent expressly permitted by applicable law:
+   (a) reverse engineer, decompile, or disassemble the Software, or attempt to
+       derive its source code, except where the Software is provided in source
+       form by Licensor;
+   (b) rent, lease, lend, sell, sublicense, or distribute the Software;
+   (c) remove or alter any proprietary notices;
+   (d) circumvent, disable, or interfere with license-enforcement, seat,
+       security, or integrity mechanisms;
+   (e) use the Software to develop a competing product.
+
+3. YOUR DATA
+   Fortiva is a local-first, zero-knowledge password manager. Your vault and
+   its contents are stored and encrypted on your own device(s). Licensor does
+   not receive, transmit, store, or have access to your vault contents or
+   master password. You are solely responsible for:
+   (a) safeguarding your master password and any recovery material; and
+   (b) maintaining backups of your vault.
+   LICENSOR CANNOT RECOVER YOUR DATA IF YOU LOSE YOUR MASTER PASSWORD. There is
+   no backdoor and no password reset.
+
+4. UPDATES
+   The Software may check for and install updates. Fortiva Personal checks the
+   public release feed over HTTPS and verifies installers by SHA-256 hash.
+   Enterprise/Admin editions are updated through your organization's tooling.
+
+5. THIRD-PARTY COMPONENTS
+   The Software incorporates third-party components that are subject to their
+   own license terms (including, without limitation, the .NET runtime, the
+   Windows App SDK, and the Argon2 implementation). Those terms govern your use
+   of the respective components.
+
+6. TERM AND TERMINATION
+   This Agreement is effective until terminated. It terminates automatically if
+   you breach it. For Enterprise/Admin editions, license rights also end when
+   the applicable license expires or is revoked. Upon termination you must stop
+   using and uninstall the Software. Sections 2, 3, 7, 8, and 9 survive
+   termination.
+
+7. DISCLAIMER OF WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY OF ANY
+   KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES
+   OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+   YOU BEAR THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE SOFTWARE.
+
+8. LIMITATION OF LIABILITY
+   TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT WILL LICENSOR
+   BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE
+   DAMAGES, OR FOR ANY LOSS OF DATA, PROFITS, OR GOODWILL, ARISING OUT OF OR
+   RELATED TO THE SOFTWARE OR THIS AGREEMENT, EVEN IF ADVISED OF THE
+   POSSIBILITY OF SUCH DAMAGES. LICENSOR'S TOTAL AGGREGATE LIABILITY WILL NOT
+   EXCEED THE GREATER OF (a) THE AMOUNT YOU PAID FOR THE SOFTWARE IN THE
+   12 MONTHS PRECEDING THE CLAIM, OR (b) USD $50.
+
+9. GENERAL
+   This Agreement is governed by the laws of the jurisdiction in which Licensor
+   is established, without regard to conflict-of-laws rules. If any provision is
+   held unenforceable, the remaining provisions remain in effect. This is the
+   entire agreement between you and Licensor regarding the Software.
+
+Contact: https://fortiva.studio.icmclab.cloud/
+Terms: https://fortiva.studio.icmclab.cloud/terms.html
+Privacy: https://fortiva.studio.icmclab.cloud/privacy.html

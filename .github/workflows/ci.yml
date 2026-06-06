@@ -160,6 +160,6 @@ jobs:
   all-clear:
     name: All checks passed
     runs-on: ubuntu-latest
-    needs: [core, license-tool, browser-bridge]
+    needs: [core, license-tool, browser-bridge, winui]
     steps:
       - run: echo "All required CI checks passed."

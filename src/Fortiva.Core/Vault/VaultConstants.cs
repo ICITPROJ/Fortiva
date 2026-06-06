@@ -9,6 +9,7 @@ public static class VaultConstants
     public const string VaultFileName = "vault.fva";
     public const string SnapshotPrefix = "vault.fva.snapshot";
     public const string TempSuffix = ".tmp";
+    public const string BackupSuffix = ".bak";
 
     public const int MaxVaultFileBytes = 256 * 1024 * 1024;
     public const int MaxFieldBytes = 64 * 1024 * 1024;

@@ -415,8 +415,15 @@ public sealed partial class EntryPage : Page
         FortivaDialogs.Configure(dlg, Content.XamlRoot);
         if (await dlg.ShowAsync() == ContentDialogResult.Primary)
         {
-            _vm.DeleteEntry(_existing.Id);
-            NavigationService.Current.GoBack();
+            try
+            {
+                _vm.DeleteEntry(_existing.Id);
+                NavigationService.Current.GoBack();
+            }
+            catch (Exception ex)
+            {
+                _ = ShowErrorAsync(ex.Message);
+            }
         }
     }
 

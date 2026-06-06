@@ -12,7 +12,7 @@
 
 #define AppPublisher   "icmclab studio"
 
-#define AppURL         "https://studio.icmclab.cloud"
+#define AppURL         "https://fortiva.studio.icmclab.cloud"
 
 #define AppExeName     "Fortiva.Personal.exe"
 
@@ -61,6 +61,10 @@ Compression=lzma2/max
 SolidCompression=yes
 
 WizardStyle=modern
+
+; Shown on the interactive install license page. Skipped automatically on /VERYSILENT
+; (the auto-update path), so it does not block silent updates.
+LicenseFile=..\..\LICENSE
 
 WizardImageFile=..\assets\wizard-sidebar.bmp
 

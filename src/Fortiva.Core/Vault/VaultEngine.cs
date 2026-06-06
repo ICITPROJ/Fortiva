@@ -23,11 +23,63 @@ public sealed class VaultEngine
         Directory.CreateDirectory(stateDir);
         _localState = new DpapiLocalStateStore(stateDir, dpapiScope);
         _policy = policy;
+        TryRecoverInterruptedWrite();
     }
 
     public string VaultPath => _snapshots.VaultPath;
     public bool VaultExists => File.Exists(_snapshots.VaultPath);
     public VaultSnapshotManager Snapshots => _snapshots;
+
+    /// <summary>
+    /// Recovers from a crash/power-loss that interrupted the non-atomic replace fallback used on
+    /// FAT32/exFAT (removable/portable drives). That fallback moves the live vault aside to
+    /// <c>vault.fva.bak</c> before moving the new file into place, so a crash in between can leave
+    /// no <c>vault.fva</c>. Restores the last good copy from the backup (or, failing that, the most
+    /// recent snapshot) so the app does not appear to have "lost" the vault. No-op on a healthy
+    /// vault or an empty directory. Returns true when a recovery was performed.
+    /// </summary>
+    public bool TryRecoverInterruptedWrite()
+    {
+        var vaultPath = _snapshots.VaultPath;
+        var dir = Path.GetDirectoryName(vaultPath)!;
+        var backup = vaultPath + VaultConstants.BackupSuffix;
+        var temp = Path.Combine(dir, VaultConstants.VaultFileName + VaultConstants.TempSuffix);
+
+        try
+        {
+            if (File.Exists(vaultPath))
+            {
+                // Healthy vault present — clean up a stale backup left by a completed fallback write.
+                if (File.Exists(backup))
+                    TryDelete(backup);
+                return false;
+            }
+
+            // vault.fva is missing. Prefer the backup (the last successfully saved state that the
+            // fallback preserved); otherwise fall back to the newest snapshot.
+            if (File.Exists(backup) && new FileInfo(backup).Length > 0)
+            {
+                File.Move(backup, vaultPath);
+                TryDelete(temp);
+                return true;
+            }
+
+            var snapshot = _snapshots.FindLatestSnapshot();
+            if (snapshot is not null && new FileInfo(snapshot).Length > 0)
+            {
+                File.Copy(snapshot, vaultPath, overwrite: false);
+                TryDelete(temp);
+                return true;
+            }
+        }
+        catch
+        {
+            // Best-effort recovery; if it fails the caller still sees "no vault" and can recover
+            // manually from the backup/snapshot files which are left in place.
+        }
+
+        return false;
+    }
 
     // ── Creation ─────────────────────────────────────────────────────────────
 
@@ -180,9 +232,42 @@ public sealed class VaultEngine
         if (ctx.ReadOnly)
             throw new InvalidOperationException("Vault is read-only.");
         PolicyEnforcer.EnsureWritableSecurityLevel(ctx.Header.SecurityLevel, _policy);
+        EnsureNoConcurrentModification(ctx);
         ctx.Header.LastModifiedAt = DateTimeOffset.UtcNow;
         ctx.Header.RevisionCounter++;
         SaveInternal(ctx.Keys, ctx.Header, ctx.Payload, updateLocalState: true);
+    }
+
+    /// <summary>
+    /// Optimistic concurrency guard: after any successful save the in-memory revision counter equals
+    /// the on-disk one. If another process saved in the meantime, the on-disk counter will be higher,
+    /// so we refuse to overwrite and let the caller reload instead of silently clobbering.
+    /// </summary>
+    private void EnsureNoConcurrentModification(VaultUnlockContext ctx)
+    {
+        var diskRevision = TryReadOnDiskRevision();
+        if (diskRevision is { } rev && rev != ctx.Header.RevisionCounter)
+            throw new VaultConcurrencyException();
+    }
+
+    private ulong? TryReadOnDiskRevision()
+    {
+        var path = _snapshots.VaultPath;
+        if (!File.Exists(path))
+            return null;
+        try
+        {
+            var bytes = File.ReadAllBytes(path);
+            if (bytes.Length > VaultConstants.MaxVaultFileBytes)
+                return null;
+            var (header, _, _) = VaultSerializer.ParseVaultFile(bytes);
+            return header.RevisionCounter;
+        }
+        catch
+        {
+            // Best-effort: a torn read or transient I/O error must not block a legitimate save.
+            return null;
+        }
     }
 
     public void AddEntry(VaultUnlockContext ctx, VaultEntry entry)
@@ -345,8 +430,34 @@ public sealed class VaultEngine
             ReplaceFileWithFallback(temp, _snapshots.VaultPath);
         else
             File.Move(temp, _snapshots.VaultPath);
+        TryRestrictPermissionsOnFixedDrive(_snapshots.VaultPath);
         if (!suppressSnapshot)
             _snapshots.RotateSnapshotAfterSave();
+    }
+
+    /// <summary>
+    /// Tightens the vault file ACL to the current user on fixed (non-removable, non-network) drives.
+    /// Removable/network media are intentionally skipped: a portable USB vault is meant to be opened
+    /// on other machines/accounts, and a machine-specific ACL would lock the owner out. Best-effort —
+    /// the vault contents are encrypted regardless.
+    /// </summary>
+    private static void TryRestrictPermissionsOnFixedDrive(string vaultPath)
+    {
+        try
+        {
+            if (!OperatingSystem.IsWindows())
+                return;
+            var root = Path.GetPathRoot(Path.GetFullPath(vaultPath));
+            if (string.IsNullOrEmpty(root))
+                return;
+            if (new DriveInfo(root).DriveType != DriveType.Fixed)
+                return;
+            Hello.HelloFileSecurity.ApplyCurrentUserOnlyAcl(vaultPath);
+        }
+        catch
+        {
+            /* best effort */
+        }
     }
 
     /// <summary>
@@ -367,7 +478,7 @@ public sealed class VaultEngine
             // ReplaceFile is unsupported on this volume — fall back below.
         }
 
-        var backup = destination + ".bak";
+        var backup = destination + VaultConstants.BackupSuffix;
         try
         {
             if (File.Exists(backup))

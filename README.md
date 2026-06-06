@@ -53,7 +53,7 @@ Master Key (MK)  ──AES-256-GCM (Windows CNG)──►  Wrapped Vault Key (VK
 
 ```powershell
 dotnet build src/Fortiva.Core/Fortiva.Core.csproj -c Release
-dotnet test  tests/Fortiva.Core.Tests/                        # 128+ tests
+dotnet test  tests/Fortiva.Core.Tests/                        # 200+ tests
 dotnet test  tests/Fortiva.AppHost.Tests/ -p:Platform=x64     # ViewModel + Hello tests
 ```
 
@@ -124,3 +124,8 @@ GitHub Actions (`.github/workflows/ci.yml`, `release.yml`):
 3. **CodeQL** — security scanning
 
 Developer flow: `git push origin main` → wait for Release workflow → users **Check for updates** in the app. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## License & Privacy
+
+- **License:** Proprietary. See [`LICENSE`](LICENSE) (End User License Agreement). Fortiva Personal is free for personal, non-commercial use; Enterprise/Admin require a paid license.
+- **Privacy:** Local-first and zero-knowledge — no telemetry, no accounts, no server-side processing of your vault. See [`PRIVACY.md`](PRIVACY.md) and [fortiva.studio.icmclab.cloud/privacy.html](https://fortiva.studio.icmclab.cloud/privacy.html).

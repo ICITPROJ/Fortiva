@@ -5,7 +5,7 @@
 #define AppVersion     "1.0.0"
 #endif
 #define AppPublisher   "icmclab studio"
-#define AppURL         "https://studio.icmclab.cloud"
+#define AppURL         "https://fortiva.studio.icmclab.cloud"
 #define AppExeName     "Fortiva.Admin.exe"
 #define SourceDir      "..\..\dist\Fortiva.Admin"
 #define OutputDir      "..\..\dist\installers"

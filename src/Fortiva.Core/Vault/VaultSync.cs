@@ -127,11 +127,24 @@ public static class VaultSynchronizer
         var localResult = ComputeSide(localBefore, merged);
         var remoteResult = ComputeSide(remoteBefore, merged);
 
-        ApplyMerged(local, merged);
+        // Persist the remote vault first. The remote is typically the removable/portable copy
+        // (USB), which is the most likely to fail (drive unplugged, disk full, read-only). If it
+        // fails we have not touched the local vault at all, so the two cannot diverge — the sync is
+        // simply aborted. Only after the remote is durably saved do we apply and save the local.
         ApplyMerged(remote, merged);
-
-        localEngine.Save(local);
         remoteEngine.Save(remote);
+
+        ApplyMerged(local, merged);
+        try
+        {
+            localEngine.Save(local);
+        }
+        catch (Exception ex)
+        {
+            throw new VaultSyncPartialException(
+                "The other vault was synced but saving this vault failed. The vaults are temporarily "
+                + "out of sync; run the sync again to reconcile them.", ex);
+        }
 
         return new VaultSyncResult(localResult, remoteResult, merged.Entries.Count);
     }

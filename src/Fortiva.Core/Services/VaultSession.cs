@@ -110,6 +110,10 @@ public sealed class VaultSession : IDisposable
 
     public void Lock()
     {
+        // Clear plaintext secrets from the entry objects before tearing down the session. The
+        // entries can outlive the session if the UI still references them, so dropping the
+        // decrypted strings here (not only in PanicLock) limits how long they linger in memory.
+        ScrubPayloadSecrets();
         DisposeSession();
         _audit?.Log(AuditEventType.Lock, "Vault locked");
         StateChanged?.Invoke();
@@ -254,11 +258,14 @@ public sealed class VaultSession : IDisposable
             if (_context is null)
                 return new CredentialResponse { Error = "locked" };
 
-            if (_fillNonce is null || !_fillNonce.TryConsume(req.FillNonce))
-                return new CredentialResponse { Error = "invalid_nonce" };
-
+            // Normalize the host first so the fill nonce can be validated against the host it was
+            // issued for. This prevents a malicious bridge client from listing on one domain and
+            // replaying the nonce to fetch credentials for a different domain.
             if (!TryNormalizeRequest(req, out var requestHost, out var hostError))
                 return hostError;
+
+            if (_fillNonce is null || !_fillNonce.TryConsume(req.FillNonce, requestHost))
+                return new CredentialResponse { Error = "invalid_nonce" };
 
             var matches = ListMatchesForHost(requestHost);
             if (matches.Count == 0)
@@ -331,7 +338,7 @@ public sealed class VaultSession : IDisposable
             {
                 Found = matches.Count > 0,
                 Matches = matches,
-                FillNonce = _fillNonce?.Issue(),
+                FillNonce = _fillNonce?.Issue(requestHost),
                 Error = matches.Count == 0 ? "no_match" : null
             };
         }

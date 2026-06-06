@@ -142,13 +142,29 @@ jobs:
         shell: pwsh
         run: ./build-release.ps1 -Version ${{ needs.prepare.outputs.version }}
 
-      # Authenticode signing disabled for Personal — see docs/CODESIGNING.md.
-      # Re-enable sign + verify steps when CODESIGN_* secrets or Azure Artifact Signing is configured.
+      # Authenticode signing. No-op until CODESIGN_PFX_BASE64 / CODESIGN_PFX_PASSWORD repo secrets
+      # are configured (the script self-skips). See docs/CODESIGNING.md. Published EXEs are signed
+      # BEFORE installers bundle them; installers are signed BEFORE the manifest hashes them.
+      - name: Sign published executables
+        shell: pwsh
+        env:
+          CODESIGN_PFX_BASE64: ${{ secrets.CODESIGN_PFX_BASE64 }}
+          CODESIGN_PFX_PASSWORD: ${{ secrets.CODESIGN_PFX_PASSWORD }}
+          CODESIGN_TIMESTAMP_URL: ${{ secrets.CODESIGN_TIMESTAMP_URL }}
+        run: ./scripts/sign-release-artifacts.ps1 -Stage Published
 
       - name: Build installers
         shell: pwsh
         run: ./build-installers.ps1 -Version ${{ needs.prepare.outputs.version }}
         timeout-minutes: 30
+
+      - name: Sign installers
+        shell: pwsh
+        env:
+          CODESIGN_PFX_BASE64: ${{ secrets.CODESIGN_PFX_BASE64 }}
+          CODESIGN_PFX_PASSWORD: ${{ secrets.CODESIGN_PFX_PASSWORD }}
+          CODESIGN_TIMESTAMP_URL: ${{ secrets.CODESIGN_TIMESTAMP_URL }}
+        run: ./scripts/sign-release-artifacts.ps1 -Stage Installers
 
       - name: Verify release artifacts
         shell: pwsh

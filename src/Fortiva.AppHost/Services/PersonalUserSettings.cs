@@ -106,6 +106,9 @@ public sealed class PersonalUserSettings
             File.Replace(temp, path, null);
         else
             File.Move(temp, path);
+        // Preferences include the portable vault location and update state; restrict to the
+        // current user (PersonalDataRoot is always on a fixed profile drive).
+        Fortiva.Core.Hello.HelloFileSecurity.ApplyCurrentUserOnlyAcl(path);
     }
 
     private static PersonalUserSettings? TryDeserializeFromFile(string path)

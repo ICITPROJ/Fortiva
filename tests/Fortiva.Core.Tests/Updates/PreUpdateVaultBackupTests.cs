@@ -22,7 +22,9 @@ public sealed class PreUpdateVaultBackupTests
             Assert.True(Directory.Exists(result.BackupDirectory));
             Assert.True(File.Exists(Path.Combine(result.BackupDirectory, Fortiva.Core.Vault.VaultConstants.VaultFileName)));
             Assert.True(File.Exists(Path.Combine(result.BackupDirectory, "hello.keyprotect")));
-            Assert.False(File.Exists(Path.Combine(result.BackupDirectory, "local.state")));
+            // local.state is now backed up so a restored pre-update backup stays writable
+            // instead of tripping the missing-rollback-state warning.
+            Assert.True(File.Exists(Path.Combine(result.BackupDirectory, "local.state")));
             Assert.True(File.Exists(Path.Combine(result.BackupDirectory, "manifest.json")));
         }
         finally

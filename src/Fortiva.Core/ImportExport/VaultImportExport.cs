@@ -27,28 +27,40 @@ public static class CsvImporter
 
         var entries = new List<VaultEntry>();
         string? line;
+        var rowNumber = 1; // header was row 1
         while ((line = reader.ReadLine()) is not null)
         {
+            rowNumber++;
             if (entries.Count >= maxRows)
                 throw new InvalidDataException($"CSV import exceeds maximum row count ({maxRows}).");
             if (string.IsNullOrWhiteSpace(line)) continue;
             var cols = ParseCsvLine(line);
             entries.Add(new VaultEntry
             {
-                Title = TrimField(Get(cols, titleIdx)),
-                Username = TrimField(Get(cols, userIdx)),
-                Password = TrimField(Get(cols, passIdx)),
-                Url = TrimField(Get(cols, urlIdx)),
-                Notes = TrimField(Get(cols, notesIdx))
+                Title = CheckField(Get(cols, titleIdx), "title", rowNumber),
+                Username = CheckField(Get(cols, userIdx), "username", rowNumber),
+                Password = CheckField(Get(cols, passIdx), "password", rowNumber),
+                Url = CheckField(Get(cols, urlIdx), "url", rowNumber),
+                Notes = CheckField(Get(cols, notesIdx), "notes", rowNumber)
             });
         }
         return entries;
     }
 
-    private const int MaxFieldLength = 4096;
+    private const int MaxFieldLength = 64 * 1024;
 
-    private static string TrimField(string value)
-        => value.Length <= MaxFieldLength ? value : value[..MaxFieldLength];
+    /// <summary>
+    /// Rejects over-long fields with a clear, row-identified error instead of silently truncating.
+    /// Truncating a password would store a wrong (unusable) credential without the user knowing.
+    /// </summary>
+    private static string CheckField(string value, string fieldName, int rowNumber)
+    {
+        if (value.Length > MaxFieldLength)
+            throw new InvalidDataException(
+                $"CSV row {rowNumber}: the '{fieldName}' field exceeds the maximum length "
+                + $"({MaxFieldLength} characters). Import aborted so no data is silently truncated.");
+        return value;
+    }
 
     private static int IndexOf(List<string> headers, params string[] names)
     {

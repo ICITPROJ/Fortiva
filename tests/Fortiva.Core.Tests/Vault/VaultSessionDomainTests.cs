@@ -174,7 +174,43 @@ public class VaultSessionDomainTests : IDisposable
             Url = "https://login.example.com/signin",
             FillNonce = "00"
         });
-        Assert.Equal("invalid_nonce", blocked.Error);
+        // The host inconsistency is rejected regardless of the (bogus) nonce.
+        Assert.Equal("host_mismatch", blocked.Error);
+    }
+
+    [Fact]
+    public void ResolveForDomain_RejectsNonceIssuedForDifferentHost()
+    {
+        var engine = new VaultEngine(_dir, DpapiScope.CurrentUser);
+        engine.CreateVault("nonce-bind-test!", SecurityLevel.Standard);
+        var session = new VaultSession(_dir, DpapiScope.CurrentUser);
+        session.Unlock("nonce-bind-test!");
+
+        session.AddEntry(new VaultEntry
+        {
+            Title = "Bank",
+            Username = "victim",
+            Password = "super-secret",
+            Url = "https://victim-bank.com"
+        });
+
+        // Attacker lists for an unrelated host and captures the issued nonce.
+        var listed = session.ListMatchesForDomain(new CredentialRequest
+        {
+            Domain = "attacker.com",
+            Url = "https://attacker.com"
+        });
+        Assert.NotNull(listed.FillNonce);
+
+        // Replaying that nonce against the victim host must fail (nonce is host-bound).
+        var replay = session.ResolveForDomain(new CredentialRequest
+        {
+            Domain = "victim-bank.com",
+            Url = "https://victim-bank.com",
+            FillNonce = listed.FillNonce
+        });
+        Assert.Equal("invalid_nonce", replay.Error);
+        Assert.True(string.IsNullOrEmpty(replay.Password));
     }
 
     [Fact]

@@ -5,10 +5,10 @@
     <Authors>icmclab studio</Authors>
     <Product>Fortiva</Product>
     <Copyright>Copyright Â© icmclab studio 2026</Copyright>
-    <PackageProjectUrl>https://studio.icmclab.cloud</PackageProjectUrl>
-    <Version>1.0.20</Version>
-    <AssemblyVersion>1.0.20.0</AssemblyVersion>
-    <FileVersion>1.0.20.0</FileVersion>
+    <PackageProjectUrl>https://fortiva.studio.icmclab.cloud/</PackageProjectUrl>
+    <Version>1.0.22</Version>
+    <AssemblyVersion>1.0.22.0</AssemblyVersion>
+    <FileVersion>1.0.22.0</FileVersion>
   </PropertyGroup>
   <PropertyGroup>
     <WindowsAppSDKVersion>1.6.250108002</WindowsAppSDKVersion>
