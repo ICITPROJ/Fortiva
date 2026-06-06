@@ -31,6 +31,14 @@ public static class UpdateUrlPolicy
         @"^FortivaPersonal-\d+(?:\.\d+){0,3}-Setup\.exe$",
         RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    private static readonly Regex GitHubCdnBlobPath = new(
+        @"^/github-production-release-asset/\d+/[0-9a-fA-F-]{36}$",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex ContentDispositionFileName = new(
+        @"filename=""?([^"";]+)""?",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     public const string DefaultInstallerArgs = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS";
 
     /// <summary>Returns manifest installer args when every token is an allowed Inno Setup switch; otherwise the default.</summary>
@@ -100,7 +108,8 @@ public static class UpdateUrlPolicy
             return false;
 
         RequireHttps(uri);
-        return uri.AbsolutePath.StartsWith("/github-production-release-asset/", StringComparison.OrdinalIgnoreCase);
+        return GitHubCdnBlobPath.IsMatch(uri.AbsolutePath)
+            || uri.AbsolutePath.StartsWith("/github-production-release-asset/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsAllowedGitHubReleaseCdnManifest(Uri uri)
@@ -203,7 +212,42 @@ public static class UpdateUrlPolicy
 
     private static string ExtractGitHubAssetFileName(Uri uri)
     {
+        if (IsGitHubReleaseCdn(uri))
+        {
+            var fromDisposition = TryExtractContentDispositionFileName(uri);
+            if (!string.IsNullOrEmpty(fromDisposition))
+                return fromDisposition;
+        }
+
         var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
         return Uri.UnescapeDataString(segments[^1]);
+    }
+
+    /// <summary>
+    /// GitHub CDN redirects use a blob GUID in the path; the real asset name is in the query string.
+    /// </summary>
+    private static string? TryExtractContentDispositionFileName(Uri uri)
+    {
+        if (string.IsNullOrEmpty(uri.Query))
+            return null;
+
+        foreach (var segment in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var equals = segment.IndexOf('=');
+            if (equals <= 0)
+                continue;
+
+            var key = Uri.UnescapeDataString(segment[..equals]);
+            if (!key.Equals("rscd", StringComparison.OrdinalIgnoreCase)
+                && !key.Equals("response-content-disposition", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var value = Uri.UnescapeDataString(segment[(equals + 1)..]);
+            var match = ContentDispositionFileName.Match(value);
+            if (match.Success)
+                return match.Groups[1].Value;
+        }
+
+        return null;
     }
 }

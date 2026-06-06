@@ -18,6 +18,8 @@ public sealed class UpdateUrlPolicyTests
 
     [InlineData("https://release-assets.githubusercontent.com/github-production-release-asset/1247749405/abc/latest.personal.json")]
 
+    [InlineData("https://release-assets.githubusercontent.com/github-production-release-asset/1247749405/00cd3fea-a25d-4fa7-9a74-703133da9ad8?rscd=attachment%3B+filename%3Dlatest.personal.json")]
+
     [InlineData("https://raw.githubusercontent.com/ICITPROJ/Fortiva/main/packaging/releases/latest.personal.json")]
 
     [InlineData("https://studio.icmclab.cloud/fortiva/releases/latest.personal.json")]
@@ -81,6 +83,8 @@ public sealed class UpdateUrlPolicyTests
 
     [InlineData("https://release-assets.githubusercontent.com/github-production-release-asset/1247749405/abc/FortivaPersonal-1.0.13-Setup.exe")]
 
+    [InlineData("https://release-assets.githubusercontent.com/github-production-release-asset/1247749405/e8f20f3c-82af-4000-b19f-7a52eeace44b?rscd=attachment%3B+filename%3DFortivaPersonal-1.0.22-Setup.exe")]
+
     [InlineData("https://studio.icmclab.cloud/fortiva/releases/1.0.0/FortivaPersonal-1.0.0-Setup.exe")]
 
     public void ValidateInstallerUrl_accepts_allowed_urls(string url)
@@ -96,6 +100,8 @@ public sealed class UpdateUrlPolicyTests
     [InlineData("https://github.com/ICITPROJ/Fortiva/releases/download/v1.0.0/FortivaEnterprise-1.0.0-Setup.exe")]
 
     [InlineData("https://release-assets.githubusercontent.com/github-production-release-asset/1247749405/abc/latest.personal.json")]
+
+    [InlineData("https://release-assets.githubusercontent.com/github-production-release-asset/1247749405/deadbeef-dead-beef-dead-beefdeadbeef?rscd=attachment%3B+filename%3Devil.exe")]
 
     public void ValidateInstallerUrl_rejects_untrusted_urls(string url)
 
