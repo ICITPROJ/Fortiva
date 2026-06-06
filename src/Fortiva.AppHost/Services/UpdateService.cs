@@ -95,8 +95,19 @@ public sealed class UpdateService
 
     public async Task<bool> ApplyAsync(ReleaseManifest manifest, bool silent = false)
     {
+        // The manual "Install now" path is only reachable from Settings, which requires an
+        // unlocked vault. Previously this threw, so pressing Install appeared to do nothing.
+        // Lock the vault first instead: locking scrubs secrets and releases the vault file
+        // before the installer replaces the app binaries. Lock() dispatches to the UI thread,
+        // so wait for it to take effect before continuing.
         if (_vm.IsUnlocked)
-            throw new InvalidOperationException("Lock the vault before installing an update.");
+        {
+            _vm.Lock();
+            for (var i = 0; i < 150 && _vm.IsUnlocked; i++)
+                await Task.Delay(20).ConfigureAwait(false);
+            if (_vm.IsUnlocked)
+                throw new InvalidOperationException("Could not lock the vault before updating. Lock the vault and try again.");
+        }
 
         try
         {
