@@ -51,6 +51,16 @@ static async Task<BridgeStatusResponse> PingAsync()
             };
         }
 
+        if (token is null)
+        {
+            return new BridgeStatusResponse
+            {
+                Ok = false,
+                Status = "setup_required",
+                Message = "Fortiva could not be reached. Open Fortiva, unlock your vault, then run Connect browser in Settings."
+            };
+        }
+
         return new BridgeStatusResponse
         {
             Ok = false,

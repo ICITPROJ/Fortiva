@@ -91,6 +91,7 @@ public sealed partial class MainWindow : Window
         _vm.BridgeUnlockRequested += OnBridgeUnlockRequested;
         if (!_vm.IsAdmin)
         {
+            BridgeClientValidator.ConfigureAllowedInstallRoots(AppContext.BaseDirectory);
             _vm.StartBridgeUnlockListener(AppContext.BaseDirectory);
             try
             {

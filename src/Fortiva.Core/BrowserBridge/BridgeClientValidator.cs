@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
+using System.Text;
 using Fortiva.Core.Platform;
 
 namespace Fortiva.Core.BrowserBridge;
@@ -43,12 +44,50 @@ public static class BridgeClientValidator
                 return false;
 
             using var proc = Process.GetProcessById((int)pid);
-            return IsAllowedBridgeHostPath(proc.MainModule?.FileName, installRoots);
+            if (!string.Equals(proc.ProcessName, "Fortiva.BrowserBridge.Host", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            var imagePath = TryGetProcessImagePath(proc);
+            if (!string.IsNullOrWhiteSpace(imagePath))
+                return IsAllowedBridgeHostPath(imagePath, installRoots);
+
+            // Edge/Chrome-spawned native hosts can block MainModule; Personal unsigned builds
+            // still require the expected process name above.
+            return !AuthenticodePolicy.RequireSignedExecutables;
         }
         catch
         {
             return false;
         }
+    }
+
+    internal static string? TryGetProcessImagePath(Process process)
+    {
+        try
+        {
+            var path = process.MainModule?.FileName;
+            if (!string.IsNullOrWhiteSpace(path))
+                return path;
+        }
+        catch
+        {
+            /* fall through */
+        }
+
+        try
+        {
+            const int maxChars = 1024;
+            var buffer = new StringBuilder(maxChars);
+            var size = maxChars;
+            if (QueryFullProcessImageName(process.SafeHandle, 0, buffer, ref size))
+                return buffer.ToString();
+        }
+        catch
+        {
+            /* best effort */
+        }
+
+        return null;
     }
 
     public static bool IsAllowedBridgeHostPath(string? fullPath, IReadOnlyList<string>? installRoots = null)
@@ -161,4 +200,7 @@ public static class BridgeClientValidator
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetNamedPipeClientProcessId(nint pipe, out uint clientProcessId);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool QueryFullProcessImageName(SafeHandle hProcess, int dwFlags, StringBuilder lpExeName, ref int lpdwSize);
 }

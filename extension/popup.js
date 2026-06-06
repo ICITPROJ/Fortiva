@@ -15,7 +15,9 @@ let activeFillNonce = null;
 const MESSAGES = {
   ready: "Fortiva is ready. Open a login form, then click Fill.",
   locked: "Fortiva is locked. Unlock the app on this PC, then try again.",
-  setup: "Fortiva is not connected. Open Fortiva → Settings → Browser extension → Connect browser.",
+  setup: "Fortiva is not connected. Open Fortiva, unlock your vault, then Settings → Browser extension → Connect browser.",
+  unreachable:
+    "Fortiva could not be reached. Make sure the app is open and unlocked, then run Connect browser in Settings.",
   noTab: "Open a website tab first, then click the Fortiva icon.",
   badTab: "Fortiva can only fill on normal website pages (http/https).",
   tabChanged:
@@ -201,6 +203,11 @@ async function refreshConnection() {
   if (ping?.status === "locked") {
     setConnection("locked", "Vault locked");
     setStatus(MESSAGES.locked, "warn");
+    return;
+  }
+  if (ping?.status === "setup_required") {
+    setConnection("setup", "Not connected");
+    setStatus(ping.message || MESSAGES.unreachable, "error");
     return;
   }
   setConnection("setup", "Not connected");
