@@ -183,6 +183,10 @@ public sealed class ShellViewModel : ViewModelBase
 
         _bridgeUnlockBroker?.Dispose();
         BridgeClientValidator.ConfigureAllowedInstallRoots(_bridgeInstallRoot);
+
+        if (!BridgePipeNaming.HasActiveSession(IsEnterprise))
+            BridgePipeNaming.RotateSessionId(IsEnterprise);
+
         _bridgeUnlockBroker = new BridgeUnlockBroker(GetBridgePresenceSnapshot, RequestUnlockFromBridgeAsync, IsEnterprise);
         _bridgeUnlockBroker.Start();
     }
