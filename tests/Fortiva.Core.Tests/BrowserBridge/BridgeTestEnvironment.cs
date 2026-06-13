@@ -20,6 +20,8 @@ public static class BridgeTestEnvironment
     {
         StopFortivaProcesses();
         BridgeHostProcessCleanup.StopAllHosts();
+        BridgeSessionRegistry.ClearActiveSessionId(false);
+        BridgePipeNaming.RotateSessionId(false);
         Thread.Sleep(400);
         if (BridgeProcessCheck.IsFortivaRunning())
         {
@@ -33,6 +35,8 @@ public static class BridgeTestEnvironment
     {
         StopFortivaProcesses();
         BridgeHostProcessCleanup.StopAllHosts();
+        BridgeSessionRegistry.ClearActiveSessionId(false);
+        BridgePipeNaming.SetInProcessSessionId(null);
         BridgeSessionAuth.ClearSessionToken();
         BridgeSessionAuth.ConfigureTokenDirectory(null!);
 

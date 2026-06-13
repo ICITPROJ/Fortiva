@@ -13,6 +13,9 @@ public interface IBridgeCoordinator : IDisposable
     /// <summary>Fires when <see cref="CurrentState"/> changes.</summary>
     event Action<BridgeReadyState>? ReadyStateChanged;
 
+    /// <summary>Fires after a new session-scoped pipe id is written to the registry.</summary>
+    event Action? SessionRotated;
+
     /// <summary>
     /// Single authoritative heal path — replaces scattered watchdog and UI reconciliation loops.
     /// </summary>

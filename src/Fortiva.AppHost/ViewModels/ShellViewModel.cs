@@ -166,12 +166,25 @@ public sealed class ShellViewModel : ViewModelBase
         if (_bridgeCoordinator is not null)
             return _bridgeCoordinator;
 
-        _bridgeCoordinator = new BridgeCoordinator(
+        var coordinator = new BridgeCoordinator(
             () => _session,
             () => VaultExists,
             () => IsEnterprise,
             () => _bridgeInstallRoot ?? AppContext.BaseDirectory);
+        coordinator.SessionRotated += RestartBridgeUnlockBroker;
+        _bridgeCoordinator = coordinator;
         return _bridgeCoordinator;
+    }
+
+    private void RestartBridgeUnlockBroker()
+    {
+        if (IsAdmin || _bridgeInstallRoot is null)
+            return;
+
+        _bridgeUnlockBroker?.Dispose();
+        BridgeClientValidator.ConfigureAllowedInstallRoots(_bridgeInstallRoot);
+        _bridgeUnlockBroker = new BridgeUnlockBroker(GetBridgePresenceSnapshot, RequestUnlockFromBridgeAsync, IsEnterprise);
+        _bridgeUnlockBroker.Start();
     }
 
     /// <summary>Starts unlock listener for browser extension (runs while app is open, even when locked).</summary>
@@ -181,10 +194,7 @@ public sealed class ShellViewModel : ViewModelBase
             return;
 
         _bridgeInstallRoot = installRoot;
-        _bridgeUnlockBroker?.Dispose();
-        BridgeClientValidator.ConfigureAllowedInstallRoots(installRoot);
-        _bridgeUnlockBroker = new BridgeUnlockBroker(GetBridgePresenceSnapshot, RequestUnlockFromBridgeAsync);
-        _bridgeUnlockBroker.Start();
+        RestartBridgeUnlockBroker();
         _ = ReconcileBridgeLifecycleAsync("UnlockListenerStart");
     }
 

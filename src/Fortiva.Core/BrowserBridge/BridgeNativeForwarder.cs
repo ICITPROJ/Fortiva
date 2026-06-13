@@ -12,6 +12,12 @@ public static class BridgeNativeForwarder
     private static int OverallTimeoutSeconds => IsFastTest ? 5 : 120;
     private const int CredentialReadSeconds = 30;
 
+    public static bool IsEnterpriseEdition { get; private set; }
+
+    public static void ConfigureEdition(bool enterprise) => IsEnterpriseEdition = enterprise;
+
+    public static bool HasActiveBridgeSession() => BridgePipeNaming.HasActiveSession(IsEnterpriseEdition);
+
     public static async Task<string> HandleAsync(JsonElement request, CancellationToken ct = default)
     {
         var command = request.TryGetProperty("command", out var cmd) ? cmd.GetString() : "";
@@ -308,8 +314,19 @@ public static class BridgeNativeForwarder
         string token,
         CancellationToken ct)
     {
+        var pipeName = BridgePipeNaming.TryCredentialPipeNameInProcess()
+            ?? BridgePipeNaming.TryCredentialPipeName(IsEnterpriseEdition);
+        if (pipeName is null)
+        {
+            return BridgeJson.Serialize(new CredentialResponse
+            {
+                Error = "setup_required",
+                Message = "Fortiva bridge is not active. Unlock Fortiva and try again."
+            });
+        }
+
         using var client = new System.IO.Pipes.NamedPipeClientStream(
-            ".", BrowserBridgeServer.PipeName, System.IO.Pipes.PipeDirection.InOut,
+            ".", pipeName, System.IO.Pipes.PipeDirection.InOut,
             System.IO.Pipes.PipeOptions.Asynchronous);
         await client.ConnectAsync(5000, ct).ConfigureAwait(false);
         using var writer = new StreamWriter(client, Encoding.UTF8) { AutoFlush = true };
@@ -345,7 +362,7 @@ public static class BridgeNativeForwarder
     {
         for (var attempt = 0; attempt < attempts && !ct.IsCancellationRequested; attempt++)
         {
-            var token = await BridgeSessionAuth.RequestTokenFromBrokerAsync(timeoutMs: timeoutMs)
+            var token = await BridgeSessionAuth.RequestTokenFromBrokerAsync(timeoutMs: timeoutMs, enterprise: IsEnterpriseEdition)
                 .ConfigureAwait(false);
             if (!string.IsNullOrEmpty(token))
                 return token;

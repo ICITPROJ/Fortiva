@@ -27,9 +27,11 @@ public sealed class BrowserBridgeCorePipeStressTests : IDisposable
     public async Task TokenBroker_RepeatedRejectedConnections_StayAvailable()
     {
         BridgeTestEnvironment.EnsurePipeNamesAvailable();
+        BridgePipeNaming.RotateSessionId(false);
+        var tokenPipe = BridgePipeNaming.TokenPipeName(false);
 
         var token = BridgeSessionAuth.CreateSessionToken();
-        var broker = new BridgeTokenBroker(token);
+        var broker = new BridgeTokenBroker(token, enterprise: false);
         try
         {
             broker.Start();
@@ -38,7 +40,7 @@ public sealed class BrowserBridgeCorePipeStressTests : IDisposable
             var connected = 0;
             for (var i = 0; i < 30; i++)
             {
-                if (await TryConnectAsync(BridgeTokenBroker.PipeName, timeoutMs: 1200))
+                if (await TryConnectAsync(tokenPipe, timeoutMs: 1200))
                     connected++;
             }
 
@@ -54,23 +56,25 @@ public sealed class BrowserBridgeCorePipeStressTests : IDisposable
     public async Task TokenBroker_ParallelRejectedConnections_DoNotDeadlock()
     {
         BridgeTestEnvironment.EnsurePipeNamesAvailable();
+        BridgePipeNaming.RotateSessionId(false);
+        var tokenPipe = BridgePipeNaming.TokenPipeName(false);
 
         var token = BridgeSessionAuth.CreateSessionToken();
-        var broker = new BridgeTokenBroker(token);
+        var broker = new BridgeTokenBroker(token, enterprise: false);
         try
         {
             broker.Start();
             await Task.Delay(250);
 
             var tasks = Enumerable.Range(0, 16)
-                .Select(_ => TryConnectAsync(BridgeTokenBroker.PipeName, timeoutMs: 5000));
+                .Select(_ => TryConnectAsync(tokenPipe, timeoutMs: 5000));
             var results = await Task.WhenAll(tasks);
             Assert.True(results.Any(r => r), "At least one parallel connect should succeed");
 
             var sequential = 0;
             for (var i = 0; i < 12; i++)
             {
-                if (await TryConnectAsync(BridgeTokenBroker.PipeName, timeoutMs: 5000))
+                if (await TryConnectAsync(tokenPipe, timeoutMs: 5000))
                     sequential++;
             }
 
@@ -86,12 +90,15 @@ public sealed class BrowserBridgeCorePipeStressTests : IDisposable
     public async Task BrowserBridgeServer_RepeatedConnections_StayAvailable()
     {
         BridgeTestEnvironment.EnsurePipeNamesAvailable();
+        BridgePipeNaming.RotateSessionId(false);
+        var credPipe = BridgePipeNaming.CredentialPipeName(false);
 
         var token = BridgeSessionAuth.CreateSessionToken();
         var server = new BrowserBridgeServer(
             _ => new CredentialResponse { Found = true, Username = "u", Password = "p" },
             _ => new CredentialResponse { Matches = [] },
-            token);
+            token,
+            enterprise: false);
         try
         {
             server.Start();
@@ -100,7 +107,7 @@ public sealed class BrowserBridgeCorePipeStressTests : IDisposable
             var connected = 0;
             for (var i = 0; i < 30; i++)
             {
-                if (await TryConnectAsync(BrowserBridgeServer.PipeName, timeoutMs: 1200))
+                if (await TryConnectAsync(credPipe, timeoutMs: 1200))
                     connected++;
             }
 
@@ -116,14 +123,16 @@ public sealed class BrowserBridgeCorePipeStressTests : IDisposable
     public async Task RestartInfrastructure_DisposeAndRecreate_AcceptsConnections()
     {
         BridgeTestEnvironment.EnsurePipeNamesAvailable();
+        BridgePipeNaming.RotateSessionId(false);
+        var tokenPipe = BridgePipeNaming.TokenPipeName(false);
 
         var token = BridgeSessionAuth.CreateSessionToken();
-        var tokenBroker = new BridgeTokenBroker(token);
+        var tokenBroker = new BridgeTokenBroker(token, enterprise: false);
         try
         {
             tokenBroker.Start();
             await Task.Delay(250);
-            Assert.True(await TryConnectAsync(BridgeTokenBroker.PipeName, timeoutMs: 5000));
+            Assert.True(await TryConnectAsync(tokenPipe, timeoutMs: 5000));
         }
         finally
         {
@@ -133,12 +142,12 @@ public sealed class BrowserBridgeCorePipeStressTests : IDisposable
         await Task.Delay(400);
 
         var token2 = BridgeSessionAuth.CreateSessionToken();
-        var tokenBroker2 = new BridgeTokenBroker(token2);
+        var tokenBroker2 = new BridgeTokenBroker(token2, enterprise: false);
         try
         {
             tokenBroker2.Start();
             await Task.Delay(250);
-            Assert.True(await TryConnectAsync(BridgeTokenBroker.PipeName, timeoutMs: 5000));
+            Assert.True(await TryConnectAsync(tokenPipe, timeoutMs: 5000));
         }
         finally
         {

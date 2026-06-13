@@ -16,16 +16,19 @@ public sealed class BridgeUnlockBroker : IDisposable
     private static readonly TimeSpan UnlockRateLimitWindow = TimeSpan.FromMinutes(5);
     private readonly Func<BridgePresenceSnapshot> _getPresence;
     private readonly Func<CancellationToken, Task<bool>> _requestUnlock;
+    private readonly bool _enterprise;
     private readonly BridgeUnlockRateLimiter _rateLimiter = new();
     private CancellationTokenSource? _cts;
     private Task[] _listenTasks = [];
 
     public BridgeUnlockBroker(
         Func<BridgePresenceSnapshot> getPresence,
-        Func<CancellationToken, Task<bool>> requestUnlock)
+        Func<CancellationToken, Task<bool>> requestUnlock,
+        bool enterprise = false)
     {
         _getPresence = getPresence;
         _requestUnlock = requestUnlock;
+        _enterprise = enterprise;
     }
 
     /// <summary>Legacy ctor for tests — prefer <see cref="BridgeUnlockBroker(Func{BridgePresenceSnapshot}, Func{CancellationToken, Task{bool}})"/>.</summary>
@@ -47,7 +50,7 @@ public sealed class BridgeUnlockBroker : IDisposable
     {
         _cts = new CancellationTokenSource();
         _listenTasks = BridgePipeListener.Start(
-            PipeName,
+            BridgePipeNaming.UnlockPipeName(_enterprise),
             ListenerCount,
             maxInstances: 8,
             HandleClientAsync,

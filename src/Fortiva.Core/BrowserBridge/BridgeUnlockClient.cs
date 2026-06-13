@@ -83,6 +83,10 @@ public static class BridgeUnlockClient
         RateLimited
     }
 
+    private static string? ResolveUnlockPipeName()
+        => BridgePipeNaming.TryUnlockPipeNameInProcess()
+            ?? BridgePipeNaming.TryUnlockPipeName(BridgeNativeForwarder.IsEnterpriseEdition);
+
     private static async Task<bool> WaitForUnlockPipeAsync(CancellationToken ct, int maxWaitMs)
     {
         var deadline = Environment.TickCount64 + maxWaitMs;
@@ -90,8 +94,15 @@ public static class BridgeUnlockClient
         {
             try
             {
+                var pipeName = ResolveUnlockPipeName();
+                if (pipeName is null)
+                {
+                    await Task.Delay(350, ct);
+                    continue;
+                }
+
                 using var client = new NamedPipeClientStream(
-                    ".", BridgeUnlockBroker.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+                    ".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
                 await client.ConnectAsync(400, ct);
                 return true;
             }
@@ -109,8 +120,12 @@ public static class BridgeUnlockClient
     {
         try
         {
+            var pipeName = ResolveUnlockPipeName();
+            if (pipeName is null)
+                return UnlockPipeResult.Failed;
+
             using var client = new NamedPipeClientStream(
-                ".", BridgeUnlockBroker.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+                ".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
             await client.ConnectAsync(3000, ct);
 
             using var writer = new StreamWriter(client, Encoding.UTF8, leaveOpen: true) { AutoFlush = true };

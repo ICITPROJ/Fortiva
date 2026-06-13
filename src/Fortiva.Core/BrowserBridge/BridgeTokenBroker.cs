@@ -13,19 +13,21 @@ public sealed class BridgeTokenBroker : IDisposable
     private const int ListenerCount = 4;
 
     private readonly string _sessionToken;
+    private readonly bool _enterprise;
     private CancellationTokenSource? _cts;
     private Task[] _listenTasks = [];
 
-    public BridgeTokenBroker(string sessionToken)
+    public BridgeTokenBroker(string sessionToken, bool enterprise = false)
     {
         _sessionToken = sessionToken;
+        _enterprise = enterprise;
     }
 
     public void Start()
     {
         _cts = new CancellationTokenSource();
         _listenTasks = BridgePipeListener.Start(
-            PipeName,
+            BridgePipeNaming.TokenPipeName(_enterprise),
             ListenerCount,
             maxInstances: 8,
             HandleClientAsync,

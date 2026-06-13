@@ -137,6 +137,8 @@ public sealed class BrowserBridgeServer : IDisposable
 
     private readonly string _sessionToken;
 
+    private readonly bool _enterprise;
+
     private CancellationTokenSource? _cts;
 
     private Task[] _listenTasks = [];
@@ -149,7 +151,9 @@ public sealed class BrowserBridgeServer : IDisposable
 
         Func<CredentialRequest, CredentialResponse> matchLister,
 
-        string sessionToken)
+        string sessionToken,
+
+        bool enterprise = false)
 
     {
 
@@ -158,6 +162,8 @@ public sealed class BrowserBridgeServer : IDisposable
         _matchLister = matchLister;
 
         _sessionToken = sessionToken;
+
+        _enterprise = enterprise;
 
     }
 
@@ -170,7 +176,7 @@ public sealed class BrowserBridgeServer : IDisposable
         _cts = new CancellationTokenSource();
 
         _listenTasks = BridgePipeListener.Start(
-            PipeName,
+            BridgePipeNaming.CredentialPipeName(_enterprise),
             ListenerCount,
             maxInstances: 8,
             HandleClientAsync,

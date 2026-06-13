@@ -61,14 +61,19 @@ public static class BridgeSessionAuth
     /// <summary>Request token from the unlocked Fortiva process via secured named pipe.</summary>
     public static async Task<string?> RequestTokenFromBrokerAsync(
         int timeoutMs = 4000,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool? enterprise = null)
     {
         try
         {
+            var pipeName = ResolveTokenPipeName(enterprise);
+            if (pipeName is null)
+                return null;
+
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             linked.CancelAfter(timeoutMs);
             using var client = new System.IO.Pipes.NamedPipeClientStream(
-                ".", BridgeTokenBroker.PipeName, System.IO.Pipes.PipeDirection.InOut,
+                ".", pipeName, System.IO.Pipes.PipeDirection.InOut,
                 System.IO.Pipes.PipeOptions.Asynchronous);
             await client.ConnectAsync(linked.Token).ConfigureAwait(false);
 
@@ -88,6 +93,14 @@ public static class BridgeSessionAuth
         {
             return null;
         }
+    }
+
+    private static string? ResolveTokenPipeName(bool? enterprise)
+    {
+        if (enterprise is bool ent)
+            return BridgePipeNaming.TryTokenPipeName(ent);
+        return BridgePipeNaming.TryTokenPipeNameInProcess()
+            ?? BridgePipeNaming.TryTokenPipeName(BridgeNativeForwarder.IsEnterpriseEdition);
     }
 
     public static bool ValidateToken(string? provided, string expectedRawToken)

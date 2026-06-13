@@ -9,12 +9,13 @@ public static class BridgePresenceClient
     public static async Task<string?> RequestStatusAsync(
         int timeoutMs = 3000,
         int maxAttempts = 4,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool? enterprise = null)
     {
         for (var attempt = 0; attempt < maxAttempts; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var status = await TryRequestStatusOnceAsync(timeoutMs, cancellationToken).ConfigureAwait(false);
+            var status = await TryRequestStatusOnceAsync(timeoutMs, cancellationToken, enterprise).ConfigureAwait(false);
             if (status is not null)
                 return status;
 
@@ -25,14 +26,18 @@ public static class BridgePresenceClient
         return null;
     }
 
-    private static async Task<string?> TryRequestStatusOnceAsync(int timeoutMs, CancellationToken cancellationToken)
+    private static async Task<string?> TryRequestStatusOnceAsync(int timeoutMs, CancellationToken cancellationToken, bool? enterprise)
     {
         try
         {
+            var pipeName = ResolveUnlockPipeName(enterprise);
+            if (pipeName is null)
+                return null;
+
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             linked.CancelAfter(timeoutMs);
             using var client = new NamedPipeClientStream(
-                ".", BridgeUnlockBroker.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+                ".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
             await client.ConnectAsync(timeoutMs / 2, linked.Token).ConfigureAwait(false);
 
             using var writer = new StreamWriter(client, Encoding.UTF8, bufferSize: 1024, leaveOpen: true)
@@ -52,5 +57,13 @@ public static class BridgePresenceClient
         {
             return null;
         }
+    }
+
+    private static string? ResolveUnlockPipeName(bool? enterprise)
+    {
+        if (enterprise is bool ent)
+            return BridgePipeNaming.TryUnlockPipeName(ent);
+        return BridgePipeNaming.TryUnlockPipeNameInProcess()
+            ?? BridgePipeNaming.TryUnlockPipeName(BridgeNativeForwarder.IsEnterpriseEdition);
     }
 }

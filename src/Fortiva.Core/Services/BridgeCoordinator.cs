@@ -40,6 +40,8 @@ public sealed class BridgeCoordinator : IBridgeCoordinator
 
     public event Action<BridgeReadyState>? ReadyStateChanged;
 
+    public event Action? SessionRotated;
+
     public async Task ReconcileLifecycleAsync(string triggerReason, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -59,6 +61,8 @@ public sealed class BridgeCoordinator : IBridgeCoordinator
             VerifyAndRepairHashSidecars();
 
             SetState(BridgeReadyState.StartingInfrastructure);
+            BridgePipeNaming.RotateSessionId(_isEnterprise());
+            SessionRotated?.Invoke();
             BridgeHostProcessCleanup.StopAllHosts();
 
             var session = _getSession();

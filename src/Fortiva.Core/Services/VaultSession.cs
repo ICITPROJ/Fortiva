@@ -705,6 +705,9 @@ public sealed class VaultSession : IDisposable
 
     private void StartInfrastructure()
     {
+        if (!BridgePipeNaming.HasActiveSession(_enterpriseClient))
+            BridgePipeNaming.RotateSessionId(_enterpriseClient);
+
         WaitForBridgeShutdown();
         StopBridgeInfrastructure(waitForListeners: true);
 
@@ -716,9 +719,9 @@ public sealed class VaultSession : IDisposable
 
         for (var attempt = 0; attempt < 3; attempt++)
         {
-            _tokenBroker = new BridgeTokenBroker(_bridgeSessionToken);
+            _tokenBroker = new BridgeTokenBroker(_bridgeSessionToken, _enterpriseClient);
             _tokenBroker.Start();
-            _bridge = new BrowserBridgeServer(ResolveForDomain, ListMatchesForDomain, _bridgeSessionToken);
+            _bridge = new BrowserBridgeServer(ResolveForDomain, ListMatchesForDomain, _bridgeSessionToken, _enterpriseClient);
             _bridge.Start();
 
             if (BridgeHealthCheck.AreListenersActive(BridgeHealthCheck.StartupHealthTimeoutMs))

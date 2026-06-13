@@ -6,10 +6,16 @@ namespace Fortiva.Core.BrowserBridge;
 public static class BridgeHealthCheck
 {
     public static bool IsTokenPipeListening(int timeoutMs = 1500)
-        => TryConnect(BridgeTokenBroker.PipeName, timeoutMs);
+    {
+        var pipe = ResolveTokenPipeName();
+        return pipe is not null && TryConnect(pipe, timeoutMs);
+    }
 
     public static bool IsCredentialPipeListening(int timeoutMs = 1500)
-        => TryConnect(BrowserBridgeServer.PipeName, timeoutMs);
+    {
+        var pipe = ResolveCredentialPipeName();
+        return pipe is not null && TryConnect(pipe, timeoutMs);
+    }
 
     /// <summary>Token broker returns a session token (full GET round-trip, bounded wait).</summary>
     public static bool IsTokenPipeResponsive(int timeoutMs = 2000)
@@ -49,6 +55,14 @@ public static class BridgeHealthCheck
     /// </summary>
     public static bool IsFullyResponsive(int timeoutMs = 2000)
         => IsTokenPipeResponsive(timeoutMs) && IsCredentialPipeListening(timeoutMs);
+
+    private static string? ResolveTokenPipeName()
+        => BridgePipeNaming.TryTokenPipeNameInProcess()
+            ?? BridgePipeNaming.TryTokenPipeName(BridgeNativeForwarder.IsEnterpriseEdition);
+
+    private static string? ResolveCredentialPipeName()
+        => BridgePipeNaming.TryCredentialPipeNameInProcess()
+            ?? BridgePipeNaming.TryCredentialPipeName(BridgeNativeForwarder.IsEnterpriseEdition);
 
     private static bool TryConnect(string pipeName, int timeoutMs)
     {

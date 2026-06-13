@@ -17,26 +17,20 @@ public class BridgeUnlockBrokerPipeTests
 {
 
     [Fact]
-
     public async Task StatusRoundTrip_UnauthenticatedClient_DoesNotLeakPresence()
-
     {
+        BridgePipeNaming.RotateSessionId(false);
+        var pipeName = BridgePipeNaming.UnlockPipeName(false);
 
         using var broker = new BridgeUnlockBroker(
-
             () => false,
-
             () => true,
-
             _ => Task.FromResult(true));
 
         broker.Start();
 
-
-
         using var client = new NamedPipeClientStream(
-
-            ".", BridgeUnlockBroker.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+            ".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
 
         using var connectCts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
 

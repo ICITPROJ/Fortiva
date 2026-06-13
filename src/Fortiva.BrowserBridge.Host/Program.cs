@@ -8,7 +8,9 @@ var inferredRoot = BridgeClientValidator.TryInferInstallRootFromBridgeHostPath(h
 var edition = inferredRoot?.Contains("Fortiva Enterprise", StringComparison.OrdinalIgnoreCase) == true
     ? "Enterprise"
     : "Personal";
+var isEnterprise = edition == "Enterprise";
 AuthenticodePolicy.ConfigureForEdition(edition);
+BridgeNativeForwarder.ConfigureEdition(isEnterprise);
 
 /// <summary>
 /// Chrome/Edge native messaging host: forwards requests to Fortiva named pipe server.
@@ -16,6 +18,9 @@ AuthenticodePolicy.ConfigureForEdition(edition);
 var installRoot = inferredRoot;
 if (installRoot is not null)
     BridgeClientValidator.ConfigureAllowedInstallRoots(installRoot);
+
+if (!BridgePipeNaming.HasActiveSession(isEnterprise))
+    Environment.Exit(0);
 
 var integrityOk = NativeHostIntegrity.VerifyCurrentProcess(installRoot);
 var stdin = Console.OpenStandardInput();
