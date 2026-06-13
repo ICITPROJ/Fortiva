@@ -215,6 +215,14 @@ async function nativeRequestWithRetry(message, attempts = 2) {
   return last;
 }
 
+function credentialEnvelope(command, payload) {
+  const envelope = { command, payload };
+  if (cachedSessionToken) {
+    envelope.cachedSessionToken = cachedSessionToken;
+  }
+  return envelope;
+}
+
 async function nativeCredentialRequestWithRetry(envelope, attempts = 3) {
   let last = null;
   for (let i = 0; i < attempts; i++) {
@@ -254,10 +262,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "prepare_fill") {
     nativeCredentialRequestWithRetry(
-      {
-        command: "prepare_fill",
-        payload: { domain: message.domain || "", url: message.url },
-      },
+      credentialEnvelope("prepare_fill", {
+        domain: message.domain || "",
+        url: message.url,
+      }),
       4
     ).then(sendResponse);
     return true;
@@ -265,15 +273,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "execute_fill") {
     nativeCredentialRequestWithRetry(
-      {
-        command: "execute_fill",
-        payload: {
-          domain: message.domain || "",
-          url: message.url,
-          entryId: message.entryId || undefined,
-          fillNonce: message.fillNonce || undefined,
-        },
-      },
+      credentialEnvelope("execute_fill", {
+        domain: message.domain || "",
+        url: message.url,
+        entryId: message.entryId || undefined,
+        fillNonce: message.fillNonce || undefined,
+      }),
       2
     ).then(sendResponse);
     return true;

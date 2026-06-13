@@ -32,6 +32,18 @@ public class BridgeNativeForwarderTests
         Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5), $"prepare_fill took {sw.Elapsed.TotalSeconds:F1}s");
     }
 
+    [Theory]
+    [InlineData("""{"cachedSessionToken":"push-token-root"}""", "push-token-root")]
+    [InlineData("""{"sessionToken":"session-token-root"}""", "session-token-root")]
+    [InlineData("""{"payload":{"cachedSessionToken":"push-token-payload"}}""", "push-token-payload")]
+    [InlineData("""{"payload":{"sessionToken":"session-token-payload"}}""", "session-token-payload")]
+    [InlineData("""{"command":"execute_fill"}""", null)]
+    public void TryGetPushCachedToken_ReadsRootAndPayload(string json, string? expected)
+    {
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(expected, BridgeNativeForwarder.TryGetPushCachedToken(doc.RootElement));
+    }
+
     [Fact]
     public async Task ExecuteFill_WithNoFortiva_ReturnsErrorJson()
     {

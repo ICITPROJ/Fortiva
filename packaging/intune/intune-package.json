@@ -1,0 +1,15 @@
+{
+  "packageName": "FortivaEnterprise",
+  "applicationName": "Fortiva Enterprise",
+  "versionSource": "Directory.Build.props",
+  "setupFilePattern": "FortivaEnterprise-*-Setup.exe",
+  "installCommand": "powershell.exe -ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File Install-FortivaEnterprise.ps1",
+  "uninstallCommand": "\"%ProgramFiles%\\icmclab studio\\Fortiva Enterprise\\unins000.exe\" /VERYSILENT",
+  "detectionScript": "Detect-FortivaEnterprise.ps1",
+  "remediationScript": "Deploy-Intune.ps1 -Remediation",
+  "extensionId": "llkpcnbhmhpenahlcdnbbfmkdfkgnpnj",
+  "extensionUpdateUrl": "https://github.com/ICITPROJ/Fortiva/releases/latest/download/fortiva-extension-updates.xml",
+  "nativeHostName": "com.fortiva.browserbridge.enterprise",
+  "installFolder": "%ProgramFiles%\\icmclab studio\\Fortiva Enterprise",
+  "mainExecutable": "Fortiva.Enterprise.exe"
+}

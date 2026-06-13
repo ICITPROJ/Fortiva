@@ -22,9 +22,11 @@ if (-not (Test-Path $msbuild)) {
     }
 }
 function Find-MakePri {
-    $cached = Get-Item "$env:USERPROFILE\.nuget\packages\microsoft.windows.sdk.buildtools\*\bin\*\x64\makepri.exe" `
-        -ErrorAction SilentlyContinue |
-        Sort-Object FullName | Select-Object -Last 1
+    $cached = Get-ChildItem "$env:USERPROFILE\.nuget\packages\microsoft.windows.sdk.buildtools" `
+        -Recurse -Filter "makepri.exe" -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match '\\x64\\makepri\.exe$' } |
+        Sort-Object FullName |
+        Select-Object -Last 1
     if ($cached) { return $cached.FullName }
     return $null
 }

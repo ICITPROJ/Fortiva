@@ -51,7 +51,8 @@ public static class BridgeNativeForwarder
 
         var listed = await ForwardCredentialAsync(
             BuildEnvelope("list_credentials", domain, url),
-            ct).ConfigureAwait(false);
+            ct,
+            tokenSource: request).ConfigureAwait(false);
         return MergeStatusAndCredential(ping, listed);
     }
 
@@ -78,7 +79,7 @@ public static class BridgeNativeForwarder
             using var overall = CancellationTokenSource.CreateLinkedTokenSource(ct);
             overall.CancelAfter(TimeSpan.FromSeconds(OverallTimeoutSeconds));
 
-            var token = await EnsureSessionTokenAsync(overall.Token).ConfigureAwait(false);
+            var token = await EnsureSessionTokenAsync(request, overall.Token).ConfigureAwait(false);
             if (string.IsNullOrEmpty(token))
                 return await BuildTokenFailureResponseAsync().ConfigureAwait(false);
 
@@ -172,14 +173,17 @@ public static class BridgeNativeForwarder
         }
     }
 
-    public static async Task<string> ForwardCredentialAsync(JsonElement request, CancellationToken ct = default)
+    public static async Task<string> ForwardCredentialAsync(
+        JsonElement request,
+        CancellationToken ct = default,
+        JsonElement? tokenSource = null)
     {
         try
         {
             using var overall = CancellationTokenSource.CreateLinkedTokenSource(ct);
             overall.CancelAfter(TimeSpan.FromSeconds(OverallTimeoutSeconds));
 
-            var token = await EnsureSessionTokenAsync(overall.Token).ConfigureAwait(false);
+            var token = await EnsureSessionTokenAsync(tokenSource ?? request, overall.Token).ConfigureAwait(false);
             if (string.IsNullOrEmpty(token))
                 return await BuildTokenFailureResponseAsync().ConfigureAwait(false);
 
@@ -209,8 +213,12 @@ public static class BridgeNativeForwarder
         }
     }
 
-    private static async Task<string?> EnsureSessionTokenAsync(CancellationToken ct)
+    private static async Task<string?> EnsureSessionTokenAsync(JsonElement request, CancellationToken ct)
     {
+        var pushed = TryGetPushCachedToken(request);
+        if (!string.IsNullOrWhiteSpace(pushed))
+            return pushed;
+
         var fast = IsFastTest;
         var token = await RequestSessionTokenAsync(
             attempts: fast ? 1 : 3,
@@ -247,6 +255,49 @@ public static class BridgeNativeForwarder
         }
 
         return token;
+    }
+
+    /// <summary>
+    /// Phase 5+: token pushed on STATE_CHANGED avoids Fortiva.Bridge.Token_{guid} round-trips.
+    /// </summary>
+    internal static string? TryGetPushCachedToken(JsonElement request)
+    {
+        if (request.TryGetProperty("cachedSessionToken", out var cached) &&
+            cached.ValueKind == JsonValueKind.String)
+        {
+            var value = cached.GetString();
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+
+        if (request.TryGetProperty("sessionToken", out var session) &&
+            session.ValueKind == JsonValueKind.String)
+        {
+            var value = session.GetString();
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+
+        if (!request.TryGetProperty("payload", out var payload))
+            return null;
+
+        if (payload.TryGetProperty("cachedSessionToken", out var payloadCached) &&
+            payloadCached.ValueKind == JsonValueKind.String)
+        {
+            var value = payloadCached.GetString();
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+
+        if (payload.TryGetProperty("sessionToken", out var payloadSession) &&
+            payloadSession.ValueKind == JsonValueKind.String)
+        {
+            var value = payloadSession.GetString();
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+
+        return null;
     }
 
     private static bool IsFastTest =>

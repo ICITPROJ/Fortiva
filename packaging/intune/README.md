@@ -11,8 +11,10 @@ For Intune **Proactive Remediations**, **Win32 app install commands**, or post-i
 
 | Script | Purpose |
 |--------|---------|
+| `Build-IntunePackage.ps1` | Stage installer + scripts and emit `FortivaEnterprise.intunewin` via `IntuneWinAppUtil.exe` |
 | `Install-FortivaEnterprise.ps1` | Silent `/VERYSILENT` install + HKLM native messaging repair (requires elevation) |
 | `Deploy-Intune.ps1` | Write `{app}\NativeMessaging\*.json` and register **HKLM** `NativeMessagingHosts` for Chrome and Edge |
+| `Detect-FortivaEnterprise.ps1` | Custom detection: `Fortiva.Enterprise.exe` + HKLM native messaging keys |
 
 ```powershell
 # After Win32 app delivers the EXE, or on existing installs:
@@ -35,36 +37,53 @@ This is **machine-wide** (not HKCU), so all users on the endpoint receive the sa
 
 See also `docs/BRIDGE-ARCHITECTURE.md` for session-bound pipe rules.
 
-## Steps
+## Build the Intune bundle
 
-1. **Package with IntuneWinAppUtil**:
+After `build-release.ps1` and `build-installers.ps1`:
 
 ```powershell
-IntuneWinAppUtil.exe `
-  -c .\dist\installers\ `
-  -s FortivaEnterprise-{version}-Setup.exe `
-  -o .\intune-output\
+powershell -ExecutionPolicy Bypass -File .\packaging\intune\Build-IntunePackage.ps1
+```
+
+Output: `dist\intune\FortivaEnterprise.intunewin` (installer + provisioning scripts staged automatically).
+
+Metadata for the Intune portal is in `intune-package.json` (install/uninstall commands, detection script name, remediation script).
+
+## Steps
+
+1. **Package** (automated — or manual `IntuneWinAppUtil.exe` if you prefer):
+
+```powershell
+.\packaging\intune\Build-IntunePackage.ps1
 ```
 
 2. **Create Win32 App in Intune**:
    - App type: Windows app (Win32)
    - Package file: `FortivaEnterprise.intunewin`
-   - Install command: `FortivaEnterprise-{version}-Setup.exe /VERYSILENT` (use the build version from `Directory.Build.props`)
-   - Uninstall command: `"C:\Program Files\icmclab studio\Fortiva Enterprise\unins000.exe" /VERYSILENT`
-   - Detection rule: File exists → `%ProgramFiles%\icmclab studio\Fortiva Enterprise\Fortiva.Enterprise.exe`
+   - Install command: `powershell.exe -ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File Install-FortivaEnterprise.ps1`
+   - Uninstall command: `"%ProgramFiles%\icmclab studio\Fortiva Enterprise\unins000.exe" /VERYSILENT`
+   - Detection rule: **Use custom detection script** → upload `Detect-FortivaEnterprise.ps1` (checks exe + HKLM `com.fortiva.browserbridge.enterprise`)
 
-3. **Policy deployment**:
+3. **Proactive Remediation (daily drift repair)**:
+
+   Create an Intune Proactive Remediation with:
+   - **Detection script:** `Detect-FortivaEnterprise.ps1` (non-compliant when exe or HKLM keys are missing)
+   - **Remediation script:** `Deploy-Intune.ps1 -Remediation` (silent HKLM manifest repair; exit 0 = compliant)
+
+   Schedule daily (or weekly) so manual uninstalls or corrupted native messaging manifests self-heal without admin intervention.
+
+4. **Policy deployment**:
 
    Deploy `policies.json` (encrypted via DPAPI-LocalMachine) to `%PROGRAMDATA%\Fortiva\`
    using an Intune PowerShell script or Configuration Baseline. The Admin Console can
    generate the encrypted policy file for distribution.
 
-4. **License deployment**:
+5. **License deployment**:
 
    Deploy `license.dat` (DPAPI-LocalMachine-encrypted signed license) to `%PROGRAMDATA%\Fortiva\`
    using the same mechanism.
 
-5. **Browser extension (automatic)**:
+6. **Browser extension (automatic)**:
 
    The Enterprise installer registers Chrome and Edge **ExtensionInstallForcelist** policy and
    HKLM native messaging. Managed PCs install the Fortiva extension without Developer mode.

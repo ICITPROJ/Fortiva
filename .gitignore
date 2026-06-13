@@ -3,6 +3,7 @@ bin/
 obj/
 dist/
 deploy-ionos/
+packaging/tools/
 
 # Logs and local build artifacts
 *.binlog
