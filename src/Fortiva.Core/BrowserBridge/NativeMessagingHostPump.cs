@@ -12,7 +12,7 @@ public sealed class NativeMessagingHostPump : IAsyncDisposable
     private readonly bool _integrityOk;
     private readonly Stream _stdin;
     private readonly Stream _stdout;
-    private readonly object _stdoutLock = new();
+    private readonly SemaphoreSlim _stdoutLock = new(1, 1);
     private readonly CancellationTokenSource _cts = new();
 
     public NativeMessagingHostPump(bool enterprise, bool integrityOk, Stream? stdin = null, Stream? stdout = null)
@@ -53,7 +53,7 @@ public sealed class NativeMessagingHostPump : IAsyncDisposable
                     if (line is null)
                         break;
                     if (!string.IsNullOrWhiteSpace(line))
-                        WriteMessageToStdout(line);
+                        await WriteMessageToStdoutAsync(line).ConfigureAwait(false);
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -146,7 +146,7 @@ public sealed class NativeMessagingHostPump : IAsyncDisposable
                 }
             }
 
-            WriteMessageToStdout(response);
+            await WriteMessageToStdoutAsync(response).ConfigureAwait(false);
         }
 
         try { _cts.Cancel(); } catch { /* loop ended */ }
@@ -158,21 +158,24 @@ public sealed class NativeMessagingHostPump : IAsyncDisposable
         return BridgeJson.Serialize(ping);
     }
 
-    private void WriteMessageToStdout(string jsonMessage)
+    private async Task WriteMessageToStdoutAsync(string jsonMessage)
     {
         var bytes = Encoding.UTF8.GetBytes(jsonMessage);
-        var header = BitConverter.GetBytes(bytes.Length);
-        lock (_stdoutLock)
+        await _stdoutLock.WaitAsync(_cts.Token).ConfigureAwait(false);
+        try
         {
-            _stdout.Write(header, 0, 4);
-            _stdout.Write(bytes, 0, bytes.Length);
-            _stdout.Flush();
+            NativeMessagingFraming.WriteLengthPrefixedMessage(_stdout, bytes);
+        }
+        finally
+        {
+            _stdoutLock.Release();
         }
     }
 
     public async ValueTask DisposeAsync()
     {
         try { await _cts.CancelAsync().ConfigureAwait(false); } catch { /* best effort */ }
+        _stdoutLock.Dispose();
         _cts.Dispose();
     }
 }

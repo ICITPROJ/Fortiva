@@ -5,6 +5,7 @@ const NATIVE_HOSTS = [
 
 let bridgePort = null;
 let connecting = false;
+let reconnectTimer = null;
 let currentBridgeSnapshot = {
   type: "STATE_CHANGED",
   state: "Uninitialized",
@@ -46,58 +47,90 @@ function handleIncomingStatePush(message) {
   }
 }
 
+function onBridgePortMessage(message) {
+  if (!message) return;
+  const pushType = message.type || message.Type;
+  if (pushType === "STATE_CHANGED" || message.state || message.State) {
+    handleIncomingStatePush(message);
+    return;
+  }
+
+  if (pendingRequest) {
+    const { resolve, timer } = pendingRequest;
+    pendingRequest = null;
+    clearTimeout(timer);
+    resolve(message);
+  }
+}
+
+function scheduleReconnect(delayMs = 3000) {
+  if (reconnectTimer !== null) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    establishAuthoritativeBridgeChannel(0);
+  }, delayMs);
+}
+
+function teardownBridgePort() {
+  if (reconnectTimer !== null) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  if (!bridgePort) return;
+  try {
+    bridgePort.onMessage.removeListener(onBridgePortMessage);
+    bridgePort.onDisconnect.removeListener(onBridgePortDisconnected);
+    bridgePort.disconnect();
+  } catch {
+    /* port may already be gone */
+  }
+  bridgePort = null;
+}
+
+function onBridgePortDisconnected() {
+  bridgePort = null;
+  connecting = false;
+  currentBridgeSnapshot = {
+    type: "STATE_CHANGED",
+    state: "Faulted",
+    isVaultUnlocked: false,
+    ok: false,
+    status: "setup_required",
+  };
+  if (pendingRequest) {
+    const { resolve, timer } = pendingRequest;
+    pendingRequest = null;
+    clearTimeout(timer);
+    resolve({
+      ok: false,
+      status: "setup_required",
+      message: "Fortiva bridge disconnected. Reconnecting…",
+    });
+  }
+  scheduleReconnect(3000);
+}
+
 function establishAuthoritativeBridgeChannel(hostIndex = 0) {
   if (bridgePort !== null || connecting) return;
-  if (hostIndex >= NATIVE_HOSTS.length) return;
+  if (hostIndex >= NATIVE_HOSTS.length) {
+    scheduleReconnect(5000);
+    return;
+  }
 
   connecting = true;
+  teardownBridgePort();
+
   try {
     bridgePort = chrome.runtime.connectNative(NATIVE_HOSTS[hostIndex]);
   } catch {
     connecting = false;
-    setTimeout(() => establishAuthoritativeBridgeChannel(hostIndex + 1), 3000);
+    bridgePort = null;
+    establishAuthoritativeBridgeChannel(hostIndex + 1);
     return;
   }
 
-  bridgePort.onMessage.addListener((message) => {
-    if (!message) return;
-    const pushType = message.type || message.Type;
-    if (pushType === "STATE_CHANGED" || message.state || message.State) {
-      handleIncomingStatePush(message);
-      return;
-    }
-
-    if (pendingRequest) {
-      const { resolve, timer } = pendingRequest;
-      pendingRequest = null;
-      clearTimeout(timer);
-      resolve(message);
-    }
-  });
-
-  bridgePort.onDisconnect.addListener(() => {
-    bridgePort = null;
-    connecting = false;
-    currentBridgeSnapshot = {
-      type: "STATE_CHANGED",
-      state: "Faulted",
-      isVaultUnlocked: false,
-      ok: false,
-      status: "setup_required",
-    };
-    if (pendingRequest) {
-      const { resolve, timer } = pendingRequest;
-      pendingRequest = null;
-      clearTimeout(timer);
-      resolve({
-        ok: false,
-        status: "setup_required",
-        message: "Fortiva bridge disconnected. Reconnecting…",
-      });
-    }
-    setTimeout(() => establishAuthoritativeBridgeChannel(0), 3000);
-  });
-
+  bridgePort.onMessage.addListener(onBridgePortMessage);
+  bridgePort.onDisconnect.addListener(onBridgePortDisconnected);
   connecting = false;
 }
 
