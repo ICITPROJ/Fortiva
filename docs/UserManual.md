@@ -38,9 +38,9 @@ Fortiva never transmits your passwords to any server. There is no cloud sync, no
 
 | Edition | Who it's for | Installer |
 |---|---|---|
-| **Fortiva Personal** | Individuals | `FortivaPersonal-1.0.0-Setup.exe` |
-| **Fortiva Enterprise** | Business users with IT-managed policies | `FortivaEnterprise-1.0.0-Setup.exe` |
-| **Fortiva Admin Console** | IT administrators | `FortivaAdmin-1.0.0-Setup.exe` |
+| **Fortiva Personal** | Individuals | `FortivaPersonal-{version}-Setup.exe` from [GitHub Releases](https://github.com/ICITPROJ/Fortiva/releases) |
+| **Fortiva Enterprise** | Business users with IT-managed policies | `FortivaEnterprise-{version}-Setup.exe` |
+| **Fortiva Admin Console** | IT administrators | `FortivaAdmin-{version}-Setup.exe` |
 
 ---
 
@@ -64,7 +64,7 @@ Fortiva never transmits your passwords to any server. There is no cloud sync, no
 
 ### 3.1 Standard Installation (Recommended)
 
-1. Double-click **`FortivaPersonal-1.0.0-Setup.exe`** (or the edition you need).
+1. Download and double-click the latest **`FortivaPersonal-*-Setup.exe`** (or the edition you need) from GitHub Releases.
 2. **Personal edition** installs per-user (no admin required). **Enterprise and Admin** may show a UAC prompt — click **Yes** to install to Program Files.
 3. The setup wizard opens. Click **Next**.
 4. Choose an install folder and click **Next**:
@@ -80,8 +80,8 @@ Fortiva never transmits your passwords to any server. There is no cloud sync, no
 For IT deployment, both installers support silent installation flags:
 
 ```
-FortivaPersonal-1.0.0-Setup.exe /SILENT
-FortivaPersonal-1.0.0-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES
+FortivaPersonal-{version}-Setup.exe /SILENT
+FortivaPersonal-{version}-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES
 ```
 
 `/SILENT` — shows a progress window but no wizard dialogs.  
@@ -381,16 +381,18 @@ The extension folder is always:
 Extension ID (stable): **`llkpcnbhmhpenahlcdnbbfmkdfkgnpnj`**
 
 ### Using the Extension
-1. Keep Fortiva unlocked on this PC.
-2. Navigate to a website login page.
-3. Click the Fortiva icon in the browser toolbar.
-4. Click **Fill credentials on this page** (Fortiva never autofills on page load or when you focus a password field).
-5. If the vault is locked, the desktop app comes to the foreground for you to unlock.
-6. Fortiva fills empty username/password fields only if a vault entry matches the site **hostname** exactly (URL path is ignored).
+1. Navigate to a website login page (Fortiva does not need to be open first).
+2. Click the Fortiva icon in the browser toolbar.
+3. Click **Fill** (Fortiva never autofills on page load or when you focus a password field).
+4. If the vault is locked, Fortiva opens and asks for Windows Hello or your master password.
+5. Set each entry’s **Website** field in Fortiva (e.g. `https://login.example.com`) so Fill can match the page hostname.
 
 ### Troubleshooting
-- **“Could not reach Fortiva”** — Open Settings → Browser extension and run **Set up browser connection** again. Ensure Fortiva is running and unlocked.
-- **Wrong folder when loading unpacked** — Use **Open extension folder** in Settings; do not pick the repo root or an empty directory.
+- **“Fortiva did not answer the browser bridge…”** or **“Click Fill below — Fortiva will connect…”** — Run **Connect browser** in Settings → Browser extension, reload the extension at `edge://extensions`, then try Fill again.
+- **“Fortiva did not respond in time…”** — Fortiva may still be starting; click Fill again. If it persists, unlock Fortiva manually and restart the bridge in Settings.
+- **“No saved login”** — Edit the vault entry and set **Website** to the login page URL, then save.
+- **Bridge starting** — Wait a few seconds or click **Restart bridge** in Settings → Browser extension.
+- **Wrong folder when loading unpacked** — Use the path shown in Settings; do not pick the repo root or an empty directory.
 
 ---
 
@@ -483,7 +485,7 @@ Open the **Audit** tab to view recent audit events. Click **Export log** to save
 
 ### Method 3 — Control Panel
 1. Open **Control Panel → Programs → Programs and Features**.
-2. Find **Fortiva Personal 1.0.0 (icmclab studio)**.
+2. Find **Fortiva Personal** (icmclab studio) — version shown in Settings → About.
 3. Click **Uninstall**.
 
 ### What happens during uninstall

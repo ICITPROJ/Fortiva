@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Fortiva.Core.Updates;
 
 namespace Fortiva.Core.Security;
 
@@ -8,7 +9,7 @@ public sealed class SecurityAuditExportOptions
 {
     public string Edition { get; init; } = "Personal";
     public string VaultLocation { get; init; } = "";
-    public string AppVersion { get; init; } = "1.0.0";
+    public string AppVersion { get; init; } = Updates.AppVersion.Current;
 }
 
 public static class SecurityAuditExporter

@@ -31,6 +31,13 @@
                 <TextBlock x:Name="TitleText" FontWeight="SemiBold" FontSize="14"
                            Foreground="{ThemeResource FortivaHeadingBrush}" VerticalAlignment="Center"/>
             </StackPanel>
+            <AutoSuggestBox x:Name="GlobalSearch" Grid.Column="2"
+                            Style="{StaticResource FortivaSearchBox}"
+                            PlaceholderText="Search vault…  (Ctrl+K · Ctrl+Shift+P commands)"
+                            QueryIcon="Find"
+                            MaxWidth="420" Margin="16,4,16,4"
+                            VerticalAlignment="Center"
+                            QuerySubmitted="GlobalSearch_QuerySubmitted"/>
             <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" Margin="8,0,8,0" VerticalAlignment="Center">
                 <Border Style="{StaticResource FortivaStatusPill}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
@@ -41,6 +48,11 @@
                                    Foreground="{ThemeResource FortivaBodyBrush}" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
+                <Button x:Name="LockBtn" Style="{StaticResource FortivaIconButton}"
+                        ToolTipService.ToolTip="Lock vault"
+                        Click="LockBtn_Click">
+                    <FontIcon Glyph="&#xE72E;" FontSize="14"/>
+                </Button>
                 <Button x:Name="PanicBtn" Style="{StaticResource FortivaIconButton}"
                         ToolTipService.ToolTip="Panic lock — wipe clipboard and hide window"
                         Click="PanicBtn_Click">
@@ -62,9 +74,6 @@
                 <Style TargetType="NavigationViewItem" BasedOn="{StaticResource FortivaNavigationViewItem}"/>
             </NavigationView.Resources>
             <NavigationView.MenuItems>
-                <NavigationViewItem x:Name="NavLock"    Tag="Lock"       Content="Lock vault">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE72E;"/></NavigationViewItem.Icon>
-                </NavigationViewItem>
                 <NavigationViewItem x:Name="NavVault"   Tag="Vault"      Content="My Vault">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE8D7;"/></NavigationViewItem.Icon>
                 </NavigationViewItem>

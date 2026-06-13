@@ -234,6 +234,83 @@ public static class FortivaPaths
         "user.prefs.json"
     ];
 
+    /// <summary>
+    /// Personal preference files under LocalAppData (never replaced by in-app or dev deploy updates).
+    /// </summary>
+    public static IReadOnlyList<string> PersonalLocalPreferenceFileNames =>
+    [
+        "appearance.json",
+        "user.prefs.json"
+    ];
+
+    /// <summary>
+    /// Roots that must never be overwritten by application updates or dev deploy scripts.
+    /// Installers only touch <c>{localappdata}\Programs\...\Fortiva Personal\</c>.
+    /// </summary>
+    public static IReadOnlyList<string> PersonalUserDataRoots =>
+    [
+        PersonalDataRoot,
+        PersonalLegacyDataRoot,
+        PersonalCrashLogDirectory,
+        PersonalLegacyLocalRoot
+    ];
+
+    /// <summary>True when <paramref name="path"/> is under a protected Personal user-data root.</summary>
+    public static bool IsProtectedUserDataPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        string full;
+        try
+        {
+            full = Path.GetFullPath(path);
+        }
+        catch
+        {
+            return false;
+        }
+
+        foreach (var root in PersonalUserDataRoots)
+        {
+            if (!Directory.Exists(root) && !File.Exists(root))
+            {
+                try
+                {
+                    var normalizedRoot = Path.GetFullPath(root);
+                    if (full.StartsWith(normalizedRoot.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
+                            StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(full, normalizedRoot, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+                catch
+                {
+                    /* ignore invalid roots */
+                }
+
+                continue;
+            }
+
+            var rootFull = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar);
+            if (full.StartsWith(rootFull + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(full, rootFull, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Throws when a deploy/install target would overlap protected user data.</summary>
+    public static void EnsureSafeInstallTarget(string installDirectory)
+    {
+        if (IsProtectedUserDataPath(installDirectory))
+        {
+            throw new InvalidOperationException(
+                "Install target overlaps Fortiva user data. Updates must only replace files under the "
+                + "application directory, never %APPDATA%\\Fortiva or %LOCALAPPDATA%\\FortivaPersonal.");
+        }
+    }
+
     /// <summary>True if a vault file exists in any canonical Personal location.</summary>
     public static bool PersonalVaultFileExists()
     {
@@ -259,8 +336,15 @@ public static class FortivaPaths
     }
 
     /// <summary>Delete all Personal user data (same paths as uninstall). Used by QA scripts only.</summary>
-    public static void DeletePersonalUserData()
+    public static void DeletePersonalUserData(bool confirmProductionWipe)
     {
+        if (!confirmProductionWipe)
+        {
+            throw new InvalidOperationException(
+                "Refusing to delete Personal user data without confirmProductionWipe: true. "
+                + "This removes vault.fva, settings, and Hello credentials.");
+        }
+
         foreach (var dir in PersonalUninstallDirectories.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             if (!Directory.Exists(dir)) continue;

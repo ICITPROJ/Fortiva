@@ -6,6 +6,7 @@ using Fortiva.Core.Audit;
 using Fortiva.Core.BrowserBridge;
 using Fortiva.Core.Crypto;
 using Fortiva.Core.Hello;
+using Fortiva.Core.ImportExport;
 using Fortiva.Core.Licensing;
 using Fortiva.Core.LocalState;
 using Fortiva.Core.Password;
@@ -116,6 +117,12 @@ public sealed class ShellViewModel : ViewModelBase
     private BridgeUnlockBroker? _bridgeUnlockBroker;
     private readonly object _bridgeUnlockGate = new();
     private TaskCompletionSource<bool>? _bridgeUnlockWait;
+    private bool _unlockNavigatesToVault = true;
+
+    /// <summary>False while unlock was requested from the browser extension (stay out of the vault UI).</summary>
+    internal bool ShouldNavigateToVaultOnUnlock => _unlockNavigatesToVault;
+
+    internal void RestoreVaultNavigationOnUnlock() => _unlockNavigatesToVault = true;
 
     // ── Constructor ───────────────────────────────────────────────────────────
     private ShellViewModel()
@@ -140,6 +147,14 @@ public sealed class ShellViewModel : ViewModelBase
     /// <summary>Abort a pending browser-extension unlock wait (navigation away, user cancel).</summary>
     public void CancelBridgeUnlockIfPending() => CompleteBridgeUnlockIfPending(false);
 
+    /// <summary>Atomic bridge STATUS source — must match vault session gate, not UI thread cache.</summary>
+    public BridgePresenceSnapshot GetBridgePresenceSnapshot()
+    {
+        var session = _session;
+        return session?.GetBridgePresenceSnapshot()
+            ?? new BridgePresenceSnapshot(VaultExists, Unlocked: false, BridgeReady: false);
+    }
+
     /// <summary>Starts unlock listener for browser extension (runs while app is open, even when locked).</summary>
     public void StartBridgeUnlockListener(string installRoot)
     {
@@ -148,10 +163,7 @@ public sealed class ShellViewModel : ViewModelBase
 
         _bridgeUnlockBroker?.Dispose();
         BridgeClientValidator.ConfigureAllowedInstallRoots(installRoot);
-        _bridgeUnlockBroker = new BridgeUnlockBroker(
-            () => IsUnlocked,
-            () => VaultExists,
-            RequestUnlockFromBridgeAsync);
+        _bridgeUnlockBroker = new BridgeUnlockBroker(GetBridgePresenceSnapshot, RequestUnlockFromBridgeAsync);
         _bridgeUnlockBroker.Start();
     }
 
@@ -180,7 +192,10 @@ public sealed class ShellViewModel : ViewModelBase
         }
 
         if (notifyUi)
+        {
+            _unlockNavigatesToVault = false;
             RunOnUi(() => BridgeUnlockRequested?.Invoke());
+        }
 
         await using var reg = ct.Register(() => CompleteBridgeUnlockIfPending(false));
         return await tcs.Task.ConfigureAwait(false);
@@ -196,6 +211,9 @@ public sealed class ShellViewModel : ViewModelBase
                 return;
             _bridgeUnlockWait = null;
         }
+
+        if (!success)
+            _unlockNavigatesToVault = true;
 
         wait.TrySetResult(success);
     }
@@ -341,6 +359,15 @@ public sealed class ShellViewModel : ViewModelBase
         await Task.Run(() => _session!.CreateVault(masterPassword, level)).ConfigureAwait(false);
         try
         {
+            await ClearHelloCredentialAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            App.LogException("CreateVaultAsync.ClearHello", ex);
+        }
+
+        try
+        {
             RunOnUi(() =>
             {
                 VaultExists = true;
@@ -469,12 +496,30 @@ public sealed class ShellViewModel : ViewModelBase
         try
         {
             ClearClipboardOnLock();
-            _session?.Lock();
             Entries.Clear();
+            VaultImportBatchFilter = null;
+            _session?.Lock();
             StatusMessage = "Locked";
             OnPropertyChanged(nameof(IsUnlocked));
             StateChanged?.Invoke();
             LockOccurred?.Invoke();
+            CompleteBridgeUnlockIfPending(false);
+        }
+        catch (Exception ex)
+        {
+            App.LogException("ShellViewModel.LockCore", ex);
+            try { _session?.PanicLock(); }
+            catch (Exception panicEx)
+            {
+                App.LogException("ShellViewModel.LockCore.PanicLock", panicEx);
+                try { _session?.Dispose(); } catch { /* best effort */ }
+                _session = null;
+            }
+            Entries.Clear();
+            VaultImportBatchFilter = null;
+            StatusMessage = "Locked";
+            OnPropertyChanged(nameof(IsUnlocked));
+            try { LockOccurred?.Invoke(); } catch (Exception navEx) { App.LogException("ShellViewModel.LockCore.Navigate", navEx); }
             CompleteBridgeUnlockIfPending(false);
         }
         finally { _isLocking = false; }
@@ -487,16 +532,32 @@ public sealed class ShellViewModel : ViewModelBase
         try
         {
             ClearClipboardOnLock();
-            _session?.PanicLock();
             Entries.Clear();
+            VaultImportBatchFilter = null;
+            _session?.PanicLock();
             StatusMessage = "Locked";
             OnPropertyChanged(nameof(IsUnlocked));
             StateChanged?.Invoke();
             LockOccurred?.Invoke();
             CompleteBridgeUnlockIfPending(false);
         }
+        catch (Exception ex)
+        {
+            App.LogException("ShellViewModel.PanicLockCore", ex);
+            try { _session?.Dispose(); } catch { /* best effort */ }
+            _session = null;
+            Entries.Clear();
+            VaultImportBatchFilter = null;
+            StatusMessage = "Locked";
+            OnPropertyChanged(nameof(IsUnlocked));
+            try { LockOccurred?.Invoke(); } catch (Exception navEx) { App.LogException("ShellViewModel.PanicLockCore.Navigate", navEx); }
+            CompleteBridgeUnlockIfPending(false);
+        }
         finally { _isLocking = false; }
     }
+
+    /// <summary>When set, auto-lock asks the active entry editor to confirm discard before locking.</summary>
+    public Func<Task<bool>>? ConfirmDiscardBeforeLockAsync { get; set; }
 
     internal void InvokeOnUi(Action action) => RunOnUi(action);
 
@@ -549,6 +610,31 @@ public sealed class ShellViewModel : ViewModelBase
         RefreshEntries();
     }
 
+    public int BulkDeleteEntries(IEnumerable<Guid> ids)
+    {
+        if (IsReadOnly)
+            throw new InvalidOperationException("Vault is read-only.");
+        var count = RequireSession().BulkDeleteEntries(ids);
+        if (count > 0)
+            RefreshEntries();
+        return count;
+    }
+
+    public (int Updated, int SkippedAlreadyTagged, int SkippedMaxTags) BulkAddTag(IEnumerable<Guid> ids, string tag)
+    {
+        if (IsReadOnly)
+            throw new InvalidOperationException("Vault is read-only.");
+        var normalized = VaultTagHelper.NormalizeTag(tag);
+        if (normalized is null)
+            return (0, 0, 0);
+
+        SyncVaultCategoriesFromTags([normalized]);
+        var result = RequireSession().BulkAddTag(ids, normalized);
+        if (result.Updated > 0)
+            RefreshEntries();
+        return result;
+    }
+
     public void DeleteEntry(Guid id)
     {
         RequireSession().DeleteEntry(id);
@@ -575,6 +661,69 @@ public sealed class ShellViewModel : ViewModelBase
         {
             session.ResumeAutoLock();
         }
+    }
+
+    public void ApplyImport(ImportApplyPlan plan)
+    {
+        EnterpriseGate.RequireValidLicense(IsEnterprise, IsAdmin, IsLicenseValid);
+        if (!IsUnlocked)
+            throw new InvalidOperationException("Unlock the vault before importing entries.");
+
+        var session = RequireSession();
+        session.SuppressAutoLock();
+        try
+        {
+            session.ApplyImport(plan);
+            RefreshEntries();
+        }
+        finally
+        {
+            session.ResumeAutoLock();
+        }
+    }
+
+    public IReadOnlyList<ImportBatch> ImportHistory()
+        => _session?.ImportHistory() ?? [];
+
+    public IReadOnlyList<VaultEntry> EntriesForImportBatch(Guid batchId)
+        => _session?.EntriesForImportBatch(batchId) ?? [];
+
+    public void RestartBridgeInfrastructure()
+    {
+        if (!IsUnlocked)
+            throw new InvalidOperationException("Unlock the vault before reconnecting the browser.");
+        RequireSession().RestartBridgeInfrastructure();
+    }
+
+    public void EnsureBridgeInfrastructureHealthy()
+    {
+        if (!IsUnlocked)
+            return;
+        RequireSession().EnsureBridgeInfrastructureHealthy();
+    }
+
+    public bool IsBridgeHealthy()
+        => IsUnlocked && (_session?.IsBridgeHealthy() ?? false);
+
+    /// <summary>Restarts bridge pipes off the UI thread (Connect browser in Settings).</summary>
+    public Task RestartBridgeInfrastructureAsync()
+    {
+        if (!IsUnlocked)
+            throw new InvalidOperationException("Unlock the vault before reconnecting the browser.");
+        return Task.Run(RestartBridgeInfrastructure);
+    }
+
+    /// <summary>When set, Vault page filters to entries from this import batch.</summary>
+    public Guid? VaultImportBatchFilter { get; set; }
+
+    /// <summary>Set from title-bar search; consumed by <see cref="Pages.VaultPage"/> on navigate.</summary>
+    public string? PendingVaultSearch { get; set; }
+
+    public string? ConsumePendingVaultSearch()
+    {
+        var q = PendingVaultSearch;
+        PendingVaultSearch = null;
+        return q;
     }
 
     public void ChangeMasterPassword(string newPassword)
@@ -882,6 +1031,7 @@ public sealed class ShellViewModel : ViewModelBase
         if (IsUnlocked)
             LockCore();
 
+        try { _session?.Dispose(); } catch (Exception ex) { App.LogException("ApplyVaultDirectory.Dispose", ex); }
         _session = null;
         VaultDirectory = directory;
         IsPortableMode = portable;
@@ -920,7 +1070,7 @@ public sealed class ShellViewModel : ViewModelBase
         await SyncHelloCredentialFromSessionAsync().ConfigureAwait(false);
     }
 
-    public async Task SyncHelloCredentialFromSessionAsync()
+    public async Task SyncHelloCredentialFromSessionAsync(bool? useHardwareBacking = null)
     {
         RuntimeIntegrity.EnsureSafeForSensitiveOperation();
         var session = RequireSession();
@@ -930,7 +1080,8 @@ public sealed class ShellViewModel : ViewModelBase
             IsEnterprise);
         try
         {
-            await manager.StoreFromMasterKeyAsync(mk).ConfigureAwait(false);
+            // KeyCredential / RequestSignAsync must run on the UI thread (WinRT).
+            await manager.StoreFromMasterKeyAsync(mk, useHardwareBacking);
         }
         finally
         {
@@ -1004,18 +1155,24 @@ public sealed class ShellViewModel : ViewModelBase
             enterpriseClient: Edition == "Enterprise",
             rollbackStateDirectory: FortivaPaths.GetRollbackStateDirectory(VaultDirectory, IsEnterprise));
         ApplyPersonalAutoLockTimeout();
-        _session.AutoLockRequested += () =>
+        _session.AutoLockRequested += () => RunOnUi(() => _ = HandleAutoLockRequestedAsync());
+    }
+
+    private async Task HandleAutoLockRequestedAsync()
+    {
+        if (IsBusy)
         {
-            RunOnUi(() =>
-            {
-                if (IsBusy)
-                {
-                    _deferAutoLock = true;
-                    return;
-                }
-                LockCore();
-            });
-        };
+            _deferAutoLock = true;
+            return;
+        }
+
+        if (ConfirmDiscardBeforeLockAsync is not null && !await ConfirmDiscardBeforeLockAsync().ConfigureAwait(true))
+        {
+            _session?.ResetAutoLock();
+            return;
+        }
+
+        LockCore();
     }
 
     private VaultSession RequireSession()
@@ -1055,17 +1212,68 @@ public sealed class VaultEntryViewModel : ViewModelBase
 
     public Guid Id => Entry.Id;
     public string Initial => string.IsNullOrEmpty(Entry.Title) ? "?" : Entry.Title[0].ToString().ToUpperInvariant();
+
+    private string? _faviconPath;
+
+    public Uri? FaviconFileUri => _faviconPath is not null ? new Uri(_faviconPath) : null;
+    public bool HasFavicon => _faviconPath is not null;
+
+    internal void SetFaviconPath(string? path)
+    {
+        if (string.Equals(_faviconPath, path, StringComparison.OrdinalIgnoreCase))
+            return;
+        _faviconPath = path;
+        OnPropertyChanged(nameof(FaviconFileUri));
+        OnPropertyChanged(nameof(HasFavicon));
+    }
+
+    internal void RefreshCachedFavicon() => SetFaviconPath(EntryFaviconService.TryGetCachedPath(Entry.Url));
+
+    public Microsoft.UI.Xaml.Media.Brush AvatarBackground =>
+        Fortiva.AppHost.Services.EntryAvatarHelper.GetBackgroundBrush(Entry.Url, Entry.Title);
+    public Microsoft.UI.Xaml.Media.Brush AvatarForeground =>
+        Fortiva.AppHost.Services.EntryAvatarHelper.GetForegroundBrush(Entry.Url, Entry.Title);
+    public Microsoft.UI.Xaml.Media.Brush AvatarBorder =>
+        Fortiva.AppHost.Services.EntryAvatarHelper.GetBorderBrush(Entry.Url, Entry.Title);
     public string Title => Entry.Title;
     public string Username => Entry.Username;
     public string Url => Entry.Url;
     public string Notes => Entry.Notes;
     public bool IsSecureNote => Entry.IsSecureNote;
     public bool IsFavorite => Entry.IsFavorite;
-    public string Tags => string.Join(", ", Entry.Tags);
+    public string Tags => string.Join(", ", Entry.Tags ?? []);
     public bool HasTotp => !string.IsNullOrWhiteSpace(Entry.TotpSecret);
     public DateTimeOffset ModifiedAt => Entry.ModifiedAt;
+    public DateTimeOffset CreatedAt => Entry.CreatedAt;
+    public string? ImportSource => Entry.ImportSource;
+    public bool HasImportProvenance => Entry.HasImportProvenance;
+    public DateTimeOffset? ImportedAt => Entry.ImportedAt;
+    public DateTimeOffset? SourceCreatedAt => Entry.SourceCreatedAt;
+    public Guid? ImportBatchId => Entry.ImportBatchId;
 
-    public string MaskedPassword => _passwordVisible ? Entry.Password : new string('•', Math.Min(Entry.Password.Length, 16));
+    public string ImportProvenanceLine
+    {
+        get
+        {
+            if (!HasImportProvenance)
+                return "";
+            var parts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(ImportSource))
+                parts.Add(ImportSource!);
+            if (ImportedAt.HasValue)
+                parts.Add($"imported {ImportedAt.Value.LocalDateTime:g}");
+            return string.Join(" · ", parts);
+        }
+    }
+
+    public string MaskedPassword
+    {
+        get
+        {
+            var password = Entry.Password ?? "";
+            return _passwordVisible ? password : new string('•', Math.Min(password.Length, 16));
+        }
+    }
     public bool PasswordVisible { get => _passwordVisible; private set { Set(ref _passwordVisible, value); OnPropertyChanged(nameof(MaskedPassword)); } }
 
     public string DomainDisplay => TryGetDomain(Entry.Url);
@@ -1089,10 +1297,12 @@ public sealed class VaultEntryViewModel : ViewModelBase
     public string DetailLine => DomainDisplay;
     public bool IsSecureNoteEntry => IsSecureNote;
     public bool HasMissingDetails => !IsSecureNote && !HasUsernameLine && !HasDetailLine;
+    public bool HasImportSourceLine => HasImportProvenance && !string.IsNullOrWhiteSpace(ImportSource);
+    public string ImportSourceLine => HasImportSourceLine ? $"From {ImportSource}" : "";
 
-    public bool HasTagChip => Entry.Tags.Count > 0;
-    public string TagChip => HasTagChip ? Entry.Tags[0] : "";
-    public int ExtraTagCount => Math.Max(0, Entry.Tags.Count - 1);
+    public bool HasTagChip => Entry.Tags is { Count: > 0 };
+    public string TagChip => HasTagChip ? Entry.Tags![0] : "";
+    public int ExtraTagCount => Math.Max(0, (Entry.Tags?.Count ?? 0) - 1);
     public bool HasExtraTags => ExtraTagCount > 0;
     public string ExtraTagsLabel => HasExtraTags ? $"+{ExtraTagCount}" : "";
 

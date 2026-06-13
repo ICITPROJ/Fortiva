@@ -194,6 +194,54 @@
             <SolidColorBrush x:Key="FortivaStatusWarningBrush" Color="#33C85000"/>
             <SolidColorBrush x:Key="FortivaStatusErrorBrush" Color="#33C83232"/>
 
+            <!-- WinUI control tokens (dark — parity with light theme) -->
+            <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="#1A2028"/>
+            <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="#141A22"/>
+            <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="#10161E"/>
+            <SolidColorBrush x:Key="ControlFillColorDisabledBrush" Color="#66101820"/>
+            <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="#2A3440"/>
+            <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="#6640BCF4"/>
+            <SolidColorBrush x:Key="TextFillColorPrimaryBrush" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="#A0AAB2"/>
+            <SolidColorBrush x:Key="TextFillColorDisabledBrush" Color="#6B7580"/>
+            <SolidColorBrush x:Key="DividerStrokeColorDefaultBrush" Color="#3340BCF4"/>
+
+            <SolidColorBrush x:Key="ComboBoxBackground" Color="#0E1218"/>
+            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#141A22"/>
+            <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#1A2028"/>
+            <SolidColorBrush x:Key="ComboBoxBackgroundDisabled" Color="#66101820"/>
+            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#2A3440"/>
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#6640BCF4"/>
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPressed" Color="#8840BCF4"/>
+            <SolidColorBrush x:Key="ComboBoxBorderBrushDisabled" Color="#442A3440"/>
+            <SolidColorBrush x:Key="ComboBoxForeground" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ComboBoxForegroundDisabled" Color="#6B7580"/>
+            <SolidColorBrush x:Key="ComboBoxDropDownGlyphForeground" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#0E1218"/>
+            <SolidColorBrush x:Key="ComboBoxBorderBrushFocused" Color="#8840BCF4"/>
+            <SolidColorBrush x:Key="ComboBoxForegroundFocused" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#161B22"/>
+            <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#2A3440"/>
+
+            <SolidColorBrush x:Key="TextControlBackground" Color="#0E1218"/>
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#141A22"/>
+            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#10161E"/>
+            <SolidColorBrush x:Key="TextControlBackgroundDisabled" Color="#66101820"/>
+            <SolidColorBrush x:Key="TextControlForeground" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="TextControlForegroundDisabled" Color="#6B7580"/>
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#2A3440"/>
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#6640BCF4"/>
+            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#8840BCF4"/>
+            <SolidColorBrush x:Key="TextControlBorderBrushDisabled" Color="#442A3440"/>
+            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#6B7580"/>
+
+            <SolidColorBrush x:Key="ButtonBackground" Color="#1A2028"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#222A34"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#2A3440"/>
+            <SolidColorBrush x:Key="ButtonForeground" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ButtonBorderBrush" Color="#2A3440"/>
+            <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#6640BCF4"/>
+
             <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="{StaticResource FortivaAccentColor}"/>
             <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="#6640BCF4"/>
             <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="#3340BCF4"/>
@@ -279,6 +327,17 @@
     </Style>
 
     <Style x:Key="FortivaIconButton" TargetType="Button">
+        <Setter Property="Width" Value="34"/>
+        <Setter Property="Height" Value="34"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{ThemeResource FortivaMutedBrush}"/>
+        <Setter Property="UseSystemFocusVisuals" Value="True"/>
+    </Style>
+
+    <Style x:Key="FortivaIconToggleButton" TargetType="ToggleButton">
         <Setter Property="Width" Value="34"/>
         <Setter Property="Height" Value="34"/>
         <Setter Property="Padding" Value="0"/>
@@ -387,12 +446,14 @@
     </Style>
 
     <Style x:Key="FortivaHeroTitle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="Segoe UI Variable Display"/>
         <Setter Property="FontSize" Value="28"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Foreground" Value="{ThemeResource FortivaHeadingBrush}"/>
     </Style>
 
     <Style x:Key="FortivaPageTitle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="Segoe UI Variable Display"/>
         <Setter Property="FontSize" Value="24"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Foreground" Value="{ThemeResource FortivaHeadingBrush}"/>
@@ -428,6 +489,33 @@
         <Setter Property="MinHeight" Value="92"/>
     </Style>
 
+    <Style x:Key="FortivaVaultListItem" TargetType="ListViewItem">
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Margin" Value="0,0,0,8"/>
+        <Setter Property="MinHeight" Value="64"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+
+    <Style x:Key="FortivaVaultListRow" TargetType="Border" BasedOn="{StaticResource FortivaGlassPanel}">
+        <Setter Property="Padding" Value="14,12"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="MinHeight" Value="64"/>
+    </Style>
+
+    <Style x:Key="FortivaViewToggleButton" TargetType="ToggleButton">
+        <Setter Property="Width" Value="40"/>
+        <Setter Property="Height" Value="40"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="CornerRadius" Value="10"/>
+        <Setter Property="Background" Value="{ThemeResource FortivaGlassFillBrush}"/>
+        <Setter Property="Foreground" Value="{ThemeResource FortivaMutedBrush}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource FortivaGlassBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+
     <Style x:Key="FortivaVaultStatChip" TargetType="Border">
         <Setter Property="CornerRadius" Value="8"/>
         <Setter Property="Padding" Value="10,6"/>
@@ -455,6 +543,27 @@
         <Setter Property="Foreground" Value="{ThemeResource FortivaAccentBrush}"/>
         <Setter Property="FontSize" Value="12"/>
     </Style>
+
+    <DataTemplate x:Key="CommandPaletteItemTemplate">
+        <Grid ColumnSpacing="12" Padding="8,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <FontIcon Glyph="{Binding Glyph}" FontSize="14"
+                      Foreground="{ThemeResource FortivaAccentBrush}" VerticalAlignment="Center"/>
+            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="14"
+                           Foreground="{ThemeResource FortivaHeadingBrush}"/>
+                <TextBlock Text="{Binding Subtitle}" FontSize="12"
+                           Foreground="{ThemeResource FortivaMutedBrush}"
+                           TextTrimming="CharacterEllipsis" MaxWidth="360"/>
+            </StackPanel>
+            <TextBlock Grid.Column="2" Text="{Binding Category}" FontSize="11"
+                       Foreground="{ThemeResource FortivaMutedBrush}" VerticalAlignment="Center"/>
+        </Grid>
+    </DataTemplate>
 
     <Style x:Key="FortivaAdminTabContent" TargetType="StackPanel">
         <Setter Property="Margin" Value="24"/>

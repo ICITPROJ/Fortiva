@@ -6,8 +6,10 @@
     :root {
       --bg: #0a0c10;
       --surface: #12161c;
+      --surface-2: #181e26;
       --accent: #40BCF4;
-      --accent-dim: rgba(64, 188, 244, 0.15);
+      --accent-dim: rgba(64, 188, 244, 0.14);
+      --accent-glow: rgba(64, 188, 244, 0.35);
       --heading: #ffffff;
       --body: #a0aab2;
       --muted: #6b7785;
@@ -19,33 +21,57 @@
     * { box-sizing: border-box; }
     body {
       font-family: "Segoe UI", system-ui, sans-serif;
-      width: 320px;
+      width: 360px;
       margin: 0;
       padding: 0;
       background: var(--bg);
       color: var(--body);
     }
+    .accent-bar {
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), rgba(64, 188, 244, 0.2));
+    }
     .header {
-      padding: 14px 16px 10px;
+      padding: 14px 16px 12px;
       border-bottom: 1px solid var(--border);
     }
-    .header h1 {
+    .brand-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .brand-row h1 {
       font-size: 15px;
       font-weight: 600;
       color: var(--heading);
-      margin: 0 0 4px;
+      margin: 0;
+      letter-spacing: 0.02em;
+    }
+    .version {
+      font-size: 10px;
+      color: var(--muted);
+      font-weight: 600;
     }
     .site {
       font-size: 12px;
       color: var(--muted);
       word-break: break-all;
+      line-height: 1.4;
     }
     .site strong { color: var(--accent); font-weight: 600; }
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 10px;
+    }
     .status-pill {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      margin-top: 8px;
       padding: 4px 10px;
       border-radius: 999px;
       font-size: 11px;
@@ -54,24 +80,85 @@
       border: 1px solid var(--border);
     }
     .status-pill.ready { color: var(--ok); border-color: rgba(61, 214, 140, 0.35); }
+    .status-pill.loading { color: var(--accent); border-color: var(--accent-glow); }
+    .status-pill.bridge_warming { color: var(--accent); border-color: var(--accent-glow); }
     .status-pill.locked { color: var(--warn); border-color: rgba(245, 185, 66, 0.35); }
     .status-pill.setup { color: var(--err); border-color: rgba(240, 113, 120, 0.35); }
     .status-dot {
       width: 7px; height: 7px; border-radius: 50%; background: currentColor;
     }
-    .body { padding: 14px 16px 16px; }
+    .status-pill.loading .status-dot,
+    .status-pill.bridge_warming .status-dot {
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(0.85); }
+    }
+    .retry-link {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px 0;
+    }
+    .retry-link:hover { text-decoration: underline; }
+    .steps {
+      display: flex;
+      gap: 6px;
+      padding: 10px 16px 0;
+    }
+    .step {
+      flex: 1;
+      text-align: center;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      padding: 6px 4px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      line-height: 1.3;
+    }
+    .step.active {
+      color: var(--accent);
+      background: var(--accent-dim);
+      border-color: var(--accent-glow);
+    }
+    .step.done { color: var(--ok); }
+    .body { padding: 12px 16px 14px; }
     .hint {
       font-size: 11px;
       line-height: 1.45;
       color: var(--muted);
-      margin: 0 0 12px;
+      margin: 0 0 10px;
     }
+    #previewCard {
+      display: none;
+      margin: 0 0 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--surface-2);
+      border: 1px solid rgba(61, 214, 140, 0.25);
+    }
+    #previewCard.visible { display: block; }
+    .preview-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--ok);
+      margin-bottom: 4px;
+    }
+    .preview-title { font-size: 13px; font-weight: 600; color: var(--heading); }
+    .preview-user { font-size: 11px; color: var(--muted); margin-top: 2px; }
     #matchList {
       display: none;
-      margin: 0 0 12px;
+      margin: 0 0 10px;
       padding: 0;
       list-style: none;
-      max-height: 160px;
+      max-height: 140px;
       overflow-y: auto;
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -98,7 +185,7 @@
     .match-user { font-size: 11px; color: var(--muted); margin-top: 2px; display: block; }
     .primary-btn {
       width: 100%;
-      padding: 11px 14px;
+      padding: 12px 14px;
       font-size: 14px;
       font-weight: 600;
       cursor: pointer;
@@ -106,18 +193,23 @@
       border-radius: 10px;
       background: var(--accent);
       color: var(--bg);
+      box-shadow: 0 0 0 0 var(--accent-glow);
+      transition: filter 0.15s, box-shadow 0.15s;
     }
-    .primary-btn:hover:not(:disabled) { filter: brightness(1.06); }
+    .primary-btn:hover:not(:disabled) {
+      filter: brightness(1.06);
+      box-shadow: 0 0 18px var(--accent-glow);
+    }
     .primary-btn:disabled { opacity: 0.45; cursor: not-allowed; }
     #statusBox {
-      margin-top: 12px;
+      margin-top: 10px;
       padding: 10px 12px;
       border-radius: 10px;
       font-size: 12px;
       line-height: 1.45;
       background: var(--surface);
       border: 1px solid var(--border);
-      min-height: 42px;
+      min-height: 40px;
     }
     #statusBox.success { color: var(--ok); border-color: rgba(61, 214, 140, 0.35); }
     #statusBox.warn { color: var(--warn); border-color: rgba(245, 185, 66, 0.35); }
@@ -127,35 +219,54 @@
       padding: 0 16px 14px;
       font-size: 10px;
       color: var(--muted);
-      line-height: 1.4;
+      line-height: 1.45;
     }
-    .footer a { color: var(--accent); text-decoration: none; }
+    .footer strong { color: var(--body); font-weight: 600; }
   </style>
 </head>
 <body>
+  <div class="accent-bar"></div>
   <div class="header">
-    <h1>Fortiva</h1>
-    <div class="site" id="siteLine">Checking this page…</div>
-    <div class="status-pill setup" id="connPill">
-      <span class="status-dot"></span>
-      <span id="connText">Connecting…</span>
+    <div class="brand-row">
+      <h1>Fortiva Autofill</h1>
+      <span class="version" id="versionLine"></span>
     </div>
+    <div class="site" id="siteLine">Checking this page…</div>
+    <div class="status-row">
+      <div class="status-pill setup" id="connPill">
+        <span class="status-dot"></span>
+        <span id="connText">Connecting…</span>
+      </div>
+      <button type="button" class="retry-link" id="retryBtn" hidden>Retry</button>
+    </div>
+  </div>
+
+  <div class="steps" aria-label="Setup progress">
+    <div class="step" id="stepConnect">1 · Connect</div>
+    <div class="step" id="stepUnlock">2 · Unlock</div>
+    <div class="step" id="stepFill">3 · Fill</div>
   </div>
 
   <div class="body">
     <p class="hint" id="actionHint">
-      Click the button when you are on a login form. Fortiva only fills when you ask — never automatically.
+      Fortiva only fills when you click — never on page load. You don't need the app open first.
     </p>
+
+    <div id="previewCard">
+      <div class="preview-label">Matched login</div>
+      <div class="preview-title" id="previewTitle"></div>
+      <div class="preview-user" id="previewUser"></div>
+    </div>
 
     <ul id="matchList" aria-label="Choose a saved login"></ul>
 
-    <button class="primary-btn" id="fillBtn" type="button" disabled>Fill login on this page</button>
+    <button class="primary-btn" id="fillBtn" type="button" disabled>Fill</button>
 
-    <div id="statusBox" class="loading">Checking Fortiva…</div>
+    <div id="statusBox" class="">Checking Fortiva on this PC…</div>
   </div>
 
   <div class="footer">
-    First time? Open Fortiva → <strong>Settings → Browser extension</strong> → <strong>Connect browser</strong>.
+    First time? <strong>Fortiva → Settings → Connect browser</strong>, then reload this extension in Edge or Chrome after each Fortiva update.
   </div>
 
   <script src="popup.js"></script>

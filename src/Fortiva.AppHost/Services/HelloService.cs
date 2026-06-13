@@ -1,37 +1,27 @@
 using System.Runtime.InteropServices;
 using Fortiva.Core.Hello;
-using Windows.Foundation;
 using Windows.Security.Credentials.UI;
-using WinRT;
 
 namespace Fortiva.AppHost.Services;
 
 /// <summary>
 /// Windows Hello unlock (face, fingerprint, or PIN) via UserConsentVerifier.
-/// Unpackaged WinUI apps must use RequestVerificationForWindowAsync so Windows
-/// offers the full Hello sign-in stack, not PIN-only fallback.
+/// Unpackaged WinUI apps must parent the dialog to the app HWND via
+/// <see cref="UserConsentVerifierInterop.RequestVerificationForWindowAsync"/>.
 /// </summary>
 public static class HelloService
 {
-    private static readonly Guid InteropGuid = new("9710727D-8E8D-4FBE-9002-3CB2AA5E9C7B");
+    private const int SwRestore = 9;
 
-    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
-    private delegate int RequestVerificationForWindowNative(
-        IntPtr thisPtr,
-        IntPtr appWindow,
-        IntPtr messageHString,
-        ref Guid riid,
-        out IntPtr asyncOperation);
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
 
-    [DllImport("api-ms-win-core-winrt-string-l1-1-0.dll", CharSet = CharSet.Unicode)]
-    private static extern int WindowsCreateString(string sourceString, int length, out IntPtr hstring);
-
-    [DllImport("api-ms-win-core-winrt-string-l1-1-0.dll")]
-    private static extern void WindowsDeleteString(IntPtr hString);
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
     public static async Task<bool> IsAvailableAsync()
     {
-        var availability = await GetAvailabilityAsync();
+        var availability = await GetAvailabilityAsync().ConfigureAwait(true);
         return availability == UserConsentVerifierAvailability.Available;
     }
 
@@ -39,11 +29,11 @@ public static class HelloService
     {
         try
         {
-            var availability = await GetAvailabilityAsync();
+            var availability = await GetAvailabilityAsync().ConfigureAwait(true);
             if (availability != UserConsentVerifierAvailability.Available)
                 return new HelloVerificationResult(false, DescribeAvailability(availability));
 
-            var result = await RequestVerificationAsync(message);
+            var result = await RequestVerificationAsync(message).ConfigureAwait(true);
             if (result == UserConsentVerificationResult.Verified)
                 HelloVerificationGate.MarkVerified();
             return MapResult(result);
@@ -59,7 +49,7 @@ public static class HelloService
     {
         try
         {
-            return await UserConsentVerifier.CheckAvailabilityAsync();
+            return await UserConsentVerifier.CheckAvailabilityAsync().AsTask().ConfigureAwait(true);
         }
         catch
         {
@@ -69,63 +59,49 @@ public static class HelloService
 
     private static async Task<UserConsentVerificationResult> RequestVerificationAsync(string message)
     {
-        var hwnd = App.MainWindowHandle;
+        var hwnd = App.EnsureMainWindowHandle();
+        PrepareOwnerWindow(hwnd);
+
         if (hwnd != IntPtr.Zero)
         {
             try
             {
-                return await RequestVerificationForWindowAsync(hwnd, message);
+                return await UserConsentVerifierInterop
+                    .RequestVerificationForWindowAsync(hwnd, message)
+                    .AsTask()
+                    .ConfigureAwait(true);
             }
-            catch (Exception ex) when (ex is InvalidCastException or COMException)
+            catch (Exception ex) when (ex is InvalidCastException or COMException or UnauthorizedAccessException)
             {
                 App.LogException("HelloService.RequestVerificationForWindow", ex);
+                return await UserConsentVerifier.RequestVerificationAsync(message)
+                    .AsTask()
+                    .ConfigureAwait(true);
             }
         }
 
-        return await UserConsentVerifier.RequestVerificationAsync(message);
+        App.LogException("HelloService.RequestVerificationAsync",
+            new InvalidOperationException("Fortiva main window handle was not available for Windows Hello."));
+
+        // HWND missing only — single non-windowed attempt (never chain two dialogs).
+        return await UserConsentVerifier.RequestVerificationAsync(message)
+            .AsTask()
+            .ConfigureAwait(true);
     }
 
-    private static async Task<UserConsentVerificationResult> RequestVerificationForWindowAsync(
-        IntPtr hwnd, string message)
+    private static void PrepareOwnerWindow(IntPtr hwnd)
     {
-        var factory = ActivationFactory.Get("Windows.Security.Credentials.UI.UserConsentVerifier");
-        Marshal.ThrowExceptionForHR(factory.TryAs(InteropGuid, out var interopPtr));
+        if (hwnd == IntPtr.Zero)
+            return;
+
         try
         {
-            var iid = typeof(IAsyncOperation<UserConsentVerificationResult>).GUID;
-            var hr = InvokeRequestVerificationForWindowAsync(interopPtr, hwnd, message, ref iid, out var opPtr);
-            Marshal.ThrowExceptionForHR(hr);
-            if (opPtr == IntPtr.Zero)
-                throw new COMException("Windows Hello did not return a verification operation.");
-
-            var operation = MarshalInterface<IAsyncOperation<UserConsentVerificationResult>>.FromAbi(opPtr);
-            return await operation;
+            ShowWindow(hwnd, SwRestore);
+            SetForegroundWindow(hwnd);
         }
-        finally
+        catch
         {
-            Marshal.Release(interopPtr);
-        }
-    }
-
-    private static int InvokeRequestVerificationForWindowAsync(
-        IntPtr interopPtr,
-        IntPtr hwnd,
-        string message,
-        ref Guid riid,
-        out IntPtr asyncOperation)
-    {
-        var vtable = Marshal.ReadIntPtr(interopPtr);
-        var methodPtr = Marshal.ReadIntPtr(vtable, 3 * IntPtr.Size);
-        var method = Marshal.GetDelegateForFunctionPointer<RequestVerificationForWindowNative>(methodPtr);
-
-        Marshal.ThrowExceptionForHR(WindowsCreateString(message, message.Length, out var messageHString));
-        try
-        {
-            return method(interopPtr, hwnd, messageHString, ref riid, out asyncOperation);
-        }
-        finally
-        {
-            WindowsDeleteString(messageHString);
+            /* best effort — verification may still succeed */
         }
     }
 

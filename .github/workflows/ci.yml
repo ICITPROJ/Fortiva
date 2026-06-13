@@ -10,6 +10,8 @@ env:
   DOTNET_VERSION: '8.0.x'
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
+  FORTIVA_ALLOW_UNSIGNED_BRIDGE: '1'
+  FORTIVA_BRIDGE_FAST_TEST: '1'
 
 jobs:
   # ── Core library + tests (runs on every push) ───────────────────────────────
@@ -36,6 +38,13 @@ jobs:
       - name: Build tests
         run: dotnet build tests/Fortiva.Core.Tests/Fortiva.Core.Tests.csproj -c Release --no-restore
 
+      - name: Stop Fortiva before Core tests
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-Process -Name 'Fortiva.Personal','Fortiva.Enterprise','Fortiva.AppHost','Fortiva.BrowserBridge.Host' -ErrorAction SilentlyContinue |
+            Stop-Process -Force -ErrorAction SilentlyContinue
+
       - name: Run tests
         uses: nick-fields/retry@v3
         with:
@@ -60,6 +69,70 @@ jobs:
         run: >
           dotnet test tests/Fortiva.AppHost.Tests/Fortiva.AppHost.Tests.csproj
           -c Release --no-build --verbosity normal
+
+      - name: Run bridge security unit tests
+        run: >
+          dotnet test tests/Fortiva.Core.Tests/Fortiva.Core.Tests.csproj
+          -c Release --no-build
+          --filter "FullyQualifiedName~BridgeNativeForwarder|FullyQualifiedName~BridgeAppLauncher|FullyQualifiedName~BridgeFillNonce|FullyQualifiedName~BridgePingClassifier|FullyQualifiedName~DomainSafety|FullyQualifiedName~VaultEntryWebsite"
+
+      - name: Validate extension manifest
+        shell: pwsh
+        run: ./scripts/Test-ExtensionManifest.ps1
+
+      - name: Publish Personal + bridge (smoke)
+        run: |
+          dotnet publish src/Fortiva.Personal/Fortiva.Personal.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=false -o $env:RUNNER_TEMP/Fortiva.Personal -v q
+          dotnet publish src/Fortiva.BrowserBridge.Host/Fortiva.BrowserBridge.Host.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=false -o $env:RUNNER_TEMP/BrowserBridge -v q
+
+  # ── Installer QA (Inno Setup + bridge hash sidecar) ─────────────────────────
+  installer-qa:
+    name: Installer — build + QA gate
+    runs-on: windows-latest
+    needs: core
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build release dist
+        shell: pwsh
+        run: ./build-release.ps1
+        timeout-minutes: 25
+
+      - name: Restore and build tests
+        run: |
+          dotnet restore tests/Fortiva.Core.Tests/Fortiva.Core.Tests.csproj
+          dotnet build tests/Fortiva.Core.Tests/Fortiva.Core.Tests.csproj -c Release --no-restore
+
+      - name: Run installer QA gate
+        shell: pwsh
+        run: ./scripts/Test-InstallerQa.ps1
+
+      - name: Bridge e2e tests (serial)
+        shell: pwsh
+        run: |
+          Get-Process -Name 'Fortiva.Personal','Fortiva.BrowserBridge.Host' -ErrorAction SilentlyContinue |
+            Stop-Process -Force -ErrorAction SilentlyContinue
+          dotnet test tests/Fortiva.Core.Tests/Fortiva.Core.Tests.csproj -c Release --no-build `
+            --filter "FullyQualifiedName~BrowserBridgeEndToEnd|FullyQualifiedName~BridgeUnlockBrokerPipe" `
+            --verbosity minimal -- xunit.parallelizeTestCollections=false
+
+      - name: Upload Personal installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-qa-personal
+          retention-days: 14
+          path: dist/installers/FortivaPersonal-*-Setup.exe
 
       - name: Upload test results
         if: always()
@@ -160,6 +233,6 @@ jobs:
   all-clear:
     name: All checks passed
     runs-on: ubuntu-latest
-    needs: [core, license-tool, browser-bridge, winui]
+    needs: [core, license-tool, browser-bridge, winui, security, installer-qa]
     steps:
       - run: echo "All required CI checks passed."

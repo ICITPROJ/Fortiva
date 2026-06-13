@@ -63,6 +63,53 @@ public sealed class PersonalUserSettingsTests
     }
 
     [Fact]
+    public void Load_PreservesExistingPreferencesWhenNewFieldsAdded()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "fortiva-prefs-test-" + Guid.NewGuid().ToString("N"));
+        var prefs = Path.Combine(dir, "user.prefs.json");
+        try
+        {
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(prefs,
+                """{"ParanoiaMode":true,"AutoLockSeconds":420,"PortableVaultDirectory":"E:\\Fortiva"}""");
+
+            var settings = LoadFromDirectory(dir);
+            Assert.True(settings.ParanoiaMode);
+            Assert.Equal(420, settings.AutoLockSeconds);
+            Assert.Equal(@"E:\Fortiva", settings.PortableVaultDirectory);
+            Assert.True(settings.AutoUpdateEnabled);
+        }
+        finally
+        {
+            try { if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Load_FallsBackToLegacyWhenCanonicalCorrupt()
+    {
+        var canonicalRoot = Path.Combine(Path.GetTempPath(), "fortiva-prefs-canonical-" + Guid.NewGuid().ToString("N"));
+        var legacyRoot = Path.Combine(canonicalRoot, "Personal");
+        var canonicalPrefs = Path.Combine(canonicalRoot, "user.prefs.json");
+        var legacyPrefs = Path.Combine(legacyRoot, "user.prefs.json");
+        try
+        {
+            Directory.CreateDirectory(canonicalRoot);
+            Directory.CreateDirectory(legacyRoot);
+            File.WriteAllText(canonicalPrefs, "{bad json");
+            File.WriteAllText(legacyPrefs, """{"ParanoiaMode":true,"AutoLockSeconds":240}""");
+
+            var settings = LoadFromPaths(canonicalPrefs, legacyPrefs);
+            Assert.True(settings.ParanoiaMode);
+            Assert.Equal(240, settings.AutoLockSeconds);
+        }
+        finally
+        {
+            try { if (Directory.Exists(canonicalRoot)) Directory.Delete(canonicalRoot, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void TryBackupCorruptFile_RenamesExistingFile()
     {
         var dir = Path.Combine(Path.GetTempPath(), "fortiva-prefs-test-" + Guid.NewGuid().ToString("N"));
@@ -86,9 +133,32 @@ public sealed class PersonalUserSettingsTests
     private static PersonalUserSettings LoadFromDirectory(string personalDataRoot)
     {
         var path = Path.Combine(personalDataRoot, "user.prefs.json");
-        var json = File.ReadAllText(path);
-        var settings = System.Text.Json.JsonSerializer.Deserialize<PersonalUserSettings>(json)
-            ?? new PersonalUserSettings();
+        return LoadFromPaths(path, Path.Combine(personalDataRoot, "Personal", "user.prefs.json"));
+    }
+
+    private static PersonalUserSettings LoadFromPaths(string canonicalPath, string legacyPath)
+    {
+        PersonalUserSettings? settings = null;
+        if (File.Exists(canonicalPath))
+        {
+            try
+            {
+                var json = File.ReadAllText(canonicalPath);
+                settings = System.Text.Json.JsonSerializer.Deserialize<PersonalUserSettings>(json);
+            }
+            catch
+            {
+                PersonalUserSettings.TryBackupCorruptFile(canonicalPath);
+            }
+        }
+
+        if (settings is null && File.Exists(legacyPath))
+        {
+            var json = File.ReadAllText(legacyPath);
+            settings = System.Text.Json.JsonSerializer.Deserialize<PersonalUserSettings>(json);
+        }
+
+        settings ??= new PersonalUserSettings();
         settings.EnsureDefaults();
         return settings;
     }

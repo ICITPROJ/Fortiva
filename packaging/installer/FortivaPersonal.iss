@@ -72,9 +72,12 @@ WizardSmallImageFile=..\assets\wizard-small.bmp
 
 WizardSizePercent=100
 
-DisableDirPage=no
+DisableDirPage=auto
 
 DisableProgramGroupPage=no
+
+; Keep the same per-user install folder on upgrade (never touches %APPDATA% vault data).
+UsePreviousAppDir=yes
 
 MinVersion=10.0.19041
 
@@ -343,6 +346,14 @@ end;
 
 
 
+function MustPreserveUserDataOnInstall: Boolean;
+begin
+  { In-app /VERYSILENT updates and same-AppId upgrades never delete or reset user data. }
+  Result := WizardSilent or IsFortivaUpgradeInstall();
+end;
+
+
+
 function InitializeSetup(): Boolean;
 var
   VaultFile: String;
@@ -353,8 +364,14 @@ begin
     Exit;
   end;
 
-  { Fresh reinstall only — upgrades and silent in-app updates must keep user.prefs.json and vault data. }
-  if (not IsFortivaUpgradeInstall()) and (not WizardSilent) and PersonalVaultExists() then
+  if MustPreserveUserDataOnInstall() then
+  begin
+    Result := True;
+    Exit;
+  end;
+
+  { Fresh interactive reinstall only — offer optional vault wipe when leftover data exists. }
+  if PersonalVaultExists() then
 
   begin
 

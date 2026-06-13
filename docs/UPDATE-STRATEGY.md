@@ -48,9 +48,15 @@ Manual **Check for updates → Install now** and the 24-hour auto-update path sh
 6. Installer upgrades files under `%LocalAppData%\Programs\icmclab studio\Fortiva Personal\`.
 7. Installer **relaunches** `Fortiva.Personal.exe` when setup was silent (`ShouldLaunchAfterSilentInstall`).
 
-**Preserved across updates:** `vault.fva`, snapshots, `local.state`, Hello blobs, `user.prefs.json`, extension staging under `%LocalAppData%\FortivaPersonal\`, browser native-messaging registration (refreshed on next launch).
+**Preserved across updates:** `vault.fva`, snapshots, `local.state`, Hello blobs, `user.prefs.json`, `appearance.json`, extension staging under `%LocalAppData%\FortivaPersonal\`, browser native-messaging registration (refreshed on next launch).
 
 **Not preserved in-place:** files under the app install directory (replaced by the new build). User data never lives there.
+
+**Guarantees (enforced in code):**
+- Inno Setup uses a fixed `AppId` + `UsePreviousAppDir=yes` — upgrades only replace `{app}` binaries.
+- Silent `/VERYSILENT` in-app updates never run the “delete old vault” prompt (`MustPreserveUserDataOnInstall`).
+- `Deploy-FortivaPersonal.ps1` refuses targets that overlap `%APPDATA%\Fortiva` or `%LOCALAPPDATA%\FortivaPersonal`.
+- Pre-update backup copies vault sidecars, `user.prefs.json`, and `appearance.json` before the installer runs.
 
 
 
@@ -82,7 +88,7 @@ git push origin main
 
 CI auto-bumps the patch version from the latest git tag, builds installers, publishes `latest.personal.json`, and creates the GitHub Release. **Manual git tags are optional** (override only).
 
-Code signing: Personal installers currently ship **unsigned** (see `docs/CODESIGNING.md`). The release workflow Authenticode-signs and verifies the published EXEs/installers only when the `CODESIGN_PFX_*` secrets are configured and the signing step is enabled; until then, first-run installs show a Windows SmartScreen "Unknown publisher" prompt. Update integrity does not depend on Authenticode — installers are verified by SHA-256 against the signed manifest over HTTPS.
+Code signing: Personal installers currently ship **unsigned** (see `docs/CODESIGNING.md`). The release workflow Authenticode-signs published EXEs/installers only when `CODESIGN_PFX_*` secrets are configured; until then, first-run installs may show a Windows SmartScreen "Unknown publisher" prompt. Update integrity does not depend on Authenticode — the manifest is fetched over HTTPS and each installer is verified by SHA-256 hash before launch.
 
 Legacy update host `studio.icmclab.cloud` is accepted only until **2026-09-01 UTC**; GitHub Releases is the canonical feed.
 

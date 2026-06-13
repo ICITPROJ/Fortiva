@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Fortiva.Core.Crypto;
+using Fortiva.Core.ImportExport;
 using Fortiva.Core.LocalState;
 using Fortiva.Core.Policy;
 
@@ -232,10 +233,14 @@ public sealed class VaultEngine
         if (ctx.ReadOnly)
             throw new InvalidOperationException("Vault is read-only.");
         PolicyEnforcer.EnsureWritableSecurityLevel(ctx.Header.SecurityLevel, _policy);
-        EnsureNoConcurrentModification(ctx);
-        ctx.Header.LastModifiedAt = DateTimeOffset.UtcNow;
-        ctx.Header.RevisionCounter++;
-        SaveInternal(ctx.Keys, ctx.Header, ctx.Payload, updateLocalState: true);
+        IntegrityValidator.ValidateConsistency(ctx.Payload);
+        using (VaultSaveMutex.Acquire(_snapshots.VaultPath))
+        {
+            EnsureNoConcurrentModification(ctx);
+            ctx.Header.LastModifiedAt = DateTimeOffset.UtcNow;
+            ctx.Header.RevisionCounter++;
+            SaveInternal(ctx.Keys, ctx.Header, ctx.Payload, updateLocalState: true);
+        }
     }
 
     /// <summary>
@@ -263,10 +268,11 @@ public sealed class VaultEngine
             var (header, _, _) = VaultSerializer.ParseVaultFile(bytes);
             return header.RevisionCounter;
         }
-        catch
+        catch (Exception ex)
         {
-            // Best-effort: a torn read or transient I/O error must not block a legitimate save.
-            return null;
+            throw new VaultConcurrencyException(
+                "Unable to verify the on-disk vault revision before saving. "
+                + "Lock and unlock the vault, then try again.", ex);
         }
     }
 
@@ -304,18 +310,103 @@ public sealed class VaultEngine
     }
 
     public void DeleteEntry(VaultUnlockContext ctx, Guid entryId)
+        => BulkDeleteEntries(ctx, [entryId]);
+
+    /// <summary>Removes multiple entries then saves once. Returns how many were removed.</summary>
+    public int BulkDeleteEntries(VaultUnlockContext ctx, IEnumerable<Guid> entryIds)
     {
-        var idx = ctx.Payload.Entries.FindIndex(e => e.Id == entryId);
-        if (idx < 0) return;
-        var removed = ctx.Payload.Entries[idx];
-        var logIdx = ctx.Payload.IntegrityLog.Count;
-        ctx.Payload.Entries.RemoveAt(idx);
-        ctx.Payload.IntegrityLog.Add(IntegrityValidator.CreateLogEntry("delete", entryId, ctx.Header.RevisionCounter + 1));
-        try { Save(ctx); }
+        var removals = new List<(int Index, VaultEntry Entry)>();
+        foreach (var id in entryIds.Distinct())
+        {
+            var idx = ctx.Payload.Entries.FindIndex(e => e.Id == id);
+            if (idx >= 0)
+                removals.Add((idx, ctx.Payload.Entries[idx]));
+        }
+
+        if (removals.Count == 0)
+            return 0;
+
+        var startLogCount = ctx.Payload.IntegrityLog.Count;
+        var revision = ctx.Header.RevisionCounter + 1;
+        foreach (var (idx, _) in removals.OrderByDescending(r => r.Index))
+            ctx.Payload.Entries.RemoveAt(idx);
+        foreach (var (_, entry) in removals)
+            ctx.Payload.IntegrityLog.Add(IntegrityValidator.CreateLogEntry("delete", entry.Id, revision));
+
+        try
+        {
+            Save(ctx);
+            return removals.Count;
+        }
         catch
         {
-            ctx.Payload.Entries.Insert(idx, removed);
-            ctx.Payload.IntegrityLog.RemoveAt(logIdx);
+            foreach (var (idx, entry) in removals.OrderBy(r => r.Index))
+                ctx.Payload.Entries.Insert(idx, entry);
+            while (ctx.Payload.IntegrityLog.Count > startLogCount)
+                ctx.Payload.IntegrityLog.RemoveAt(ctx.Payload.IntegrityLog.Count - 1);
+            throw;
+        }
+    }
+
+    /// <summary>Applies a tag to multiple entries then saves once.</summary>
+    public (int Updated, int SkippedAlreadyTagged, int SkippedMaxTags) BulkAddTag(
+        VaultUnlockContext ctx,
+        IEnumerable<Guid> entryIds,
+        string normalizedTag)
+    {
+        var updates = new List<(int Index, VaultEntry Previous, VaultEntry Updated)>();
+        var skippedAlready = 0;
+        var skippedMax = 0;
+
+        foreach (var id in entryIds.Distinct())
+        {
+            var idx = ctx.Payload.Entries.FindIndex(e => e.Id == id);
+            if (idx < 0)
+                continue;
+
+            var previous = ctx.Payload.Entries[idx];
+            var tags = previous.Tags?.ToList() ?? [];
+            if (tags.Any(t => string.Equals(t, normalizedTag, StringComparison.OrdinalIgnoreCase)))
+            {
+                skippedAlready++;
+                continue;
+            }
+
+            if (tags.Count >= VaultConstants.MaxTagsPerEntry)
+            {
+                skippedMax++;
+                continue;
+            }
+
+            var updated = previous.Clone();
+            tags.Add(normalizedTag);
+            updated.Tags = tags;
+            updated.ModifiedAt = DateTimeOffset.UtcNow;
+            updates.Add((idx, previous, updated));
+        }
+
+        if (updates.Count == 0)
+            return (0, skippedAlready, skippedMax);
+
+        var startLogCount = ctx.Payload.IntegrityLog.Count;
+        var revision = ctx.Header.RevisionCounter + 1;
+        foreach (var (idx, _, updated) in updates)
+        {
+            ctx.Payload.Entries[idx] = updated;
+            ctx.Payload.IntegrityLog.Add(IntegrityValidator.CreateLogEntry("update", updated.Id, revision, updated));
+        }
+
+        try
+        {
+            Save(ctx);
+            return (updates.Count, skippedAlready, skippedMax);
+        }
+        catch
+        {
+            foreach (var (idx, previous, _) in updates)
+                ctx.Payload.Entries[idx] = previous;
+            while (ctx.Payload.IntegrityLog.Count > startLogCount)
+                ctx.Payload.IntegrityLog.RemoveAt(ctx.Payload.IntegrityLog.Count - 1);
             throw;
         }
     }
@@ -347,21 +438,74 @@ public sealed class VaultEngine
         }
     }
 
+    /// <summary>Applies a reviewed import plan (adds, selective updates, batch history). Never overwrites without explicit plan items.</summary>
+    public void ApplyImport(VaultUnlockContext ctx, ImportApplyPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        var startEntryCount = ctx.Payload.Entries.Count;
+        var startLogCount = ctx.Payload.IntegrityLog.Count;
+        var startBatchCount = ctx.Payload.ImportBatches.Count;
+        var updateSnapshots = new List<(int Index, VaultEntry Previous)>();
+
+        try
+        {
+            foreach (var entry in plan.ToAdd)
+            {
+                if (entry.Id == Guid.Empty)
+                    entry.Id = Guid.NewGuid();
+                ctx.Payload.Entries.Add(entry);
+                ctx.Payload.IntegrityLog.Add(IntegrityValidator.CreateLogEntry("import", entry.Id, ctx.Header.RevisionCounter + 1, entry));
+            }
+
+            foreach (var entry in plan.ToUpdate)
+            {
+                var idx = ctx.Payload.Entries.FindIndex(e => e.Id == entry.Id);
+                if (idx < 0)
+                    throw new KeyNotFoundException($"Import update target {entry.Id} not found.");
+                updateSnapshots.Add((idx, ctx.Payload.Entries[idx].Clone()));
+                ctx.Payload.Entries[idx] = entry;
+                ctx.Payload.IntegrityLog.Add(IntegrityValidator.CreateLogEntry("update", entry.Id, ctx.Header.RevisionCounter + 1, entry));
+            }
+
+            ctx.Payload.ImportBatches.Add(plan.Batch);
+            Save(ctx);
+        }
+        catch
+        {
+            while (ctx.Payload.Entries.Count > startEntryCount)
+                ctx.Payload.Entries.RemoveAt(ctx.Payload.Entries.Count - 1);
+            foreach (var (index, previous) in updateSnapshots)
+            {
+                if (index < ctx.Payload.Entries.Count)
+                    ctx.Payload.Entries[index] = previous;
+            }
+            while (ctx.Payload.IntegrityLog.Count > startLogCount)
+                ctx.Payload.IntegrityLog.RemoveAt(ctx.Payload.IntegrityLog.Count - 1);
+            while (ctx.Payload.ImportBatches.Count > startBatchCount)
+                ctx.Payload.ImportBatches.RemoveAt(ctx.Payload.ImportBatches.Count - 1);
+            throw;
+        }
+    }
+
     public void ChangeMasterPassword(VaultUnlockContext ctx, string newPassword, Argon2Parameters? kdfOverride = null)
     {
         if (ctx.ReadOnly)
             throw new InvalidOperationException("Vault is read-only.");
         PolicyEnforcer.EnsureWritableSecurityLevel(ctx.Header.SecurityLevel, _policy);
-        var kdf = ResolveKdf(kdfOverride ?? ctx.Header.KdfParameters, ctx.Header.SecurityLevel);
-        var (newKeys, wrappedVk, salt) = KeyHierarchy.CreateNew(newPassword, kdf);
-        ctx.Header.KdfParameters = kdf;
-        ctx.Header.Salt = salt;
-        ctx.Header.WrappedVaultKey = wrappedVk;
-        // Re-encrypt payload under new keys
-        SaveInternal(newKeys, ctx.Header, ctx.Payload, updateLocalState: true);
-        ctx.Keys.Lock();
-        ctx.Keys.Dispose();
-        ctx.Keys = newKeys;
+        using (VaultSaveMutex.Acquire(_snapshots.VaultPath))
+        {
+            EnsureNoConcurrentModification(ctx);
+            var kdf = ResolveKdf(kdfOverride ?? ctx.Header.KdfParameters, ctx.Header.SecurityLevel);
+            var (newKeys, wrappedVk, salt) = KeyHierarchy.CreateNew(newPassword, kdf);
+            ctx.Header.KdfParameters = kdf;
+            ctx.Header.Salt = salt;
+            ctx.Header.WrappedVaultKey = wrappedVk;
+            ctx.Header.RevisionCounter++;
+            SaveInternal(newKeys, ctx.Header, ctx.Payload, updateLocalState: true);
+            ctx.Keys.Lock();
+            ctx.Keys.Dispose();
+            ctx.Keys = newKeys;
+        }
     }
 
     /// <summary>Verifies a candidate master password against the currently unlocked vault header.</summary>
@@ -399,7 +543,10 @@ public sealed class VaultEngine
         try
         {
             verified = UnlockFromBytes(bytes, masterPassword, false, true);
-            WriteVaultAtomically(bytes, suppressSnapshot: true);
+            using (VaultSaveMutex.Acquire(_snapshots.VaultPath))
+            {
+                WriteVaultAtomically(bytes, suppressSnapshot: true);
+            }
         }
         finally
         {

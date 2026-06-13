@@ -5,33 +5,107 @@ using System.Text;
 
 namespace Fortiva.Core.BrowserBridge;
 
-/// <summary>Browser-bridge side: ask Fortiva to unlock, or launch / foreground the desktop app.</summary>
+/// <summary>Browser-bridge side: launch Fortiva if needed, foreground it, and wait for unlock.</summary>
 public static class BridgeUnlockClient
 {
-    private const int ConnectRetryCount = 12;
+    private const int ConnectRetryCount = 60;
     private const int ConnectRetryDelayMs = 500;
+    private const int PostLaunchWarmupMs = 2500;
+    private const int UnlockPipeWaitMs = 35_000;
+
+    /// <summary>Set when the last <see cref="RequestUnlockAsync"/> failed due to broker rate limiting.</summary>
+    public static bool LastFailureWasRateLimited { get; private set; }
 
     public static async Task<bool> RequestUnlockAsync(int totalTimeoutMs = 120_000)
     {
+        LastFailureWasRateLimited = false;
+
+        var fastTest = string.Equals(Environment.GetEnvironmentVariable("FORTIVA_BRIDGE_FAST_TEST"), "1", StringComparison.Ordinal);
+        if (fastTest)
+            totalTimeoutMs = 2000;
+
         using var cts = new CancellationTokenSource(totalTimeoutMs);
 
-        if (!await TrySendUnlockAsync(cts.Token))
+        var presence = await BridgePresenceClient.RequestStatusAsync(timeoutMs: 2000);
+        if (BridgePresenceStatus.IsUnlocked(presence))
+            return true;
+
+        if (!BridgeProcessCheck.IsFortivaRunning())
         {
-            BridgeAppLauncher.TryLaunchOrActivate();
-            await Task.Delay(800, cts.Token);
+            if (!BridgeAppLauncher.TryLaunchFortiva())
+                return false;
+
+            await WaitForUnlockPipeAsync(cts.Token, UnlockPipeWaitMs);
+        }
+        else
+        {
+            BridgeAppLauncher.TryForegroundFortiva();
+            await Task.Delay(fastTest ? 100 : PostLaunchWarmupMs, cts.Token);
         }
 
-        for (var attempt = 0; attempt < ConnectRetryCount && !cts.Token.IsCancellationRequested; attempt++)
+        var unlockSent = false;
+        for (var attempt = 0; attempt < ConnectRetryCount && !cts.IsCancellationRequested; attempt++)
         {
-            if (await TrySendUnlockAsync(cts.Token))
+            presence = await BridgePresenceClient.RequestStatusAsync(timeoutMs: 1500);
+            if (BridgePresenceStatus.IsUnlocked(presence))
                 return true;
+
+            if (!unlockSent)
+            {
+                var unlockResult = await TrySendUnlockAsync(cts.Token);
+                if (unlockResult == UnlockPipeResult.RateLimited)
+                {
+                    LastFailureWasRateLimited = true;
+                    return false;
+                }
+
+                unlockSent = true;
+                if (unlockResult == UnlockPipeResult.AlreadyUnlocked)
+                    return true;
+            }
+
+            if (!BridgeProcessCheck.IsFortivaRunning() && attempt % 6 == 5)
+                BridgeAppLauncher.TryLaunchFortiva();
+            else if (attempt % 8 == 7)
+                BridgeAppLauncher.TryForegroundFortiva();
+
             await Task.Delay(ConnectRetryDelayMs, cts.Token);
         }
 
         return false;
     }
 
-    private static async Task<bool> TrySendUnlockAsync(CancellationToken ct)
+    private enum UnlockPipeResult
+    {
+        Failed,
+        Accepted,
+        AlreadyUnlocked,
+        RateLimited
+    }
+
+    private static async Task<bool> WaitForUnlockPipeAsync(CancellationToken ct, int maxWaitMs)
+    {
+        var deadline = Environment.TickCount64 + maxWaitMs;
+        while (Environment.TickCount64 < deadline && !ct.IsCancellationRequested)
+        {
+            try
+            {
+                using var client = new NamedPipeClientStream(
+                    ".", BridgeUnlockBroker.PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+                await client.ConnectAsync(400, ct);
+                return true;
+            }
+            catch (OperationCanceledException) { throw; }
+            catch
+            {
+                try { await Task.Delay(350, ct); } catch (OperationCanceledException) { throw; }
+            }
+        }
+
+        return false;
+    }
+
+    private static async Task<UnlockPipeResult> TrySendUnlockAsync(CancellationToken ct)
     {
         try
         {
@@ -43,34 +117,69 @@ public static class BridgeUnlockClient
             using var reader = new StreamReader(client, Encoding.UTF8, leaveOpen: true);
             await writer.WriteLineAsync("UNLOCK".AsMemory(), ct);
             var response = (await reader.ReadLineAsync(ct))?.Trim();
-            return response is "OK" or "ALREADY_UNLOCKED";
+            return response switch
+            {
+                "OK" => UnlockPipeResult.Accepted,
+                "ALREADY_UNLOCKED" => UnlockPipeResult.AlreadyUnlocked,
+                "RATE_LIMITED" => UnlockPipeResult.RateLimited,
+                _ => UnlockPipeResult.Failed
+            };
         }
         catch (OperationCanceledException) { throw; }
-        catch { return false; }
+        catch { return UnlockPipeResult.Failed; }
     }
 }
 
-/// <summary>Finds Fortiva beside BrowserBridge or running in memory and brings it forward.</summary>
+/// <summary>Finds Fortiva beside BrowserBridge, launches it, or brings an existing window forward.</summary>
 public static class BridgeAppLauncher
 {
-    public static void TryLaunchOrActivate()
+    public static bool TryLaunchOrActivate() =>
+        TryForegroundFortiva() || TryLaunchFortiva();
+
+    public static bool TryLaunchFortiva()
     {
-        if (TryActivateRunning("Fortiva.Personal") || TryActivateRunning("Fortiva.Enterprise"))
-            return;
+        if (BridgeProcessCheck.IsFortivaRunning())
+            return true;
 
         var bridgeDir = AppContext.BaseDirectory;
-        foreach (var relative in new[] { "..\\Fortiva.Personal.exe", "..\\Fortiva.Enterprise.exe" })
+        var installRoot = ResolveInstallRootFromBridgeDir(bridgeDir);
+        if (installRoot is null || !BridgeClientValidator.IsTrustedInstallRoot(installRoot))
+            return false;
+
+        foreach (var name in new[] { "Fortiva.Personal.exe", "Fortiva.Enterprise.exe" })
         {
-            var path = Path.GetFullPath(Path.Combine(bridgeDir, relative));
+            var path = Path.Combine(installRoot, name);
             if (!File.Exists(path))
+                continue;
+            if (!BridgeClientValidator.IsAllowedExecutablePath(path, [installRoot]))
                 continue;
             try
             {
-                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
-                return;
+                Process.Start(new ProcessStartInfo(path)
+                {
+                    UseShellExecute = true,
+                    WorkingDirectory = installRoot
+                });
+                return true;
             }
             catch { /* try next */ }
         }
+
+        return false;
+    }
+
+    internal static string? ResolveInstallRootFromBridgeDir(string bridgeDir)
+    {
+        var hostPath = Path.Combine(bridgeDir, BridgeClientValidator.BridgeHostExecutableName);
+        return BridgeClientValidator.TryInferInstallRootFromBridgeHostPath(hostPath);
+    }
+
+    public static bool TryForegroundFortiva()
+    {
+        if (TryActivateRunning("Fortiva.Personal") || TryActivateRunning("Fortiva.Enterprise"))
+            return true;
+
+        return BridgeProcessCheck.IsFortivaRunning();
     }
 
     private static bool TryActivateRunning(string processName)

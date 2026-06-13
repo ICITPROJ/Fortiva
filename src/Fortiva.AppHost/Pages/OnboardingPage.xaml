@@ -87,7 +87,8 @@
                             </StackPanel>
                             <InfoBar x:Name="PasswordErrorBar" IsOpen="False" Severity="Error" IsClosable="True"/>
                             <Grid ColumnSpacing="8">
-                                <Button Content="Back" Click="PrevStep_Click"/>
+                                <Button Content="Back" Click="PrevStep_Click"
+                                        Style="{StaticResource FortivaSecondaryButton}"/>
                                 <Button Grid.Column="1" Content="Continue" HorizontalAlignment="Stretch"
                                         Style="{StaticResource FortivaAccentButton}" Click="Step1Next_Click"/>
                                 <Grid.ColumnDefinitions>
@@ -110,8 +111,10 @@
                                     HorizontalAlignment="Stretch"
                                     Style="{StaticResource FortivaAccentButton}" Click="EnableHello_Click"/>
                             <Grid ColumnSpacing="8">
-                                <Button Content="Back" Click="PrevStep_Click"/>
-                                <Button x:Name="SkipHelloBtn" Grid.Column="1" Content="Skip for now" Click="HelloSkip_Click"/>
+                                <Button Content="Back" Click="PrevStep_Click"
+                                        Style="{StaticResource FortivaSecondaryButton}"/>
+                                <Button x:Name="SkipHelloBtn" Grid.Column="1" Content="Skip for now" Click="HelloSkip_Click"
+                                        Style="{StaticResource FortivaSecondaryButton}"/>
                                 <Button x:Name="HelloContinueBtn" Grid.Column="2" Content="Continue"
                                         Visibility="Collapsed" Style="{StaticResource FortivaAccentButton}" Click="HelloContinue_Click"/>
                                 <Grid.ColumnDefinitions>
@@ -146,7 +149,8 @@
                             </Border>
                             <InfoBar x:Name="FinishErrorBar" IsOpen="False" Severity="Error" IsClosable="True"/>
                             <Grid ColumnSpacing="8">
-                                <Button Content="Back" Click="PrevStep_Click"/>
+                                <Button Content="Back" Click="PrevStep_Click"
+                                        Style="{StaticResource FortivaSecondaryButton}"/>
                                 <Button x:Name="FinishBtn" Grid.Column="1" Content="Create vault"
                                         IsEnabled="False" HorizontalAlignment="Stretch"
                                         Style="{StaticResource FortivaAccentButton}" Click="FinishOnboarding_Click"/>

@@ -14,13 +14,22 @@ public static class AuthenticodePolicy
 
     public static void ConfigureForEdition(string edition)
     {
-        // Personal: unsigned GitHub Releases (SHA-256 manifest check still applies).
-        // Enterprise: opt in later with FORTIVA_REQUIRE_CODESIGN=1 when IT signing is configured.
-        RequireSignedExecutables =
-            string.Equals(edition, "Enterprise", StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(
-                Environment.GetEnvironmentVariable("FORTIVA_REQUIRE_CODESIGN"),
-                "1",
-                StringComparison.Ordinal);
+        _ = edition; // reserved for future per-edition defaults when Enterprise signing ships
+        var allowUnsigned = string.Equals(
+            Environment.GetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE"),
+            "1",
+            StringComparison.Ordinal);
+        var requireCodesign = string.Equals(
+            Environment.GetEnvironmentVariable("FORTIVA_REQUIRE_CODESIGN"),
+            "1",
+            StringComparison.Ordinal);
+#if DEBUG
+        RequireSignedExecutables = false;
+#else
+        // Authenticode is opt-in only (FORTIVA_REQUIRE_CODESIGN=1) until an Enterprise customer
+        // engages and signing is provisioned (Azure Trusted Signing or traditional .pfx).
+        // Personal and Enterprise dev/CI builds use FORTIVA_ALLOW_UNSIGNED_BRIDGE=1 (Deploy script).
+        RequireSignedExecutables = requireCodesign && !allowUnsigned;
+#endif
     }
 }

@@ -18,10 +18,12 @@ public sealed partial class EntryPage : Page
     private readonly ClipboardService _clipboard;
     private readonly VaultTagPickerPanel _tagPicker;
     private VaultEntry? _existing;
+    private VaultEntryPaneHost? _paneHost;
     private bool _isNew;
     private CancellationTokenSource? _revealCts;
     private DispatcherTimer? _otpTimer;
     private string? _normalizedTotpSecret;
+    private string? _baselineSignature;
 
     public EntryPage()
     {
@@ -29,6 +31,73 @@ public sealed partial class EntryPage : Page
         _clipboard = new ClipboardService(_vm.Policy, _vm.PersonalSettings.ClipboardClearSeconds, _vm.LogPolicyViolation);
         _tagPicker = new VaultTagPickerPanel(_vm);
         TagsPickerHost.Child = _tagPicker.Root;
+        foreach (var field in new Control[] { TitleBox, UsernameBox, UrlBox, PasswordBox })
+            field.KeyDown += InputField_KeyDown;
+        TitleBox.TextChanged += (_, _) => OnFormChanged();
+        UsernameBox.TextChanged += (_, _) => OnFormChanged();
+        UrlBox.TextChanged += (_, _) => OnFormChanged();
+        NotesBox.TextChanged += (_, _) => OnFormChanged();
+        PasswordBox.PasswordChanged += (_, _) => OnFormChanged();
+        TotpSecretBox.PasswordChanged += (_, _) => OnFormChanged();
+        FavoriteBtn.Checked += (_, _) => OnFormChanged();
+        FavoriteBtn.Unchecked += (_, _) => OnFormChanged();
+        _tagPicker.TagsChanged += OnFormChanged;
+    }
+
+    private void OnFormChanged() { }
+
+    private string BuildSignature()
+    {
+        var tags = string.Join(",", _tagPicker.GetSelectedTags().OrderBy(t => t, StringComparer.OrdinalIgnoreCase));
+        return string.Join('\u001f',
+        [
+            TitleBox.Text,
+            UsernameBox.Text,
+            PasswordBox.Password,
+            UrlBox.Text,
+            NotesBox.Text,
+            (FavoriteBtn.IsChecked ?? false).ToString(),
+            SecureNoteToggle.IsOn.ToString(),
+            TotpSecretBox.Password,
+            tags
+        ]);
+    }
+
+    private bool IsDirty => _baselineSignature is not null && BuildSignature() != _baselineSignature;
+
+    private void CaptureBaseline() => _baselineSignature = BuildSignature();
+
+    private async Task<bool> ConfirmDiscardIfDirtyAsync()
+    {
+        if (!IsDirty || _vm.IsReadOnly)
+            return true;
+
+        var dlg = new ContentDialog
+        {
+            Title = "Unsaved changes",
+            Content = new TextBlock
+            {
+                Text = "Save your edits before leaving this entry?",
+                TextWrapping = TextWrapping.WrapWholeWords
+            },
+            PrimaryButtonText = "Save",
+            SecondaryButtonText = "Discard",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = Content.XamlRoot
+        };
+        FortivaDialogs.Configure(dlg, Content.XamlRoot);
+        var result = await dlg.ShowAsync();
+        if (result is not (ContentDialogResult.Primary or ContentDialogResult.Secondary))
+            return false;
+        if (result == ContentDialogResult.Primary)
+        {
+            if (SaveBtn.IsEnabled)
+                Save_Click(SaveBtn, new RoutedEventArgs());
+            return !IsDirty;
+        }
+
+        return true;
     }
 
     private void Page_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -63,8 +132,12 @@ public sealed partial class EntryPage : Page
         Grid.SetRow(NotesPanel, narrow ? 6 : 4);
         Grid.SetColumnSpan(NotesPanel, 2);
 
+        Grid.SetColumn(ProvenancePanel, 0);
+        Grid.SetRow(ProvenancePanel, narrow ? 7 : 5);
+        Grid.SetColumnSpan(ProvenancePanel, 2);
+
         Grid.SetColumn(OtpSection, 0);
-        Grid.SetRow(OtpSection, narrow ? 7 : 5);
+        Grid.SetRow(OtpSection, narrow ? 8 : 6);
         Grid.SetColumnSpan(OtpSection, 2);
 
         OtpCol1.Width = narrow ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
@@ -85,6 +158,19 @@ public sealed partial class EntryPage : Page
         }
     }
 
+    private void InputField_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.Enter || e.Handled)
+            return;
+
+        if (ReferenceEquals(sender, NotesBox))
+            return;
+
+        e.Handled = true;
+        if (SaveBtn.IsEnabled)
+            Save_Click(SaveBtn, new RoutedEventArgs());
+    }
+
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
@@ -93,7 +179,20 @@ public sealed partial class EntryPage : Page
         _revealCts?.Cancel();
         PasswordBox.PasswordRevealMode = PasswordRevealMode.Peek;
 
-        if (e.Parameter is VaultEntry entry)
+        _paneHost = null;
+
+        VaultEntry? entry = null;
+        if (e.Parameter is EntryPaneNavigationContext paneCtx)
+        {
+            entry = paneCtx.Entry;
+            _paneHost = paneCtx.Host;
+        }
+        else if (e.Parameter is VaultEntry vaultEntry)
+        {
+            entry = vaultEntry;
+        }
+
+        if (entry is not null)
         {
             _existing = entry;
             _isNew = false;
@@ -113,6 +212,7 @@ public sealed partial class EntryPage : Page
                 ? null
                 : TotpSecretNormalizer.Normalize(entry.TotpSecret);
             UpdateStrength(entry.Password);
+            BindProvenance(entry);
         }
         else if (e.Parameter is EntryDraft draft)
         {
@@ -135,10 +235,16 @@ public sealed partial class EntryPage : Page
             TitleBox.Focus(FocusState.Programmatic);
         }
 
+        BackBtn.Visibility = _paneHost is null ? Visibility.Visible : Visibility.Collapsed;
+        if (_paneHost is not null)
+            _paneHost.ConfirmCloseAsync = ConfirmDiscardIfDirtyAsync;
+
+        ApplySecureNoteLayout();
         ApplyReadOnlyState();
         _tagPicker.ApplyTheme(this);
         ConfigureOtpSection();
         ApplyResponsiveLayout(ActualWidth);
+        CaptureBaseline();
     }
 
     protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
@@ -251,6 +357,34 @@ public sealed partial class EntryPage : Page
         var generated = _vm.GeneratePassword(PasswordGeneratorOptions.Default);
         PasswordBox.Password = generated;
         UpdateStrength(generated);
+        ProvenancePanel.Visibility = Visibility.Collapsed;
+    }
+
+    private void BindProvenance(VaultEntry entry)
+    {
+        if (!entry.HasImportProvenance)
+        {
+            ProvenancePanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        ProvenancePanel.Visibility = Visibility.Visible;
+        ProvenanceSourceText.Text = string.IsNullOrWhiteSpace(entry.ImportSource)
+            ? "Imported entry"
+            : $"Imported from {entry.ImportSource}";
+
+        var parts = new List<string>();
+        if (entry.SourceCreatedAt.HasValue)
+            parts.Add($"Originally created {entry.SourceCreatedAt.Value.LocalDateTime:g}");
+        if (entry.ImportedAt.HasValue)
+            parts.Add($"Imported into Fortiva {entry.ImportedAt.Value.LocalDateTime:g}");
+        else
+            parts.Add($"Created in Fortiva {entry.CreatedAt.LocalDateTime:g}");
+        if (entry.SourceLastUsedAt.HasValue)
+            parts.Add($"Last used (source) {entry.SourceLastUsedAt.Value.LocalDateTime:g}");
+        parts.Add($"Last modified {entry.ModifiedAt.LocalDateTime:g}");
+
+        ProvenanceDatesText.Text = string.Join(" · ", parts);
     }
 
     private void ApplyReadOnlyState()
@@ -267,6 +401,25 @@ public sealed partial class EntryPage : Page
         TotpSecretBox.IsEnabled = !ro;
         DeleteBtn.IsEnabled = !ro && !_isNew;
         SaveBtn.IsEnabled = !ro;
+    }
+
+    private void SecureNoteToggle_Toggled(object sender, RoutedEventArgs e)
+        => ApplySecureNoteLayout();
+
+    private void ApplySecureNoteLayout()
+    {
+        var isNote = SecureNoteToggle.IsOn;
+        PasswordPanel.Visibility = isNote ? Visibility.Collapsed : Visibility.Visible;
+        if (isNote)
+        {
+            PasswordBox.Password = "";
+            StrengthBar.Value = 0;
+            StrengthLabel.Text = "";
+        }
+        else if (!string.IsNullOrEmpty(PasswordBox.Password))
+        {
+            UpdateStrength(PasswordBox.Password);
+        }
     }
 
     private void PasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
@@ -324,7 +477,18 @@ public sealed partial class EntryPage : Page
 
     private void CopyUsername_Click(object sender, RoutedEventArgs e)
     {
-        if (!string.IsNullOrEmpty(UsernameBox.Text)) _clipboard.CopyText(UsernameBox.Text);
+        if (string.IsNullOrEmpty(UsernameBox.Text))
+            return;
+        try
+        {
+            _clipboard.CopyText(UsernameBox.Text);
+            _vm.ResetAutoLock();
+            _vm.StatusMessage = "Username copied — clipboard will clear automatically.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            _ = ShowErrorAsync(ex.Message);
+        }
     }
 
     private void CopyPassword_Click(object sender, RoutedEventArgs e)
@@ -377,23 +541,31 @@ public sealed partial class EntryPage : Page
         entry.Password = PasswordBox.Password;
         entry.Url = UrlBox.Text.Trim();
         entry.Notes = NotesBox.Text;
+        VaultEntryWebsite.NormalizeWebsite(entry);
         entry.IsFavorite = FavoriteBtn.IsChecked ?? false;
         entry.IsSecureNote = SecureNoteToggle.IsOn;
         entry.Tags = _tagPicker.GetSelectedTags().Take(VaultTagHelper.MaxTagsPerEntry).ToList();
-        if (_vm.CanUseTotp)
-        {
-            entry.TotpSecret = string.IsNullOrWhiteSpace(TotpSecretBox.Password)
-                ? null
-                : TotpSecretNormalizer.Normalize(TotpSecretBox.Password);
-        }
 
         try
         {
+            if (_vm.CanUseTotp)
+            {
+                entry.TotpSecret = string.IsNullOrWhiteSpace(TotpSecretBox.Password)
+                    ? null
+                    : TotpSecretNormalizer.Normalize(TotpSecretBox.Password);
+            }
+
             if (_isNew)
                 _vm.AddEntry(entry);
             else
                 _vm.UpdateEntry(entry);
-            NavigationService.Current.GoBack();
+            CaptureBaseline();
+            FinishEditor(saved: true);
+        }
+        catch (VaultConcurrencyException)
+        {
+            _ = ShowErrorAsync(
+                "Another Fortiva window saved changes to this vault first. Close other windows, reload the vault, and try again.");
         }
         catch (Exception ex)
         {
@@ -410,6 +582,7 @@ public sealed partial class EntryPage : Page
             Content = new TextBlock { Text = $"'{_existing.Title}' will be permanently deleted.", TextWrapping = TextWrapping.WrapWholeWords },
             PrimaryButtonText = "Delete",
             CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
             XamlRoot = Content.XamlRoot
         };
         FortivaDialogs.Configure(dlg, Content.XamlRoot);
@@ -418,7 +591,7 @@ public sealed partial class EntryPage : Page
             try
             {
                 _vm.DeleteEntry(_existing.Id);
-                NavigationService.Current.GoBack();
+                FinishEditor(saved: false);
             }
             catch (Exception ex)
             {
@@ -427,8 +600,30 @@ public sealed partial class EntryPage : Page
         }
     }
 
-    private void Back_Click(object sender, RoutedEventArgs e)
-        => NavigationService.Current.GoBack();
+    private async void Back_Click(object sender, RoutedEventArgs e)
+    {
+        if (_paneHost is not null)
+        {
+            await _paneHost.TryCloseAsync();
+            return;
+        }
+
+        FinishEditor(saved: false);
+    }
+
+    private void FinishEditor(bool saved)
+    {
+        if (_paneHost is not null)
+        {
+            if (saved)
+                _paneHost.NotifySaved();
+            else
+                _paneHost.Close();
+            return;
+        }
+
+        NavigationService.Current.GoBack();
+    }
 
     private async Task ShowErrorAsync(string msg)
     {

@@ -1,6 +1,4 @@
 using System.IO.Pipes;
-using System.Security.AccessControl;
-using System.Security.Principal;
 using System.Text;
 
 namespace Fortiva.Core.BrowserBridge;
@@ -12,10 +10,11 @@ namespace Fortiva.Core.BrowserBridge;
 public sealed class BridgeTokenBroker : IDisposable
 {
     public const string PipeName = "Fortiva.Bridge.Token";
+    private const int ListenerCount = 4;
 
     private readonly string _sessionToken;
     private CancellationTokenSource? _cts;
-    private Task? _listenTask;
+    private Task[] _listenTasks = [];
 
     public BridgeTokenBroker(string sessionToken)
     {
@@ -25,60 +24,48 @@ public sealed class BridgeTokenBroker : IDisposable
     public void Start()
     {
         _cts = new CancellationTokenSource();
-        _listenTask = Task.Run(() => ListenLoopAsync(_cts.Token));
-    }
-
-    private async Task ListenLoopAsync(CancellationToken ct)
-    {
-        while (!ct.IsCancellationRequested)
-        {
-            await using var server = CreateSecuredServerStream();
-            try
-            {
-                await server.WaitForConnectionAsync(ct);
-                if (!BridgePipeGuard.IsAllowedClient(server))
-                    continue;
-                await HandleClientAsync(server, ct);
-            }
-            catch (OperationCanceledException) { break; }
-            catch { /* continue listening */ }
-        }
+        _listenTasks = BridgePipeListener.Start(
+            PipeName,
+            ListenerCount,
+            maxInstances: 8,
+            HandleClientAsync,
+            _cts.Token,
+            validateClients: true);
     }
 
     private async Task HandleClientAsync(NamedPipeServerStream server, CancellationToken ct)
     {
         using var reader = new StreamReader(server, Encoding.UTF8, leaveOpen: true);
         using var writer = new StreamWriter(server, Encoding.UTF8, leaveOpen: true) { AutoFlush = true };
-        var line = await BridgeJson.ReadBoundedLineAsync(reader, ct);
-        if (line is null || !string.Equals(line.Trim(), "GET", StringComparison.OrdinalIgnoreCase))
+        try
+        {
+            using var readCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            readCts.CancelAfter(TimeSpan.FromMilliseconds(2500));
+            var line = await BridgeJson.ReadBoundedLineAsync(reader, readCts.Token);
+            if (string.Equals(line?.Trim(), "GET", StringComparison.OrdinalIgnoreCase))
+                await writer.WriteLineAsync(_sessionToken.AsMemory(), ct);
+            else
+                await writer.WriteLineAsync("".AsMemory(), ct);
+        }
+        catch
+        {
+            try { await writer.WriteLineAsync("".AsMemory(), CancellationToken.None); } catch { /* client gone */ }
+        }
+    }
+
+    public void Dispose() => Dispose(waitForListeners: false);
+
+    internal void DisposeBlocking() => Dispose(waitForListeners: true);
+
+    private void Dispose(bool waitForListeners)
+    {
+        if (_cts is null)
             return;
-        await writer.WriteLineAsync(_sessionToken.AsMemory(), ct);
-    }
 
-    private static NamedPipeServerStream CreateSecuredServerStream()
-    {
-        var pipeSecurity = new PipeSecurity();
-        var currentUser = WindowsIdentity.GetCurrent().User
-            ?? throw new InvalidOperationException("Cannot resolve current user SID for pipe ACL.");
-        pipeSecurity.AddAccessRule(new PipeAccessRule(
-            currentUser,
-            PipeAccessRights.FullControl,
-            AccessControlType.Allow));
-
-        return NamedPipeServerStreamAcl.Create(
-            PipeName,
-            PipeDirection.InOut,
-            maxNumberOfServerInstances: 1,
-            PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous,
-            inBufferSize: 0,
-            outBufferSize: 0,
-            pipeSecurity);
-    }
-
-    public void Dispose()
-    {
-        _cts?.Cancel();
-        _cts?.Dispose();
+        var cts = _cts;
+        var tasks = _listenTasks;
+        _cts = null;
+        _listenTasks = [];
+        BridgePipeListener.ShutdownListeners(cts, tasks, waitForListeners);
     }
 }

@@ -32,7 +32,7 @@ if ($Wipe) {
     Write-Host ''
     Write-Host 'Wiping...'
     Stop-FortivaProcesses
-    Remove-FortivaPersonalUserData
+    Remove-FortivaPersonalUserData -ConfirmProductionWipe
     $VerifyClean = $true
 }
 

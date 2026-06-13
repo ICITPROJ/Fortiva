@@ -13,7 +13,7 @@ namespace Fortiva.AppHost.Services;
 public static class HelloCredentialStore
 {
     private const string CredentialName = "Fortiva.VaultUnlock";
-    private static ReadOnlySpan<byte> MkWrapAssociatedData => "Fortiva.Hello.MK.v4"u8;
+    private static readonly byte[] MkWrapAssociatedData = "Fortiva.Hello.MK.v4"u8.ToArray();
 
     public static async Task<bool> IsAvailableAsync()
     {
@@ -38,9 +38,8 @@ public static class HelloCredentialStore
     {
         var credential = await OpenOrCreateCredentialAsync();
         var challenge = RandomNumberGenerator.GetBytes(32);
-            var signature = await SignChallengeAsync(credential, challenge);
-            _ = signature; // proves Windows Hello; do not use signature bytes as key (ECDSA is non-deterministic)
-            var wrapKey = SHA256.HashData(challenge);
+        var signature = await SignChallengeAsync(credential, challenge);
+        var wrapKey = DeriveWrapKey(challenge, signature);
 
         byte[]? wrappedMk = null;
         try
@@ -84,8 +83,7 @@ public static class HelloCredentialStore
                 return null;
 
             var signature = await SignChallengeAsync(open.Credential, challenge);
-            _ = signature;
-            var wrapKey = SHA256.HashData(challenge);
+            var wrapKey = DeriveWrapKey(challenge, signature);
             try
             {
                 return CngAesGcm.Open(wrapKey, wrappedMk, MkWrapAssociatedData);
@@ -131,6 +129,10 @@ public static class HelloCredentialStore
 
         return create.Credential;
     }
+
+    /// <summary>MK wrap key requires a live Hello signature — not derivable from on-disk challenge alone.</summary>
+    private static byte[] DeriveWrapKey(byte[] challenge, byte[] signature)
+        => HKDF.DeriveKey(HashAlgorithmName.SHA256, signature, 32, challenge, MkWrapAssociatedData);
 
     private static async Task<byte[]> SignChallengeAsync(KeyCredential credential, byte[] challenge)
     {

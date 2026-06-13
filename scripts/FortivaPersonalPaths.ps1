@@ -15,6 +15,26 @@ function Get-FortivaPersonalVaultPath {
     Join-Path $env:APPDATA 'Fortiva\vault.fva'
 }
 
+function Test-FortivaInstallTargetSafe {
+    param([Parameter(Mandatory)][string]$InstallPath)
+    $full = [System.IO.Path]::GetFullPath($InstallPath)
+    foreach ($root in (Get-FortivaPersonalDataPaths)) {
+        $rootFull = [System.IO.Path]::GetFullPath($root)
+        if ($full.Equals($rootFull, [StringComparison]::OrdinalIgnoreCase) -or
+            $full.StartsWith($rootFull + [System.IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+            return $false
+        }
+    }
+    return $true
+}
+
+function Assert-FortivaInstallTargetSafe {
+    param([Parameter(Mandatory)][string]$InstallPath)
+    if (-not (Test-FortivaInstallTargetSafe -InstallPath $InstallPath)) {
+        throw "Refusing to deploy: install target overlaps Fortiva user data ($InstallPath). Updates must only replace application files."
+    }
+}
+
 function Stop-FortivaProcesses {
     $names = @(
         'Fortiva.Personal', 'Fortiva.Enterprise', 'Fortiva.Admin',
@@ -59,6 +79,15 @@ function Start-FortivaSmokeProcess {
 }
 
 function Remove-FortivaPersonalUserData {
+    param(
+        [switch]$ConfirmProductionWipe
+    )
+
+    if (-not $ConfirmProductionWipe) {
+        throw "Refusing to wipe Fortiva user data without -ConfirmProductionWipe. " +
+            "This deletes vault.fva, settings, and Hello credentials under your profile."
+    }
+
     Stop-FortivaProcesses
     for ($attempt = 1; $attempt -le 3; $attempt++) {
         foreach ($p in Get-FortivaPersonalDataPaths) {

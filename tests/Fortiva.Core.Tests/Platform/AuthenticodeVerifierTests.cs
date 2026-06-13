@@ -29,12 +29,36 @@ public sealed class AuthenticodeVerifierTests
     }
 
     [Fact]
+    public void ConfigureForEdition_require_codesign_blocked_when_allow_unsigned_set()
+    {
+        var previous = AuthenticodePolicy.RequireSignedExecutables;
+        var priorRequire = Environment.GetEnvironmentVariable("FORTIVA_REQUIRE_CODESIGN");
+        var priorAllow = Environment.GetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE");
+        try
+        {
+            Environment.SetEnvironmentVariable("FORTIVA_REQUIRE_CODESIGN", "1");
+            Environment.SetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE", "1");
+            AuthenticodePolicy.ConfigureForEdition("Enterprise");
+            Assert.False(AuthenticodePolicy.RequireSignedExecutables);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("FORTIVA_REQUIRE_CODESIGN", priorRequire);
+            Environment.SetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE", priorAllow);
+            AuthenticodePolicy.RequireSignedExecutables = previous;
+        }
+    }
+
+    [Fact]
     public void ConfigureForEdition_leaves_personal_unsigned_by_default()
     {
         var previous = AuthenticodePolicy.RequireSignedExecutables;
+        var priorRequire = Environment.GetEnvironmentVariable("FORTIVA_REQUIRE_CODESIGN");
+        var priorAllow = Environment.GetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE");
         try
         {
             Environment.SetEnvironmentVariable("FORTIVA_REQUIRE_CODESIGN", null);
+            Environment.SetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE", null);
             AuthenticodePolicy.ConfigureForEdition("Personal");
             Assert.False(AuthenticodePolicy.RequireSignedExecutables);
 
@@ -43,23 +67,33 @@ public sealed class AuthenticodeVerifierTests
         }
         finally
         {
+            Environment.SetEnvironmentVariable("FORTIVA_REQUIRE_CODESIGN", priorRequire);
+            Environment.SetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE", priorAllow);
             AuthenticodePolicy.RequireSignedExecutables = previous;
         }
     }
 
     [Fact]
-    public void ConfigureForEdition_enables_enterprise_when_env_set()
+    public void ConfigureForEdition_enables_when_require_codesign_set_in_release()
     {
         var previous = AuthenticodePolicy.RequireSignedExecutables;
+        var priorRequire = Environment.GetEnvironmentVariable("FORTIVA_REQUIRE_CODESIGN");
+        var priorAllow = Environment.GetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE");
         try
         {
             Environment.SetEnvironmentVariable("FORTIVA_REQUIRE_CODESIGN", "1");
+            Environment.SetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE", null);
             AuthenticodePolicy.ConfigureForEdition("Enterprise");
+#if DEBUG
+            Assert.False(AuthenticodePolicy.RequireSignedExecutables);
+#else
             Assert.True(AuthenticodePolicy.RequireSignedExecutables);
+#endif
         }
         finally
         {
-            Environment.SetEnvironmentVariable("FORTIVA_REQUIRE_CODESIGN", null);
+            Environment.SetEnvironmentVariable("FORTIVA_REQUIRE_CODESIGN", priorRequire);
+            Environment.SetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE", priorAllow);
             AuthenticodePolicy.RequireSignedExecutables = previous;
         }
     }

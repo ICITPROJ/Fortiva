@@ -110,10 +110,6 @@ public sealed class UpdateService
             if (!hash.Equals(manifest.InstallerSha256.ToLowerInvariant(), StringComparison.Ordinal))
                 throw new InvalidOperationException("Installer failed pre-launch integrity check.");
 
-            var backup = PreUpdateVaultBackup.TryCreate(_vm.VaultDirectory, manifest.Version);
-            if (!string.IsNullOrEmpty(backup.ErrorMessage))
-                App.LogException("PreUpdateVaultBackup", new InvalidOperationException(backup.ErrorMessage));
-
             // Re-verify immediately before launch to narrow TOCTOU window on %TEMP%.
             var launchHash = Convert.ToHexString(
                 System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(dest)))
@@ -121,15 +117,25 @@ public sealed class UpdateService
             if (!launchHash.Equals(manifest.InstallerSha256.ToLowerInvariant(), StringComparison.Ordinal))
                 throw new InvalidOperationException("Installer changed after verification.");
 
-            if (!AuthenticodeVerifier.IsSigned(dest))
+            if (AuthenticodePolicy.RequireSignedExecutables && !AuthenticodeVerifier.IsSigned(dest))
                 throw new InvalidOperationException("Installer is not Authenticode-signed.");
 
-            // The manual "Install now" path is reached from Settings while the vault is unlocked.
-            // Lock here — only once download + verification have succeeded — so a download/verify
-            // failure leaves the user unlocked with a visible error instead of silently locking.
-            // Locking scrubs secrets and releases the vault file before the installer runs.
+            // Lock before backup so vault.fva is quiesced on disk (manual path often starts unlocked).
             await EnsureVaultLockedAsync().ConfigureAwait(false);
             TryStopBridgeHost();
+
+            var backup = PreUpdateVaultBackup.TryCreate(_vm.VaultDirectory, manifest.Version);
+            if (!string.IsNullOrEmpty(backup.ErrorMessage))
+            {
+                throw new InvalidOperationException(
+                    "Could not back up your vault before updating. " + backup.ErrorMessage);
+            }
+
+            if (_vm.VaultExists && !backup.VaultCopied)
+            {
+                throw new InvalidOperationException(
+                    "Could not back up your vault before updating. Close other Fortiva windows and try again.");
+            }
 
             var installer = Process.Start(new ProcessStartInfo
             {

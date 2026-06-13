@@ -33,11 +33,31 @@ public sealed partial class OnboardingPage : Page
         _vm.BrandAppearanceChanged += OnBrandAppearanceChanged;
         RefreshPortableHint();
         _ = CheckHelloAvailabilityAsync();
+        WireOnboardingEnterKey();
+    }
+
+    private void WireOnboardingEnterKey()
+    {
+        void OnEnter(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+        {
+            if (e.Key != Windows.System.VirtualKey.Enter)
+                return;
+
+            e.Handled = true;
+            if (_step == 1)
+                Step1Next_Click(sender, new RoutedEventArgs());
+            else if (_step == 4 && FinishBtn.IsEnabled)
+                FinishOnboarding_Click(sender, new RoutedEventArgs());
+        }
+
+        NewPasswordBox.KeyDown += OnEnter;
+        ConfirmPasswordBox.KeyDown += OnEnter;
     }
 
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        ThemeService.ApplyToElement(this);
         RefreshPortableHint();
 
         _vm.RefreshVaultExists();
@@ -282,20 +302,20 @@ public sealed partial class OnboardingPage : Page
         }
 
         if (_vm.IsEnterprise && _vm.Policy?.MandatoryWindowsHello == true &&
-            _helloEnrollmentPending == false && !_hello.IsConfigured)
+            !_helloEnrollmentPending && !_hello.IsConfigured)
         {
             var helloAvailable = await HelloService.IsAvailableAsync().ConfigureAwait(true);
-            if (helloAvailable)
-            {
-                ShowFinishError("Your organization requires Windows Hello. Go back to step 2 and enable it before creating the vault.");
-                return;
-            }
+            ShowFinishError(helloAvailable
+                ? "Your organization requires Windows Hello. Go back to step 2 and enable it before creating the vault."
+                : "Your organization requires Windows Hello, but it is not available on this device. "
+                  + "Set up face, fingerprint, or a PIN in Windows Settings, then return to step 2.");
+            return;
         }
 
         var password = NewPasswordBox.Password;
         if (string.IsNullOrWhiteSpace(password))
         {
-            ShowFinishError("Master password was lost - go back to step 2 and re-enter it.");
+            ShowFinishError("Master password was lost — go back to step 1 and re-enter it.");
             return;
         }
 
@@ -321,7 +341,8 @@ public sealed partial class OnboardingPage : Page
                 DispatcherQueue.TryEnqueue(() =>
                 {
                     SetBusyOverlay(false);
-                    ShowFinishError(error ?? "Vault was created but unlock failed. Restart Fortiva and enter your master password.");
+                    ShowFinishError(error ?? "Vault was created but unlock failed. Use the unlock screen with your master password.");
+                    RedirectToUnlockIfVaultExists();
                 });
                 return;
             }
@@ -330,6 +351,7 @@ public sealed partial class OnboardingPage : Page
             {
                 try
                 {
+                    // Step 2 already ran UserConsentVerifier; store consumes that verification.
                     await _vm.SyncHelloCredentialFromSessionAsync();
                 }
                 catch (Exception helloEx)
@@ -388,7 +410,7 @@ public sealed partial class OnboardingPage : Page
     {
         BrowserExtensionSetupHelper.EnsureReady(_vm);
         var status = BrowserExtensionSetupHelper.GetStatus(_vm);
-        BrowserExtStatusText.Text = BrowserExtensionSetupHelper.FormatStatusMessage(status);
+        BrowserExtStatusText.Text = BrowserExtensionSetupHelper.FormatLiveStatusMessage(status, _vm);
     }
 
     private async void BrowserExtConnect_Click(object sender, RoutedEventArgs e)

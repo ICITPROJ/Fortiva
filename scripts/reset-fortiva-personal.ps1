@@ -24,7 +24,7 @@ try {
     }
 
     Write-Step 'Wiping user data...'
-    Remove-FortivaPersonalUserData
+    Remove-FortivaPersonalUserData -ConfirmProductionWipe
 
     Write-Step 'Verifying...'
     if (Test-FortivaPersonalVaultExists) {

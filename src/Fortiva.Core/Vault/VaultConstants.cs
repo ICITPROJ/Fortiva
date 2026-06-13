@@ -13,6 +13,7 @@ public static class VaultConstants
 
     public const int MaxVaultFileBytes = 256 * 1024 * 1024;
     public const int MaxFieldBytes = 64 * 1024 * 1024;
+    public const int MaxTagsPerEntry = 16;
 
     public static string SnapshotFileName(int index) => $"{SnapshotPrefix}{index}";
 }

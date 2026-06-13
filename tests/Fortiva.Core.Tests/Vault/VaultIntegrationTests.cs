@@ -179,6 +179,34 @@ public sealed class VaultIntegrationTests : IDisposable
     }
 
     [Fact]
+    public void VaultSession_Lock_AfterCsvImport_DoesNotThrow()
+    {
+        using var session = new VaultSession(_dir, DpapiScope.CurrentUser);
+        session.CreateVault(Password, SecurityLevel.Standard);
+        session.Unlock(Password);
+
+        var imported = Enumerable.Range(0, 50).Select(i => new ImportedCredential
+        {
+            Entry = new VaultEntry
+            {
+                Title = $"Site {i}",
+                Username = $"user{i}@example.com",
+                Password = $"secret{i}",
+                Url = $"https://site{i}.example.com"
+            },
+            SourceCreatedAt = DateTimeOffset.UtcNow.AddDays(-i)
+        }).ToList();
+
+        var preview = ImportMergeService.Analyze([], imported);
+        var plan = ImportMergeService.BuildApplyPlan(preview, "Browser export", "BrowserCsv", "passwords.csv");
+        session.ApplyImport(plan);
+
+        Assert.Equal(50, session.AllEntries().Count);
+        session.Lock();
+        Assert.False(session.IsUnlocked);
+    }
+
+    [Fact]
     public void Search_FindsByTitleUsernameUrlTag()
     {
         using var session = new VaultSession(_dir, DpapiScope.CurrentUser);

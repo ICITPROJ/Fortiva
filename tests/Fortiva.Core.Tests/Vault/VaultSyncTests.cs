@@ -50,6 +50,34 @@ public class VaultSyncTests : IDisposable
     }
 
     [Fact]
+    public void Merge_ImportBatches_SameId_NewerImportedAtWins()
+    {
+        var batchId = Guid.NewGuid();
+        var older = new ImportBatch
+        {
+            Id = batchId,
+            ImportedAt = DateTimeOffset.UtcNow.AddHours(-2),
+            SourceLabel = "older",
+            Format = "Csv"
+        };
+        var newer = new ImportBatch
+        {
+            Id = batchId,
+            ImportedAt = DateTimeOffset.UtcNow.AddHours(-1),
+            SourceLabel = "newer",
+            Format = "Csv"
+        };
+
+        var a = new VaultPayload { ImportBatches = { older } };
+        var b = new VaultPayload { ImportBatches = { newer } };
+
+        var merged = VaultMergeEngine.Merge(a, b, 1);
+
+        Assert.Single(merged.ImportBatches);
+        Assert.Equal("newer", merged.ImportBatches[0].SourceLabel);
+    }
+
+    [Fact]
     public void Merge_SameId_NewerModifiedWins()
     {
         var id = Guid.NewGuid();
@@ -255,6 +283,45 @@ public class VaultSyncTests : IDisposable
     }
 
     [Fact]
+    public void SyncTwoWay_MergesImportBatchHistory()
+    {
+        var (localEngine, local) = OpenOrCreate(_localDir);
+        var (remoteEngine, remote) = OpenOrCreate(_remoteDir);
+        try
+        {
+            var localBatch = new ImportBatch
+            {
+                Id = Guid.NewGuid(),
+                ImportedAt = DateTimeOffset.UtcNow.AddHours(-2),
+                SourceLabel = "local-import",
+                Format = "Csv"
+            };
+            local.Payload.ImportBatches.Add(localBatch);
+
+            var remoteBatch = new ImportBatch
+            {
+                Id = Guid.NewGuid(),
+                ImportedAt = DateTimeOffset.UtcNow.AddHours(-1),
+                SourceLabel = "remote-import",
+                Format = "Csv"
+            };
+            remote.Payload.ImportBatches.Add(remoteBatch);
+
+            VaultSynchronizer.SyncTwoWay(localEngine, local, remoteEngine, remote);
+
+            Assert.Equal(2, local.Payload.ImportBatches.Count);
+            Assert.Equal(2, remote.Payload.ImportBatches.Count);
+            Assert.Contains(local.Payload.ImportBatches, b => b.Id == localBatch.Id);
+            Assert.Contains(local.Payload.ImportBatches, b => b.Id == remoteBatch.Id);
+        }
+        finally
+        {
+            local.Keys.Dispose();
+            remote.Keys.Dispose();
+        }
+    }
+
+    [Fact]
     public void SyncTwoWay_Idempotent_SecondSyncNoChanges()
     {
         var (localEngine, local) = OpenOrCreate(_localDir);
@@ -273,6 +340,82 @@ public class VaultSyncTests : IDisposable
             Assert.Equal(0, second.Remote.Added);
             Assert.Equal(0, second.Remote.Updated);
             Assert.Equal(0, second.Remote.Removed);
+        }
+        finally
+        {
+            local.Keys.Dispose();
+            remote.Keys.Dispose();
+        }
+    }
+
+    [Fact]
+    public void SyncMarker_RoundTrip()
+    {
+        VaultSyncMarker.WriteDivergence(_localDir, "test divergence", _localDir, _remoteDir);
+        Assert.True(VaultSyncMarker.Exists(_localDir));
+        var marker = VaultSyncMarker.Read(_localDir);
+        Assert.NotNull(marker);
+        Assert.Contains("divergence", marker!.Message);
+
+        VaultSyncMarker.ClearBoth(_localDir, _remoteDir);
+        Assert.False(VaultSyncMarker.Exists(_localDir));
+        Assert.False(VaultSyncMarker.Exists(_remoteDir));
+    }
+
+    [Fact]
+    public void SyncInProgressMarker_BlocksSync()
+    {
+        VaultSyncMarker.WriteInProgressBoth(_localDir, _remoteDir);
+        var (localEngine, local) = OpenOrCreate(_localDir);
+        var (remoteEngine, remote) = OpenOrCreate(_remoteDir);
+        try
+        {
+            var ex = Assert.Throws<VaultSyncDivergedException>(() =>
+                VaultSynchronizer.SyncTwoWay(localEngine, local, remoteEngine, remote));
+            Assert.Contains("in progress", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            VaultSyncMarker.ClearBoth(_localDir, _remoteDir);
+            local.Keys.Dispose();
+            remote.Keys.Dispose();
+        }
+    }
+
+    [Fact]
+    public void SyncTwoWay_BlockedWhenDivergenceMarkerPresent()
+    {
+        VaultSyncMarker.WriteDivergence(_localDir, "prior failure", _localDir, _remoteDir);
+        var (localEngine, local) = OpenOrCreate(_localDir);
+        var (remoteEngine, remote) = OpenOrCreate(_remoteDir);
+        try
+        {
+            var ex = Assert.Throws<VaultSyncDivergedException>(() =>
+                VaultSynchronizer.SyncTwoWay(localEngine, local, remoteEngine, remote));
+            Assert.Contains("prior failure", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            VaultSyncMarker.ClearBoth(_localDir, _remoteDir);
+            local.Keys.Dispose();
+            remote.Keys.Dispose();
+        }
+    }
+
+    [Fact]
+    public void SyncTwoWay_ClearsMarkerOnSuccess()
+    {
+        VaultSyncMarker.WriteDivergence(_localDir, "stale", _localDir, _remoteDir);
+        VaultSyncMarker.Clear(_localDir);
+
+        var (localEngine, local) = OpenOrCreate(_localDir);
+        var (remoteEngine, remote) = OpenOrCreate(_remoteDir);
+        try
+        {
+            localEngine.AddEntry(local, new VaultEntry { Title = "A", Password = "a" });
+            VaultSynchronizer.SyncTwoWay(localEngine, local, remoteEngine, remote);
+            Assert.False(VaultSyncMarker.Exists(_localDir));
+            Assert.False(VaultSyncMarker.Exists(_remoteDir));
         }
         finally
         {

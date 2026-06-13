@@ -26,3 +26,14 @@ public sealed class VaultSyncPartialException : Exception
 {
     public VaultSyncPartialException(string message, Exception inner) : base(message, inner) { }
 }
+
+/// <summary>
+/// Thrown when sync could not roll both vaults back after a partial write — disks may differ.
+/// User must run sync again or restore from snapshot; see <see cref="VaultSyncMarker"/>.
+/// </summary>
+public sealed class VaultSyncDivergedException : Exception
+{
+    public VaultSyncDivergedException(string message) : base(message) { }
+
+    public VaultSyncDivergedException(string message, Exception inner) : base(message, inner) { }
+}

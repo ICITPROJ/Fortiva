@@ -29,4 +29,12 @@ public static class ExtensionIdHelper
             throw new InvalidOperationException("manifest.json must contain a 'key' field.");
         return ComputeFromManifestKey(keyProp.GetString()!);
     }
+
+    public static string? ReadVersionFromManifestFile(string manifestPath)
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        return doc.RootElement.TryGetProperty("version", out var versionProp)
+            ? versionProp.GetString()
+            : null;
+    }
 }

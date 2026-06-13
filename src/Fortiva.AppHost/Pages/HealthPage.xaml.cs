@@ -92,6 +92,19 @@ public sealed partial class HealthPage : Page
         ExportAuditBtn.IsEnabled = false;
         try
         {
+            if (!_vm.IsUnlocked)
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (generation != _buildGeneration) return;
+                    ScoreHeading.Text = "Unlock your vault first";
+                    ScoreDetail.Text = "Enter your master password on the unlock screen, then return here and run the audit again.";
+                    LastRunLabel.Text = "Last audit: (vault locked)";
+                    FindingsPanel.Children.Clear();
+                });
+                return;
+            }
+
             var entries = _vm.Entries.ToList();
             _entryLookup = entries.ToDictionary(e => e.Id, e => e.Entry);
             var helloConfigured = _hello.IsConfigured;
@@ -234,10 +247,10 @@ public sealed partial class HealthPage : Page
         PopulateStrengthBars(report, loginTotal);
         PopulatePasswordLists(report, entries);
 
-        WeakExpander.Header = BuildExpanderHeader("Weak passwords", report.WeakCount, "\uEA3A", GetBrush("SystemFillColorCriticalBrush"));
-        ReusedExpander.Header = BuildExpanderHeader("Reused passwords", report.ReusedCount, "\uE8AB", GetBrush("SystemFillColorCautionBrush"));
-        OldExpander.Header = BuildExpanderHeader("Old passwords (1+ year)", report.OldCount, "\uE787", GetBrush("SystemFillColorCautionBrush"));
-        MissingExpander.Header = BuildExpanderHeader("Missing passwords", report.MissingCount, "\uE946", GetBrush("SystemFillColorNeutralBrush"));
+        WeakExpander.Header = BuildExpanderHeader("Weak passwords", report.WeakCount, "\uEA3A", FortivaThemeResources.StatusError);
+        ReusedExpander.Header = BuildExpanderHeader("Reused passwords", report.ReusedCount, "\uE8AB", FortivaThemeResources.StatusWarning);
+        OldExpander.Header = BuildExpanderHeader("Old passwords (1+ year)", report.OldCount, "\uE787", FortivaThemeResources.StatusWarning);
+        MissingExpander.Header = BuildExpanderHeader("Missing passwords", report.MissingCount, "\uE946", FortivaThemeResources.Body);
 
         HighlightCard(WeakCard, report.WeakCount > 0);
         HighlightCard(ReusedCard, report.ReusedCount > 0);
@@ -530,11 +543,11 @@ public sealed partial class HealthPage : Page
     {
         card.Opacity = active ? 1.0 : 0.72;
         card.BorderThickness = active ? new Thickness(2) : new Thickness(0);
-        card.BorderBrush = active ? GetBrush("AccentFillColorDefaultBrush") : null;
+        card.BorderBrush = active ? FortivaThemeResources.GetBrush("AccentFillColorDefaultBrush") : null;
     }
 
     private static Brush GetBrush(string key)
-        => (Application.Current.Resources[key] as Brush) ?? new SolidColorBrush(Colors.Gray);
+        => FortivaThemeResources.GetBrush(key);
 }
 
 public sealed class HealthEntryDisplay

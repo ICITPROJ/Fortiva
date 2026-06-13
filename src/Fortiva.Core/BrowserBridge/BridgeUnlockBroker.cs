@@ -1,117 +1,167 @@
 using System.IO.Pipes;
-using System.Security.AccessControl;
-using System.Security.Principal;
 using System.Text;
 
 namespace Fortiva.Core.BrowserBridge;
 
 /// <summary>
 /// Listens while Fortiva is running (locked or unlocked). Browser bridge host sends UNLOCK
-/// to foreground the app and wait for master password / Windows Hello.
+/// to foreground the app and wait for master password / Windows Hello, or STATUS for presence.
 /// Pipe: \\.\pipe\Fortiva.Bridge.UnlockRequest
 /// </summary>
 public sealed class BridgeUnlockBroker : IDisposable
 {
     public const string PipeName = "Fortiva.Bridge.UnlockRequest";
+    private const int ListenerCount = 4;
     private const int MaxUnlockRequestsPerWindow = 8;
     private static readonly TimeSpan UnlockRateLimitWindow = TimeSpan.FromMinutes(5);
-
-    private readonly Func<bool> _isUnlocked;
-    private readonly Func<bool> _vaultExists;
+    private readonly Func<BridgePresenceSnapshot> _getPresence;
     private readonly Func<CancellationToken, Task<bool>> _requestUnlock;
     private readonly BridgeUnlockRateLimiter _rateLimiter = new();
     private CancellationTokenSource? _cts;
-    private Task? _listenTask;
+    private Task[] _listenTasks = [];
 
+    public BridgeUnlockBroker(
+        Func<BridgePresenceSnapshot> getPresence,
+        Func<CancellationToken, Task<bool>> requestUnlock)
+    {
+        _getPresence = getPresence;
+        _requestUnlock = requestUnlock;
+    }
+
+    /// <summary>Legacy ctor for tests — prefer <see cref="BridgeUnlockBroker(Func{BridgePresenceSnapshot}, Func{CancellationToken, Task{bool}})"/>.</summary>
     public BridgeUnlockBroker(
         Func<bool> isUnlocked,
         Func<bool> vaultExists,
-        Func<CancellationToken, Task<bool>> requestUnlock)
+        Func<CancellationToken, Task<bool>> requestUnlock,
+        Func<bool>? isBridgeReady = null)
+        : this(
+            () => new BridgePresenceSnapshot(
+                vaultExists(),
+                isUnlocked(),
+                isBridgeReady?.Invoke() ?? false),
+            requestUnlock)
     {
-        _isUnlocked = isUnlocked;
-        _vaultExists = vaultExists;
-        _requestUnlock = requestUnlock;
     }
 
     public void Start()
     {
         _cts = new CancellationTokenSource();
-        _listenTask = Task.Run(() => ListenLoopAsync(_cts.Token));
+        _listenTasks = BridgePipeListener.Start(
+            PipeName,
+            ListenerCount,
+            maxInstances: 8,
+            HandleClientAsync,
+            _cts.Token,
+            validateClients: true);
     }
 
-    private async Task ListenLoopAsync(CancellationToken ct)
+    private async Task HandleClientAsync(NamedPipeServerStream server, CancellationToken ct)
     {
-        while (!ct.IsCancellationRequested)
+        var authenticated = BridgePipeGuard.IsAllowedClient(server);
+        var response = authenticated ? BuildStatusResponse() : BridgePresenceStatus.Unknown;
+        try
         {
-            await using var server = CreateSecuredServerStream();
+            using var reader = new StreamReader(server, Encoding.UTF8, leaveOpen: true);
+            using var readCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            readCts.CancelAfter(TimeSpan.FromMilliseconds(1500));
+
+            string? line = null;
             try
             {
-                await server.WaitForConnectionAsync(ct);
-                if (!BridgePipeGuard.IsAllowedClient(server))
-                    continue;
-                await HandleClientAsync(server, ct);
+                line = await BridgeJson.ReadBoundedLineAsync(reader, readCts.Token);
             }
-            catch (OperationCanceledException) { break; }
-            catch { /* continue listening */ }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                // Connect-only probe — refresh presence at write time.
+            }
+
+            var command = line?.Trim();
+            if (!authenticated)
+            {
+                response = BridgePresenceStatus.Unknown;
+            }
+            else if (command is not null && string.Equals(command, "UNLOCK", StringComparison.OrdinalIgnoreCase))
+            {
+                response = await ProcessUnlockRequestAsync(command, CancellationToken.None);
+            }
+            else
+            {
+                response = BuildStatusResponse();
+            }
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
+        catch { /* BuildStatusResponse fallback */ }
+
+        try
+        {
+            using var writer = new StreamWriter(server, Encoding.UTF8, leaveOpen: true) { AutoFlush = true };
+            await writer.WriteLineAsync(response.AsMemory(), CancellationToken.None);
+        }
+        catch { /* client disconnected */ }
     }
 
-    public async Task HandleClientAsync(NamedPipeServerStream server, CancellationToken ct)
+    /// <summary>Core bridge protocol (testable without named pipes).</summary>
+    internal Task<string> ProcessRequestAsync(string? requestLine, CancellationToken ct)
     {
-        using var reader = new StreamReader(server, Encoding.UTF8, leaveOpen: true);
-        using var writer = new StreamWriter(server, Encoding.UTF8, leaveOpen: true) { AutoFlush = true };
+        if (requestLine is null)
+            return Task.FromResult("INVALID");
 
-        var line = await BridgeJson.ReadBoundedLineAsync(reader, ct);
-        var response = await ProcessUnlockRequestAsync(line, ct);
-        await writer.WriteLineAsync(response.AsMemory(), ct);
+        var command = requestLine.Trim();
+        if (string.Equals(command, "STATUS", StringComparison.OrdinalIgnoreCase))
+            return Task.FromResult(BuildStatusResponse());
+
+        return ProcessUnlockRequestAsync(command, ct);
     }
 
-    /// <summary>Core unlock protocol (testable without named pipes).</summary>
-    internal async Task<string> ProcessUnlockRequestAsync(string? requestLine, CancellationToken ct)
+    internal string BuildStatusResponse()
     {
-        if (requestLine is null || !string.Equals(requestLine.Trim(), "UNLOCK", StringComparison.OrdinalIgnoreCase))
+        var snapshot = _getPresence();
+        if (!snapshot.VaultExists)
+            return BridgePresenceStatus.NoVault;
+        if (!snapshot.Unlocked)
+            return BridgePresenceStatus.Locked;
+
+        return snapshot.BridgeReady
+            ? BridgePresenceStatus.UnlockedBridgeReady
+            : BridgePresenceStatus.UnlockedBridgeDown;
+    }
+
+    /// <summary>Unlock flow invoked from <see cref="ProcessRequestAsync"/>.</summary>
+    internal async Task<string> ProcessUnlockRequestAsync(string requestLine, CancellationToken ct)
+    {
+        if (!string.Equals(requestLine, "UNLOCK", StringComparison.OrdinalIgnoreCase))
             return "INVALID";
 
         if (!_rateLimiter.TryAllow())
             return "RATE_LIMITED";
 
-        if (!_vaultExists())
+        var snapshot = _getPresence();
+        if (!snapshot.VaultExists)
             return "NO_VAULT";
 
-        if (_isUnlocked())
+        if (snapshot.Unlocked)
             return "ALREADY_UNLOCKED";
 
         using var unlockCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        unlockCts.CancelAfter(TimeSpan.FromMinutes(2));
+        unlockCts.CancelAfter(TimeSpan.FromSeconds(90));
         var ok = await _requestUnlock(unlockCts.Token);
         return ok ? "OK" : "FAILED";
     }
 
-    private static NamedPipeServerStream CreateSecuredServerStream()
-    {
-        var pipeSecurity = new PipeSecurity();
-        var currentUser = WindowsIdentity.GetCurrent().User
-            ?? throw new InvalidOperationException("Cannot resolve current user SID for pipe ACL.");
-        pipeSecurity.AddAccessRule(new PipeAccessRule(
-            currentUser,
-            PipeAccessRights.FullControl,
-            AccessControlType.Allow));
+    public void Dispose() => Dispose(waitForListeners: false);
 
-        return NamedPipeServerStreamAcl.Create(
-            PipeName,
-            PipeDirection.InOut,
-            maxNumberOfServerInstances: 1,
-            PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous,
-            inBufferSize: 0,
-            outBufferSize: 0,
-            pipeSecurity);
-    }
+    internal void DisposeBlocking() => Dispose(waitForListeners: true);
 
-    public void Dispose()
+    private void Dispose(bool waitForListeners)
     {
-        _cts?.Cancel();
-        _cts?.Dispose();
+        if (_cts is null)
+            return;
+
+        var cts = _cts;
+        var tasks = _listenTasks;
+        _cts = null;
+        _listenTasks = [];
+        BridgePipeListener.ShutdownListeners(cts, tasks, waitForListeners);
     }
 
     internal sealed class BridgeUnlockRateLimiter

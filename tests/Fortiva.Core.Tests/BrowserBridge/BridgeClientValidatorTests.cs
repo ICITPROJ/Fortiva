@@ -1,13 +1,23 @@
 using Fortiva.Core.BrowserBridge;
+using Fortiva.Core.Platform;
 
 namespace Fortiva.Core.Tests.BrowserBridge;
 
 public sealed class BridgeClientValidatorTests
 {
+    private static string SeedTrustedInstallRoot(string root)
+    {
+        root = Path.GetFullPath(root);
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, "Fortiva.Personal.exe"), "");
+        return root;
+    }
+
     public BridgeClientValidatorTests()
     {
-        // Unit tests use stub EXEs; Authenticode is enforced in Release builds only.
+        // Unit tests use stub EXEs; keep Personal unsigned policy isolated from other tests.
         Environment.SetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE", "1");
+        AuthenticodePolicy.ConfigureForEdition("Personal");
     }
 
     [Theory]
@@ -54,9 +64,51 @@ public sealed class BridgeClientValidatorTests
     }
 
     [Fact]
-    public void IsAllowedBridgeHostPath_RejectsBridgeOutsideInstallRoot()
+    public void TryInferInstallRootFromBridgeHostPath_ResolvesStandardLayout()
     {
         var root = Path.Combine(Path.GetTempPath(), "FortivaInstall-" + Guid.NewGuid());
+        var host = Path.Combine(root, "BrowserBridge", "Fortiva.BrowserBridge.Host.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(host)!);
+
+        try
+        {
+            Assert.Equal(Path.GetFullPath(root), BridgeClientValidator.TryInferInstallRootFromBridgeHostPath(host));
+            Assert.Null(BridgeClientValidator.TryInferInstallRootFromBridgeHostPath(Path.Combine(root, "Fortiva.BrowserBridge.Host.exe")));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void IsAllowedBridgeHostPath_AcceptsHostWhenRootInferredFromPath()
+    {
+        var root = SeedTrustedInstallRoot(Path.Combine(Path.GetTempPath(), "FortivaInstall-" + Guid.NewGuid()));
+        var host = Path.Combine(root, "BrowserBridge", "Fortiva.BrowserBridge.Host.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(host)!);
+        File.WriteAllText(host, "");
+
+        try
+        {
+            File.WriteAllText(host, "");
+            BridgeInstallIntegrity.RecordBridgeHostHash(host);
+            var inferred = BridgeClientValidator.TryInferInstallRootFromBridgeHostPath(host);
+            Assert.NotNull(inferred);
+            Assert.True(BridgeClientValidator.IsTrustedInstallRoot(inferred));
+            Assert.True(BridgeClientValidator.IsAllowedBridgeHostPath(host, [inferred!]));
+        }
+        finally
+        {
+            if (File.Exists(host)) File.Delete(host);
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void IsAllowedBridgeHostPath_RejectsBridgeOutsideInstallRoot()
+    {
+        var root = SeedTrustedInstallRoot(Path.Combine(Path.GetTempPath(), "FortivaInstall-" + Guid.NewGuid()));
         var bridgeDir = Path.Combine(root, "BrowserBridge");
         Directory.CreateDirectory(bridgeDir);
 
@@ -66,6 +118,7 @@ public sealed class BridgeClientValidatorTests
         try
         {
             File.WriteAllText(validBridge, "");
+            BridgeInstallIntegrity.RecordBridgeHostHash(validBridge);
             File.WriteAllText(invalidBridge, "");
 
             Assert.True(BridgeClientValidator.IsAllowedBridgeHostPath(validBridge, [root]));
@@ -73,10 +126,63 @@ public sealed class BridgeClientValidatorTests
         }
         finally
         {
-            if (File.Exists(validBridge)) File.Delete(validBridge);
-            if (File.Exists(invalidBridge)) File.Delete(invalidBridge);
-            if (Directory.Exists(bridgeDir)) Directory.Delete(bridgeDir);
-            if (Directory.Exists(root)) Directory.Delete(root);
+            try
+            {
+                if (File.Exists(invalidBridge)) File.Delete(invalidBridge);
+                if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+            }
+            catch { /* best effort */ }
         }
+    }
+
+    [Fact]
+    public void IsAllowedBridgeHostPath_RejectsInstallRootWithoutEntryExecutable()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "FortivaInstall-" + Guid.NewGuid());
+        var bridgeDir = Path.Combine(root, "BrowserBridge");
+        Directory.CreateDirectory(bridgeDir);
+        var host = Path.Combine(bridgeDir, "Fortiva.BrowserBridge.Host.exe");
+        File.WriteAllText(host, "");
+
+        try
+        {
+            Assert.False(BridgeClientValidator.IsAllowedBridgeHostPath(host, [root]));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void IsAllowedBridgeHostPath_RejectsHostAtInstallRoot()
+    {
+        var root = SeedTrustedInstallRoot(Path.Combine(Path.GetTempPath(), "FortivaInstall-" + Guid.NewGuid()));
+        var hostAtRoot = Path.Combine(root, "Fortiva.BrowserBridge.Host.exe");
+        File.WriteAllText(hostAtRoot, "stub");
+
+        try
+        {
+            Assert.False(BridgeClientValidator.IsAllowedBridgeHostPath(hostAtRoot, [root]));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void IsAllowedBridgeHostPath_AcceptsInstalledPersonalLayout()
+    {
+        var root = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Programs", "icmclab studio", "Fortiva Personal");
+        var host = Path.Combine(root, "BrowserBridge", "Fortiva.BrowserBridge.Host.exe");
+        if (!File.Exists(host))
+            return;
+
+        Assert.True(BridgeClientValidator.IsTrustedInstallRoot(root));
+        BridgeInstallIntegrity.RecordBridgeHostHash(host);
+        Assert.True(BridgeClientValidator.IsAllowedBridgeHostPath(host, [root]));
     }
 }

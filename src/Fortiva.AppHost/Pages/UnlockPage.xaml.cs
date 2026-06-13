@@ -13,6 +13,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
     private bool _rollbackConfirmRequired;
     private bool _helloCheckComplete;
     private bool _bridgeUnlockMode;
+    private bool _autoHelloAttempted;
 
     public UnlockPage()
     {
@@ -64,6 +65,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
         ErrorBar.IsOpen = false;
         PasswordField.Password = "";
         _helloCheckComplete = false;
+        _autoHelloAttempted = false;
         HelloBtn.IsEnabled = false;
         EnablePasswordWhileHelloProbes();
         RefreshBrandLogo();
@@ -113,14 +115,49 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
 
             if (_bridgeUnlockMode)
             {
-                HeadingText.Text = "Unlock for browser autofill";
-                SubtitleText.Text = "Your browser extension needs credentials for this site. " +
-                                    "Unlock with your master password or Windows Hello, then return to the browser.";
+                HeadingText.Text = "Unlock for browser Fill";
+                SubtitleText.Text = "Your browser asked for credentials on this site. " +
+                                    "Unlock with Windows Hello or your master password — Fill will finish automatically if you keep the extension popup open.";
             }
 
             _helloCheckComplete = true;
             ApplyUnlockControls();
+
+            if (_bridgeUnlockMode && showHello && configured)
+                _ = AutoHelloUnlockAsync();
         });
+    }
+
+    private async Task AutoHelloUnlockAsync()
+    {
+        if (_autoHelloAttempted)
+            return;
+
+        _autoHelloAttempted = true;
+
+        try
+        {
+            // Cold-start from the browser extension often lands here before the WinUI HWND exists.
+            // Firing Hello too early produces COM errors and misleading "re-setup Hello" guidance.
+            for (var i = 0; i < 50; i++)
+            {
+                await Task.Delay(100);
+                if (!_bridgeUnlockMode || _vm.IsUnlocked || _vm.IsBusy)
+                    return;
+                if (App.EnsureMainWindowHandle() != IntPtr.Zero)
+                    break;
+            }
+
+            await Task.Delay(500);
+            if (!_bridgeUnlockMode || _vm.IsUnlocked || _vm.IsBusy)
+                return;
+
+            HelloBtn_Click(this, new Microsoft.UI.Xaml.RoutedEventArgs());
+        }
+        catch (Exception ex)
+        {
+            App.LogException("UnlockPage.AutoHelloUnlockAsync", ex);
+        }
     }
 
     private void ApplyUnlockControls()
@@ -155,12 +192,15 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
         SetBusy(true);
         ErrorBar.IsOpen = false;
 
-        var helloResult = await HelloService.VerifyAsync("Unlock Fortiva vault");
-        if (!helloResult.Verified)
+        if (!_hello.IsHardwareBacked)
         {
-            SetBusy(false);
-            ShowError(helloResult.ErrorMessage ?? "Windows Hello verification failed.");
-            return;
+            var helloResult = await HelloService.VerifyAsync("Unlock Fortiva vault");
+            if (!helloResult.Verified)
+            {
+                SetBusy(false);
+                ShowError(helloResult.ErrorMessage ?? "Windows Hello verification failed.");
+                return;
+            }
         }
 
         var masterKey = await _hello.TryLoadMasterKeyAsync();
@@ -172,7 +212,10 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
                 SubtitleText.Text = "Windows Hello could not load your credential. Unlock with your master password, then re-configure Hello in Settings.";
                 ApplyUnlockControls();
             }
-            ShowError("Windows Hello could not unlock the vault key. Try again, use your master password, or re-configure Hello in Settings.");
+            ShowError(_hello.IsConfigured
+                ? "Windows Hello did not unlock the vault this time. Try the Hello button again, "
+                  + "or use your master password. Only re-enroll in Settings if Hello keeps failing after a successful password unlock."
+                : "Windows Hello could not unlock the vault key. Try again, use your master password, or set up Hello in Settings.");
             return;
         }
 
@@ -191,7 +234,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
                     SubtitleText.Text = "Windows Hello unlock failed. Unlock with your master password, then re-configure Hello in Settings.";
                     ApplyUnlockControls();
                 }
-                ShowError(error ?? "Windows Hello unlock failed. Try your master password or re-configure Hello in Settings.");
+                ShowError(error ?? "Windows Hello unlock failed. Try your master password, or tap Hello again.");
             }
             else if (error is not null)
             {
@@ -206,6 +249,11 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
             else
             {
                 _vm.PendingRollbackConfirm = false;
+                if (_bridgeUnlockMode)
+                {
+                    SubtitleText.Text = "Unlocked — switch back to your browser tab. "
+                                        + "Fill will finish automatically if the Fortiva popup is still open.";
+                }
             }
         }
         finally
@@ -216,7 +264,17 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
 
     private async Task TryUnlockAsync(string password, bool confirmRollback)
     {
-        if (_vm.IsBusy || !_helloCheckComplete) return;
+        if (_vm.IsBusy)
+        {
+            ShowError("Fortiva is busy — wait a moment and try again.");
+            return;
+        }
+
+        if (!_helloCheckComplete)
+        {
+            ShowError("Please wait a moment while Fortiva finishes starting up.");
+            return;
+        }
 
         if (HelloMandatory && _hello.IsConfigured)
         {
@@ -256,6 +314,11 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
         else
         {
             _vm.PendingRollbackConfirm = false;
+            if (_bridgeUnlockMode)
+            {
+                SubtitleText.Text = "Unlocked — switch back to your browser tab. "
+                                    + "Fill will finish automatically if the Fortiva popup is still open.";
+            }
         }
     }
 

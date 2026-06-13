@@ -40,4 +40,15 @@ public sealed class BridgeFillNonceTests
         var nonce = broker.Issue("Example.COM");
         Assert.True(broker.TryConsume(nonce, "example.com"));
     }
+
+    [Fact]
+    public void Issue_ReplacesPriorNonceForSameHost()
+    {
+        var broker = new BridgeFillNonce();
+        var first = broker.Issue("example.com");
+        var second = broker.Issue("example.com");
+
+        Assert.False(broker.TryConsume(first, "example.com"));
+        Assert.True(broker.TryConsume(second, "example.com"));
+    }
 }

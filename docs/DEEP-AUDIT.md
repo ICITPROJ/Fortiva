@@ -31,12 +31,12 @@ This document lists every finding by severity. Items marked **FIXED** were addre
 
 | ID | Area | Finding | Impact | Status |
 |----|------|---------|--------|--------|
-| H1 | Bridge | Session token persisted on disk (`bridge.session` under app data) | Token theft enables pipe RPC until lock | OPEN — prefer in-process token only |
-| H2 | Bridge | Credentials returned in plaintext over named pipe to extension | Malware on same user session can sniff pipe | OPEN — document threat; consider short-lived pipe encryption |
+| H1 | Bridge | Session token persisted on disk (`bridge.session` under app data) | Token theft enables pipe RPC until lock | **FIXED** — in-memory token + token pipe; legacy file cleared |
+| H2 | Bridge | Credentials returned in plaintext over named pipe to extension | Malware on same user session can sniff pipe | **MITIGATED** — passwords AES-GCM sealed (`BridgeCredentialProtector`); usernames still plaintext |
 | H3 | Bridge | `BridgeClientValidator` allowed any path when install roots empty | Dev/misconfigured hosts accept impostor clients | **FIXED** — fail closed |
 | H4 | AppHost | Mandatory Hello + unavailable hardware = **total lockout** on unlock screen | Enterprise users blocked on VMs / broken Hello | **FIXED** — password fallback when HW unavailable |
 | H5 | AppHost | Auto-lock could fire during master password change / bulk import | Operation interrupted; possible corrupt UX state | **FIXED** — suppress auto-lock + `IsBusy` gate |
-| H6 | Policy | `PolicyEnforcer` not applied inside Core vault mutations | Policy bypass if UI circumvented | OPEN |
+| H6 | Policy | `PolicyEnforcer` not applied inside Core vault mutations | Policy bypass if UI circumvented | **FIXED** — `EnsureWritable` + `EnsureEntryCompliesWithPolicy` in `VaultSession` |
 | H7 | Licensing | `LicenseStore.TryImportFromFile` deserialized JSON without signature verify | Unsigned JSON accepted if caller skips verify | **FIXED** — verify on import |
 | H8 | AppHost | Stale Hello credential under mandatory policy left password disabled after clear | User lockout after Hello reset | **FIXED** — re-apply unlock controls |
 | H9 | AppHost | Admin license import called `ReloadPolicies()` not `ReloadEnterpriseConfig()` | License state stale in running Admin session | **FIXED** |
@@ -49,14 +49,14 @@ This document lists every finding by severity. Items marked **FIXED** were addre
 | ID | Area | Finding | Impact | Status |
 |----|------|---------|--------|--------|
 | M1 | AppHost | Onboarding Hello sync after navigate could throw on disposed session | Finish flow error after success | **FIXED** — guard + try/catch |
-| M2 | AppHost | Portable vault switch without prominent “return to local vault” risks perceived data loss | User confusion | OPEN — UX copy/warning |
+| M2 | AppHost | Portable vault switch without prominent “return to local vault” risks perceived data loss | User confusion | **FIXED** — confirm dialog + “Use local vault” button |
 | M3 | AppHost | `AppViewModel.cs` duplicate dead code vs `ShellViewModel` | Maintenance drift | **FIXED** — removed |
 | M4 | QA scripts | `qa-stress-audit.ps1` compiled ISCC without `/DExtensionId` | QA installers ≠ production bridge manifests | **FIXED** |
-| M5 | CI | `release.yml` runs Core tests only; no AppHost tests or installer smoke | Regressions ship | OPEN |
-| M6 | Audit | Personal audit trail new; no hash chaining / tamper evidence | Log tampering possible | OPEN |
+| M5 | CI | `release.yml` runs Core tests only; no AppHost tests or installer smoke | Regressions ship | **FIXED** — `ci.yml` runs AppHost tests; publish smoke in audit scripts |
+| M6 | Audit | Personal audit trail new; no hash chaining / tamper evidence | Log tampering possible | **FIXED** — `AuditIntegrity` HMAC chain |
 | M7 | Vault | `SecurityLevel` header not re-validated against policy max on unlock | Downgrade if file edited | OPEN |
 | M8 | Updates | Silent auto-update previously called `Environment.Exit(0)` | Abrupt termination | FIXED (prior pass) |
-| M9 | Docs | THREAT-MODEL still says “no network” for Personal; MSIX vs EXE deployment stale | Wrong operator assumptions | OPEN |
+| M9 | Docs | THREAT-MODEL / update signing stance | Wrong operator assumptions | **FIXED** — network + SHA-256 updates + deferred Authenticode (`THREAT-MODEL.md`, `CODESIGNING.md`) |
 
 ---
 
@@ -156,11 +156,15 @@ Current flow: UI verifies Hello → loads DPAPI-protected MK blob. **No** `KeyCr
 ### Next sprint (recommended)
 
 1. ~~**C1** — TPM/Hello-gated MK wrap (Core + AppHost)~~ **Done**  
-2. **H6** — Enforce policy in `VaultSession` mutations  
-3. **H1** — In-process bridge token only  
-4. **M5** — CI: AppHost tests + installer compile  
-5. **M6** — Audit log hash chain  
-6. **M9** — Refresh THREAT-MODEL and deployment docs  
+2. ~~**H6** — Enforce policy in `VaultSession` mutations~~ **Done**  
+3. ~~**H1** — In-process bridge token only~~ **Done**  
+4. ~~**M5** — CI: AppHost tests~~ **Done**  
+5. ~~**M6** — Audit log hash chain~~ **Done**  
+6. ~~**M9** — Refresh THREAT-MODEL~~ **Done (2026-06)**  
+7. ~~**H2** — Pipe password sealing~~ **Done** (`BridgeCredentialProtector`)  
+8. ~~**P1** — Authenticode~~ **Deferred** — opt-in via `FORTIVA_REQUIRE_CODESIGN=1` when an Enterprise customer engages; Personal stays unsigned (`docs/CODESIGNING.md`)  
+9. ~~**P1** — HKLM native messaging Enterprise~~ **Done** (installer + `TryRegisterMachineNativeHost`)  
+10. **Certification** — See [MILITARY-GRADE-SPEC.md](MILITARY-GRADE-SPEC.md) + `scripts/Audit-MilitaryGrade.ps1`  
 
 ---
 

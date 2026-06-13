@@ -5,8 +5,9 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="Transparent">
 
-    <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="400">
-        <Border Style="{StaticResource FortivaGlassPanelGlow}" Padding="32">
+    <Grid HorizontalAlignment="Center" VerticalAlignment="Center"
+          MaxWidth="440" MinWidth="320" Margin="24">
+        <Border Style="{StaticResource FortivaGlassPanelGlow}" Padding="36,32">
             <Grid RowSpacing="20">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -45,7 +46,8 @@
                 <StackPanel Grid.Row="4" Spacing="8">
                     <Button x:Name="UnlockBtn" Content="Unlock" HorizontalAlignment="Stretch"
                             Style="{StaticResource FortivaAccentButton}" Click="UnlockBtn_Click"/>
-                    <Button x:Name="HelloBtn" HorizontalAlignment="Stretch" Click="HelloBtn_Click" Visibility="Collapsed">
+                    <Button x:Name="HelloBtn" HorizontalAlignment="Stretch" Click="HelloBtn_Click" Visibility="Collapsed"
+                            Style="{StaticResource FortivaSecondaryButton}">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE77B;" FontSize="16"/>
                             <TextBlock Text="Unlock with Windows Hello"/>

@@ -28,7 +28,8 @@
             </Grid>
         </Border>
 
-        <ListView x:Name="AuditList" Grid.Row="1" SelectionMode="None" Background="Transparent"/>
+        <ListView x:Name="AuditList" Grid.Row="1" SelectionMode="None" Background="Transparent"
+                  Padding="16,8,16,12"/>
 
         <Border Grid.Row="2" Style="{StaticResource FortivaToolbar}" Padding="16,6">
             <TextBlock x:Name="CountLabel" Style="{StaticResource FortivaMutedText}"/>

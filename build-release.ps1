@@ -278,7 +278,13 @@ foreach ($appOut in @("dist\Fortiva.Personal", "dist\Fortiva.Enterprise")) {
     $destBridge = Join-Path $target "BrowserBridge"
     $destExt = Join-Path $target "extension"
     Remove-Item -Recurse -Force $destBridge -ErrorAction SilentlyContinue
-    Copy-Item $bridgeOut $destBridge -Recurse -Force
+    New-Item -ItemType Directory -Force $destBridge | Out-Null
+    Copy-Item (Join-Path $bridgeOut "*") $destBridge -Recurse -Force
+    $hostPath = Join-Path $destBridge "Fortiva.BrowserBridge.Host.exe"
+    if (Test-Path $hostPath) {
+        $hash = (Get-FileHash $hostPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        Set-Content -Path (Join-Path $destBridge "bridge-host.sha256") -Value $hash -Encoding ascii -NoNewline
+    }
     Copy-FilteredExtension -SourceDir $extOut -DestDir $destExt
     Write-Host "  Bundled into $appOut" -ForegroundColor Green
 }

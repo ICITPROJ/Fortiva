@@ -71,6 +71,10 @@ public sealed class VaultTagPickerPanel
 
     public StackPanel Root { get; }
 
+    public event Action? TagsChanged;
+
+    private void NotifyTagsChanged() => TagsChanged?.Invoke();
+
     public void ApplyTheme(FrameworkElement? context = null)
     {
         var theme = FortivaControlTheme.ResolveAppTheme();
@@ -121,6 +125,7 @@ public sealed class VaultTagPickerPanel
         _selected.Add(tag);
         _newTagBox.Text = "";
         RebuildChips();
+        NotifyTagsChanged();
     }
 
     private void RebuildChips()
@@ -170,5 +175,6 @@ public sealed class VaultTagPickerPanel
             _selected.Add(tag);
         else
             _selected.Remove(tag);
+        NotifyTagsChanged();
     }
 }

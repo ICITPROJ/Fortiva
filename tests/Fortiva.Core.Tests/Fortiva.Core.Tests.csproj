@@ -14,4 +14,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Fortiva.Core\Fortiva.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

@@ -29,7 +29,7 @@ public sealed partial class MainWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         AppTitleBar.SizeChanged += (_, _) => UpdateTitleBarInsets();
-        Activated += (_, _) => UpdateTitleBarInsets();
+        Activated += OnWindowActivated;
 
         ThemeService.Apply(this, _vm.ThemePreference);
         ThemeService.ApplySystemBackdrop(this);
@@ -67,13 +67,13 @@ public sealed partial class MainWindow : Window
         if (_vm.IsAdmin)
         {
             NavVault.Visibility = NavGenerator.Visibility = NavHealth.Visibility = NavImport.Visibility = NavSettings.Visibility = Visibility.Collapsed;
-            NavLock.Visibility = Visibility.Collapsed;
+            LockBtn.Visibility = Visibility.Collapsed;
         }
 
         if (_vm.IsEnterprise && !_vm.IsAdmin && !_vm.IsLicenseValid)
         {
             NavVault.Visibility = NavGenerator.Visibility = NavHealth.Visibility = NavImport.Visibility = Visibility.Collapsed;
-            NavLock.Visibility = Visibility.Collapsed;
+            LockBtn.Visibility = Visibility.Collapsed;
             NavAudit.Visibility = Visibility.Collapsed;
             NavigationService.Current.Navigate<LicenseRequiredPage>();
         }
@@ -91,15 +91,13 @@ public sealed partial class MainWindow : Window
         _vm.BridgeUnlockRequested += OnBridgeUnlockRequested;
         if (!_vm.IsAdmin)
         {
-            BridgeClientValidator.ConfigureAllowedInstallRoots(AppContext.BaseDirectory);
-            _vm.StartBridgeUnlockListener(AppContext.BaseDirectory);
             try
             {
-                BrowserBridgeInstallService.EnsureInstalled(AppContext.BaseDirectory, _vm.IsEnterprise);
+                BrowserBridgeInstallService.RepairNativeHostIfStale(AppContext.BaseDirectory, _vm.IsEnterprise);
             }
             catch (Exception ex)
             {
-                App.LogException("BrowserBridgeInstallService.EnsureInstalled", ex);
+                App.LogException("BrowserBridgeInstallService.RepairNativeHostIfStale", ex);
             }
         }
 
@@ -112,8 +110,44 @@ public sealed partial class MainWindow : Window
         {
             root.PointerPressed += (_, _) => OnUserActivity();
             root.PointerMoved += (_, _) => OnPointerActivity();
-            root.KeyDown += (_, _) => OnUserActivity();
+            root.KeyDown += OnRootKeyDown;
         }
+    }
+
+    private void OnRootKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        OnUserActivity();
+        if (!_vm.IsUnlocked || _vm.IsAdmin)
+            return;
+
+        if (e.Key == Windows.System.VirtualKey.K && KeyboardHelpers.IsControlDown())
+        {
+            e.Handled = true;
+            GlobalSearch.Focus(FocusState.Programmatic);
+        }
+        else if (e.Key == Windows.System.VirtualKey.P &&
+                 KeyboardHelpers.IsControlDown() &&
+                 KeyboardHelpers.IsShiftDown())
+        {
+            e.Handled = true;
+            _ = CommandPalette.ShowAsync(Content.XamlRoot, _vm);
+        }
+    }
+
+    private void GlobalSearch_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        if (!_vm.IsUnlocked || _vm.IsAdmin)
+            return;
+
+        var q = args.QueryText?.Trim();
+        if (string.IsNullOrEmpty(q))
+            return;
+
+        _vm.PendingVaultSearch = q;
+        _suppressNav = true;
+        try { NavView.SelectedItem = NavVault; }
+        finally { _suppressNav = false; }
+        NavigationService.Current.Navigate<VaultPage>(VaultPageNavigationContext.ForSearch(q));
     }
 
     private void OnUserActivity()
@@ -207,18 +241,6 @@ public sealed partial class MainWindow : Window
         try
         {
             var tag = item.Tag?.ToString();
-
-            if (tag == "Lock")
-            {
-                _suppressNav = true;
-                try
-                {
-                    NavView.SelectedItem = null;
-                    if (_vm.IsUnlocked) _vm.Lock();
-                }
-                finally { _suppressNav = false; }
-                return;
-            }
 
             if (tag == "Admin")
             {
@@ -319,7 +341,7 @@ public sealed partial class MainWindow : Window
             NavHealth.Visibility = licensed ? Visibility.Visible : Visibility.Collapsed;
             NavImport.Visibility = licensed ? Visibility.Visible : Visibility.Collapsed;
             NavAudit.Visibility = _vm.IsAdmin ? Visibility.Collapsed : Visibility.Visible;
-            NavLock.Visibility = licensed ? Visibility.Visible : Visibility.Collapsed;
+            LockBtn.Visibility = licensed ? Visibility.Visible : Visibility.Collapsed;
 
             if (licensed && ContentFrame.Content is LicenseRequiredPage)
             {
@@ -331,7 +353,7 @@ public sealed partial class MainWindow : Window
             else if (!licensed)
             {
                 NavVault.Visibility = NavGenerator.Visibility = NavHealth.Visibility = NavImport.Visibility = Visibility.Collapsed;
-                NavLock.Visibility = Visibility.Collapsed;
+                LockBtn.Visibility = Visibility.Collapsed;
                 NavAudit.Visibility = Visibility.Collapsed;
                 NavigationService.Current.Navigate<LicenseRequiredPage>();
             }
@@ -342,6 +364,7 @@ public sealed partial class MainWindow : Window
     {
         DispatcherQueue.TryEnqueue(() =>
         {
+            _bridgeWatchdogTimer?.Stop();
             _suppressNav = true;
             try
             {
@@ -360,12 +383,28 @@ public sealed partial class MainWindow : Window
     {
         DispatcherQueue.TryEnqueue(() =>
         {
+            if (!_vm.ShouldNavigateToVaultOnUnlock)
+            {
+                _vm.RestoreVaultNavigationOnUnlock();
+                StatusText.Text = "Unlocked — switch back to your browser tab.";
+                RefreshStatusChrome();
+                if (!_vm.IsAdmin)
+                    _vm.StartBridgeUnlockListener(AppContext.BaseDirectory);
+                _ = EnsureBrowserBridgeAfterUnlockAsync();
+                _vm.SkipNextBrowserExtensionPrompt = true;
+                AppWindow.Hide();
+                return;
+            }
+
             // Navigate explicitly — do NOT rely on SelectionChanged while _suppressNav is true
             NavigationService.Current.ResetCurrent();
             NavigationService.Current.ClearHistory();
             NavigationService.Current.Navigate<VaultPage>();
             StatusText.Text = _vm.StatusMessage;
             RefreshStatusChrome();
+            if (!_vm.IsAdmin)
+                _vm.StartBridgeUnlockListener(AppContext.BaseDirectory);
+            _ = EnsureBrowserBridgeAfterUnlockAsync();
 
             _suppressNav = true;
             try { NavView.SelectedItem = NavVault; }
@@ -375,6 +414,60 @@ public sealed partial class MainWindow : Window
                 _ = BrowserExtensionSetupHelper.ShowFirstRunPromptAsync(Content.XamlRoot, _vm);
             _vm.SkipNextBrowserExtensionPrompt = false;
         });
+    }
+
+    private void OnWindowActivated(object sender, WindowActivatedEventArgs args)
+    {
+        UpdateTitleBarInsets();
+        if (args.WindowActivationState == WindowActivationState.Deactivated || _vm.IsAdmin || !_vm.IsUnlocked)
+            return;
+
+        _ = Task.Run(() =>
+        {
+            BridgeHostProcessCleanup.StopOrphanedHosts();
+            _vm.EnsureBridgeInfrastructureHealthy();
+        });
+    }
+
+    private async Task EnsureBrowserBridgeAfterUnlockAsync()
+    {
+        if (_vm.IsAdmin || !_vm.IsUnlocked)
+            return;
+
+        try
+        {
+            BridgeHostProcessCleanup.StopAllHosts();
+            BrowserBridgeInstallService.EnsureInstalled(AppContext.BaseDirectory, _vm.IsEnterprise);
+            await Task.Run(() => _vm.EnsureBridgeInfrastructureHealthy()).ConfigureAwait(true);
+            StartBridgeWatchdog();
+        }
+        catch (Exception ex)
+        {
+            App.LogException("EnsureBrowserBridgeAfterUnlock", ex);
+        }
+    }
+
+    private DispatcherTimer? _bridgeWatchdogTimer;
+
+    private void StartBridgeWatchdog()
+    {
+        _bridgeWatchdogTimer?.Stop();
+        _bridgeWatchdogTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _bridgeWatchdogTimer.Tick += (_, _) =>
+        {
+            if (_vm.IsAdmin || !_vm.IsUnlocked)
+            {
+                _bridgeWatchdogTimer?.Stop();
+                return;
+            }
+
+            _ = Task.Run(() =>
+            {
+                BridgeHostProcessCleanup.StopOrphanedHosts();
+                _vm.EnsureBridgeInfrastructureHealthy();
+            });
+        };
+        _bridgeWatchdogTimer.Start();
     }
 
     private DispatcherTimer? _clipboardTimer;
@@ -408,6 +501,12 @@ public sealed partial class MainWindow : Window
         _clipboardTimer = null;
         StatusText.Text = _vm.StatusMessage;
         RefreshStatusChrome();
+    }
+
+    private void LockBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.IsUnlocked)
+            _vm.Lock();
     }
 
     private void PanicBtn_Click(object sender, RoutedEventArgs e)
@@ -471,6 +570,10 @@ public sealed partial class MainWindow : Window
     {
         var theme = FortivaControlTheme.ResolveAppTheme();
         FortivaSurfaceEffects.ApplyIconButton(PanicBtn, PanicBtn);
+        FortivaSurfaceEffects.ApplyIconButton(LockBtn, LockBtn);
+        GlobalSearch.Visibility = _vm.IsUnlocked && !_vm.IsAdmin
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         if (_vm.IsUnlocked)
         {
             StatusIcon.Glyph = "\uE73E";

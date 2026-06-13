@@ -87,7 +87,14 @@ public static class VaultMergeEngine
             });
         }
 
-        return new VaultPayload { Entries = merged, IntegrityLog = rebuiltLog };
+        var mergedBatches = local.ImportBatches
+            .Concat(remote.ImportBatches)
+            .GroupBy(b => b.Id)
+            .Select(g => g.OrderByDescending(b => b.ImportedAt).First())
+            .OrderByDescending(b => b.ImportedAt)
+            .ToList();
+
+        return new VaultPayload { Entries = merged, IntegrityLog = rebuiltLog, ImportBatches = mergedBatches };
     }
 
     private static IEnumerable<IntegrityLogEntry> EnumerateLogs(VaultPayload local, VaultPayload remote)
@@ -115,6 +122,18 @@ public static class VaultSynchronizer
         if (local.ReadOnly || remote.ReadOnly)
             throw new InvalidOperationException("Both vaults must be writable to sync.");
 
+        var localDir = Path.GetDirectoryName(localEngine.VaultPath)!;
+        var remoteDir = Path.GetDirectoryName(remoteEngine.VaultPath)!;
+        if (VaultSyncMarker.Exists(localDir) || VaultSyncMarker.Exists(remoteDir))
+        {
+            var marker = VaultSyncMarker.Read(localDir) ?? VaultSyncMarker.Read(remoteDir);
+            var detail = marker?.Message
+                ?? "A previous sync did not complete cleanly.";
+            throw new VaultSyncDivergedException(
+                detail + " Open Settings → Portable mode and run Sync again after verifying both "
+                + "vault copies, or restore from a snapshot.");
+        }
+
         var localBefore = SnapshotModified(local.Payload);
         var remoteBefore = SnapshotModified(remote.Payload);
 
@@ -127,26 +146,98 @@ public static class VaultSynchronizer
         var localResult = ComputeSide(localBefore, merged);
         var remoteResult = ComputeSide(remoteBefore, merged);
 
+        var localBackup = ClonePayload(local.Payload);
+        var remoteBackup = ClonePayload(remote.Payload);
+
         // Persist the remote vault first. The remote is typically the removable/portable copy
         // (USB), which is the most likely to fail (drive unplugged, disk full, read-only). If it
         // fails we have not touched the local vault at all, so the two cannot diverge — the sync is
         // simply aborted. Only after the remote is durably saved do we apply and save the local.
-        ApplyMerged(remote, merged);
-        remoteEngine.Save(remote);
-
-        ApplyMerged(local, merged);
+        VaultSyncMarker.WriteInProgressBoth(localDir, remoteDir);
         try
         {
-            localEngine.Save(local);
-        }
-        catch (Exception ex)
-        {
-            throw new VaultSyncPartialException(
-                "The other vault was synced but saving this vault failed. The vaults are temporarily "
-                + "out of sync; run the sync again to reconcile them.", ex);
-        }
+            ApplyMerged(remote, merged);
+            remoteEngine.Save(remote);
 
-        return new VaultSyncResult(localResult, remoteResult, merged.Entries.Count);
+            ApplyMerged(local, merged);
+            try
+            {
+                localEngine.Save(local);
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    ApplyMerged(remote, remoteBackup);
+                    remoteEngine.Save(remote);
+                    ApplyMerged(local, localBackup);
+                    throw new VaultSyncPartialException(
+                        "Saving this vault failed after the other vault was updated. Both vaults were rolled "
+                        + "back to their pre-sync state. Check free space and permissions, then run sync again.", ex);
+                }
+                catch (VaultSyncPartialException)
+                {
+                    throw;
+                }
+                catch (Exception rollbackEx)
+                {
+                    ApplyMerged(local, localBackup);
+                    var message =
+                        "Portable sync failed and could not roll back the USB/local copy. "
+                        + "Do not edit either vault until you verify both copies and run Sync again, "
+                        + "or restore from a snapshot.";
+                    VaultSyncMarker.WriteDivergence(localDir, message, localDir, remoteDir);
+                    VaultSyncMarker.WriteDivergence(remoteDir, message, localDir, remoteDir);
+                    throw new VaultSyncDivergedException(message, rollbackEx);
+                }
+            }
+
+            VaultSyncMarker.ClearBoth(localDir, remoteDir);
+            return new VaultSyncResult(localResult, remoteResult, merged.Entries.Count);
+        }
+        catch (VaultSyncPartialException)
+        {
+            VaultSyncMarker.ClearBoth(localDir, remoteDir);
+            throw;
+        }
+        catch (VaultSyncDivergedException)
+        {
+            throw;
+        }
+        catch
+        {
+            if (!VaultSyncMarker.HasDivergence(localDir) && !VaultSyncMarker.HasDivergence(remoteDir))
+            {
+                var message =
+                    "Portable sync was interrupted. Verify both vault copies before editing or syncing again.";
+                VaultSyncMarker.WriteDivergence(localDir, message, localDir, remoteDir);
+                VaultSyncMarker.WriteDivergence(remoteDir, message, localDir, remoteDir);
+            }
+
+            throw;
+        }
+    }
+
+    private static VaultPayload ClonePayload(VaultPayload source)
+    {
+        var clone = new VaultPayload();
+        foreach (var entry in source.Entries)
+            clone.Entries.Add(entry.Clone());
+
+        foreach (var log in source.IntegrityLog)
+            clone.IntegrityLog.Add(new IntegrityLogEntry
+            {
+                Timestamp = log.Timestamp,
+                Action = log.Action,
+                EntryId = log.EntryId,
+                RevisionAfter = log.RevisionAfter,
+                EntryHash = (byte[])log.EntryHash.Clone()
+            });
+
+        foreach (var batch in source.ImportBatches)
+            clone.ImportBatches.Add(batch);
+
+        return clone;
     }
 
     private static void ApplyMerged(VaultUnlockContext ctx, VaultPayload merged)
@@ -165,6 +256,10 @@ public static class VaultSynchronizer
                 RevisionAfter = log.RevisionAfter,
                 EntryHash = (byte[])log.EntryHash.Clone()
             });
+
+        ctx.Payload.ImportBatches.Clear();
+        foreach (var batch in merged.ImportBatches)
+            ctx.Payload.ImportBatches.Add(batch);
     }
 
     private static Dictionary<Guid, DateTimeOffset> SnapshotModified(VaultPayload payload)

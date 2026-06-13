@@ -87,5 +87,6 @@ public sealed class ClipboardService : IDisposable
     {
         _clearCts?.Cancel();
         _clearCts?.Dispose();
+        ClearNow();
     }
 }

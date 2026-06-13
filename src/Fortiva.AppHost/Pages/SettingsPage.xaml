@@ -1,18 +1,30 @@
 <Page
     x:Class="Fortiva.AppHost.Pages.SettingsPage"
-    NavigationCacheMode="Enabled"
+    NavigationCacheMode="Disabled"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="Transparent">
 
-    <ScrollViewer x:Name="PageScroll"
+    <Grid RowSpacing="0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Style="{StaticResource FortivaToolbar}" Padding="24,20,24,16">
+            <StackPanel Spacing="4">
+                <TextBlock Text="Settings" Style="{StaticResource FortivaHeroTitle}"/>
+                <TextBlock x:Name="SettingsSubtitle" Style="{StaticResource FortivaMutedText}"/>
+            </StackPanel>
+        </Border>
+
+    <ScrollViewer x:Name="PageScroll" Grid.Row="1"
                   HorizontalScrollBarVisibility="Disabled"
                   HorizontalContentAlignment="Stretch">
         <Border Style="{StaticResource FortivaGlassPanel}" Margin="24"
                 HorizontalAlignment="Stretch" MinWidth="320"
                 Width="{Binding ViewportWidth, ElementName=PageScroll}">
         <StackPanel Spacing="24">
-            <TextBlock Text="Settings" Style="{StaticResource FortivaPageTitle}"/>
 
             <!-- Appearance -->
             <StackPanel Spacing="12">
@@ -24,7 +36,7 @@
                 </ComboBox>
             </StackPanel>
 
-            <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+            <Border Style="{StaticResource FortivaSectionDivider}"/>
 
             <!-- Security -->
             <StackPanel Spacing="16">
@@ -49,7 +61,7 @@
                 </StackPanel>
             </StackPanel>
 
-            <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+            <Border Style="{StaticResource FortivaSectionDivider}"/>
 
             <!-- Windows Hello -->
             <StackPanel Spacing="12">
@@ -62,37 +74,53 @@
                 <InfoBar x:Name="HelloUpgradeInfo"
                          IsOpen="False"
                          IsClosable="True"
-                         Severity="Informational"
+                         Severity="Warning"
                          Title="Upgrade Windows Hello security"
-                         Message="Your Hello credential uses software protection. Re-enroll once to use hardware-backed TPM storage when available."
+                         Message="Your Hello credential uses software-only protection. Same-user malware on this PC could bypass biometrics. Re-set Hello below when TPM is available to upgrade to hardware-backed storage."
                          Closed="HelloUpgradeInfo_Closed"/>
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button x:Name="SetupHelloBtn" Content="Set up Windows Hello" Click="SetupHello_Click"/>
-                    <Button x:Name="RemoveHelloBtn" Content="Remove Hello credential" Click="RemoveHello_Click"/>
+                    <Button x:Name="SetupHelloBtn" Content="Set up Windows Hello" Click="SetupHello_Click"
+                            Style="{StaticResource FortivaAccentButton}"/>
+                    <Button x:Name="RemoveHelloBtn" Content="Remove Hello credential" Click="RemoveHello_Click"
+                            Style="{StaticResource FortivaSecondaryButton}"/>
                 </StackPanel>
             </StackPanel>
 
-            <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+            <Border Style="{StaticResource FortivaSectionDivider}"/>
 
             <!-- Browser extension -->
             <StackPanel x:Name="BrowserExtensionSection" Spacing="12">
                 <TextBlock Text="Browser extension" Style="{StaticResource FortivaSectionTitle}"/>
                 <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13">
-                    On any login page, click the Fortiva icon in Edge or Chrome and choose Fill login.
-                    Fortiva prepares the connection for you — one quick browser step the first time.
+                    Fill logins from your vault when you click Fill on a website. Fortiva can launch, unlock, and connect automatically — you do not need the app open first.
                 </TextBlock>
                 <Border Style="{StaticResource FortivaGlassPanelGlow}" Padding="14">
-                    <StackPanel Spacing="6">
-                        <TextBlock x:Name="BrowserExtensionStatusText" Style="{StaticResource FortivaBodyText}" FontSize="13"/>
+                    <StackPanel Spacing="10">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <FontIcon x:Name="BridgeHealthIcon" Glyph="&#xE946;" FontSize="20"
+                                      Foreground="{StaticResource FortivaAccentBrush}" VerticalAlignment="Top" Margin="0,2,0,0"/>
+                            <StackPanel Spacing="4">
+                                <TextBlock x:Name="BrowserExtensionHealthHeadline"
+                                           Style="{StaticResource FortivaBodyText}" FontSize="14" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="BrowserExtensionStatusText" TextWrapping="WrapWholeWords"
+                                           Style="{StaticResource FortivaBodyText}" FontSize="13"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaHelperText}">
+                            1. Connect browser (one time)&#x0a;2. Reload the extension in Edge or Chrome after Fortiva updates&#x0a;3. On login pages: Fortiva icon → Fill
+                        </TextBlock>
                         <TextBlock x:Name="BrowserExtensionPathText" Style="{StaticResource FortivaHelperText}"
                                    FontFamily="Consolas"/>
                     </StackPanel>
                 </Border>
-                <Button x:Name="ConnectBrowserBtn" Content="Connect browser"
-                        HorizontalAlignment="Left"
-                        Style="{StaticResource FortivaAccentButton}" Click="ConnectBrowser_Click"/>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="ConnectBrowserBtn" Content="Connect browser"
+                            Style="{StaticResource FortivaAccentButton}" Click="ConnectBrowser_Click"/>
+                    <Button x:Name="RestartBridgeBtn" Content="Restart bridge" Click="RestartBridge_Click"/>
+                    <Button x:Name="OpenExtensionsBtn" Content="Open browser extensions" Click="OpenExtensions_Click"/>
+                </StackPanel>
                 <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaHelperText}">
-                    Fortiva never fills a form unless you click Fill. Keep the app unlocked while browsing.
+                    Fortiva never fills a form unless you click Fill. Match logins by setting the Website field on each vault entry (e.g. https://login.example.com).
                 </TextBlock>
             </StackPanel>
 
@@ -111,7 +139,7 @@
                 </StackPanel>
             </StackPanel>
 
-            <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+            <Border Style="{StaticResource FortivaSectionDivider}"/>
 
             <!-- Updates (Personal) -->
             <StackPanel x:Name="UpdatesSection" Spacing="12">
@@ -187,7 +215,7 @@
 
             <InfoBar x:Name="SettingsInfo" IsOpen="False" IsClosable="True"/>
 
-            <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+            <Border Style="{StaticResource FortivaSectionDivider}"/>
 
             <!-- About -->
             <StackPanel Spacing="6">
@@ -211,4 +239,5 @@
         </StackPanel>
         </Border>
     </ScrollViewer>
+    </Grid>
 </Page>

@@ -1,6 +1,9 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Windows.System;
 
 namespace Fortiva.AppHost.Services;
 
@@ -30,8 +33,174 @@ public static class FortivaDialogs
         dialog.Opened += (_, _) =>
         {
             ApplyDialogTheme();
+            EnableEnterKeyDefaultButton(dialog);
             onOpened?.Invoke();
         };
+    }
+
+    /// <summary>
+    /// Makes Enter activate the dialog default button (Primary / Close), including from text fields.
+    /// Multiline fields keep Enter for new lines; use Ctrl+Enter to submit there.
+    /// </summary>
+    public static void EnableEnterKeyDefaultButton(ContentDialog dialog)
+    {
+        var defaultButton = ResolveDefaultButton(dialog);
+        if (defaultButton == ContentDialogButton.None)
+            return;
+
+        dialog.PreviewKeyDown += (_, e) => OnDialogPreviewKeyDown(dialog, defaultButton, e);
+
+        if (dialog.Content is DependencyObject content)
+            WireInputEnterKey(content, dialog, defaultButton);
+    }
+
+    private static ContentDialogButton ResolveDefaultButton(ContentDialog dialog)
+    {
+        if (dialog.DefaultButton != ContentDialogButton.None)
+            return dialog.DefaultButton;
+
+        if (!string.IsNullOrEmpty(dialog.PrimaryButtonText))
+            return ContentDialogButton.Primary;
+
+        if (!string.IsNullOrEmpty(dialog.CloseButtonText))
+            return ContentDialogButton.Close;
+
+        return ContentDialogButton.None;
+    }
+
+    private static void OnDialogPreviewKeyDown(
+        ContentDialog dialog,
+        ContentDialogButton defaultButton,
+        KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.Enter)
+            return;
+
+        var focused = FocusManager.GetFocusedElement(dialog.XamlRoot);
+        if (focused is TextBox or PasswordBox or ComboBox or AutoSuggestBox)
+            return;
+
+        if (TryActivateDefaultButton(dialog, defaultButton))
+            e.Handled = true;
+    }
+
+    private static void WireInputEnterKey(
+        DependencyObject root,
+        ContentDialog dialog,
+        ContentDialogButton defaultButton)
+    {
+        switch (root)
+        {
+            case TextBox textBox:
+                textBox.KeyDown += (_, e) => OnInputKeyDown(dialog, defaultButton, textBox, e);
+                break;
+            case PasswordBox passwordBox:
+                passwordBox.KeyDown += (_, e) => OnInputKeyDown(dialog, defaultButton, passwordBox, e);
+                break;
+        }
+
+        switch (root)
+        {
+            case Panel panel:
+                foreach (var child in panel.Children)
+                    WireInputEnterKey(child, dialog, defaultButton);
+                break;
+            case Border border when border.Child is DependencyObject borderChild:
+                WireInputEnterKey(borderChild, dialog, defaultButton);
+                break;
+            case ContentControl contentControl when contentControl.Content is DependencyObject contentChild:
+                WireInputEnterKey(contentChild, dialog, defaultButton);
+                break;
+            case ScrollViewer scrollViewer when scrollViewer.Content is DependencyObject scrollChild:
+                WireInputEnterKey(scrollChild, dialog, defaultButton);
+                break;
+            case ItemsControl itemsControl when itemsControl.ItemsPanelRoot is DependencyObject panelRoot:
+                WireInputEnterKey(panelRoot, dialog, defaultButton);
+                break;
+        }
+    }
+
+    private static void OnInputKeyDown(
+        ContentDialog dialog,
+        ContentDialogButton defaultButton,
+        Control input,
+        KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.Enter)
+            return;
+
+        if (input is TextBox { AcceptsReturn: true } && !KeyboardHelpers.IsControlDown())
+            return;
+
+        if (TryActivateDefaultButton(dialog, defaultButton))
+            e.Handled = true;
+    }
+
+    private static bool TryActivateDefaultButton(ContentDialog dialog, ContentDialogButton defaultButton)
+    {
+        var buttonName = defaultButton switch
+        {
+            ContentDialogButton.Primary => "PrimaryButton",
+            ContentDialogButton.Secondary => "SecondaryButton",
+            ContentDialogButton.Close => "CloseButton",
+            _ => null
+        };
+
+        if (buttonName is null)
+            return false;
+
+        if (!IsDefaultButtonEnabled(dialog, defaultButton))
+            return false;
+
+        dialog.UpdateLayout();
+
+        if (FindTemplateButton(dialog, buttonName) is not Button button || !button.IsEnabled)
+            return false;
+
+        if (FrameworkElementAutomationPeer.CreatePeerForElement(button) is ButtonAutomationPeer peer)
+        {
+            peer.Invoke();
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsDefaultButtonEnabled(ContentDialog dialog, ContentDialogButton defaultButton)
+        => defaultButton switch
+        {
+            ContentDialogButton.Primary => dialog.IsPrimaryButtonEnabled
+                && !string.IsNullOrEmpty(dialog.PrimaryButtonText),
+            ContentDialogButton.Secondary => dialog.IsSecondaryButtonEnabled
+                && !string.IsNullOrEmpty(dialog.SecondaryButtonText),
+            ContentDialogButton.Close => !string.IsNullOrEmpty(dialog.CloseButtonText),
+            _ => false
+        };
+
+    private static Button? FindTemplateButton(ContentDialog dialog, string name)
+    {
+        if (dialog.FindName(name) is Button named)
+            return named;
+
+        return FindDescendant<Button>(dialog, b => string.Equals(b.Name, name, StringComparison.Ordinal));
+    }
+
+    private static T? FindDescendant<T>(DependencyObject root, Func<T, bool> predicate)
+        where T : DependencyObject
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match && predicate(match))
+                return match;
+
+            var found = FindDescendant(child, predicate);
+            if (found is not null)
+                return found;
+        }
+
+        return null;
     }
 
     public static Border WrapDialogContent(UIElement inner, ElementTheme? theme = null)

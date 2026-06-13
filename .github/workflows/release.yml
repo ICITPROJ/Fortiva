@@ -148,9 +148,9 @@ jobs:
           EXTENSION_PRIVATE_KEY_PEM: ${{ secrets.EXTENSION_PRIVATE_KEY_PEM }}
         run: ./scripts/pack-extension-crx.ps1 -Version ${{ needs.prepare.outputs.version }}
 
-      # Authenticode signing. No-op until CODESIGN_PFX_BASE64 / CODESIGN_PFX_PASSWORD repo secrets
-      # are configured (the script self-skips). See docs/CODESIGNING.md. Published EXEs are signed
-      # BEFORE installers bundle them; installers are signed BEFORE the manifest hashes them.
+      # Authenticode signing — no-op until CODESIGN_PFX_* secrets exist (script self-skips).
+      # Personal ships unsigned today; see docs/CODESIGNING.md. When secrets are set, EXEs are
+      # signed before installers bundle them; installers are signed before manifest hashing.
       - name: Sign published executables
         shell: pwsh
         env:
@@ -163,6 +163,20 @@ jobs:
         shell: pwsh
         run: ./build-installers.ps1 -Version ${{ needs.prepare.outputs.version }}
         timeout-minutes: 30
+
+      - name: Installer QA gate
+        shell: pwsh
+        run: ./scripts/Test-InstallerQa.ps1 -Version ${{ needs.prepare.outputs.version }}
+
+      - name: Bridge release tests (serial)
+        shell: pwsh
+        run: |
+          Get-Process -Name 'Fortiva.Personal','Fortiva.BrowserBridge.Host' -ErrorAction SilentlyContinue |
+            Stop-Process -Force -ErrorAction SilentlyContinue
+          dotnet test tests/Fortiva.Core.Tests/Fortiva.Core.Tests.csproj -c Release --no-build `
+            --filter "FullyQualifiedName~BrowserBridgeEndToEnd|FullyQualifiedName~BridgeUnlockBrokerPipe|FullyQualifiedName~BridgeInstallIntegrity" `
+            --verbosity minimal -- xunit.parallelizeTestCollections=false
+        timeout-minutes: 10
 
       - name: Sign installers
         shell: pwsh

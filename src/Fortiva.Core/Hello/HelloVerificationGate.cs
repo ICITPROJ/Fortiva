@@ -6,13 +6,30 @@ namespace Fortiva.Core.Hello;
 /// </summary>
 public static class HelloVerificationGate
 {
-    private static int _verified;
+    private static readonly object Gate = new();
+    private static int _pendingVerifications;
 
-    public static void MarkVerified() => Interlocked.Exchange(ref _verified, 1);
+    public static void MarkVerified()
+    {
+        lock (Gate)
+            _pendingVerifications++;
+    }
 
-    public static void Reset() => Interlocked.Exchange(ref _verified, 0);
+    public static void Reset()
+    {
+        lock (Gate)
+            _pendingVerifications = 0;
+    }
 
-    /// <summary>Consumes the pending verification flag. Returns false when Hello UI was not completed.</summary>
+    /// <summary>Consumes one pending verification. Returns false when Hello UI was not completed.</summary>
     public static bool TryConsumeVerification()
-        => Interlocked.CompareExchange(ref _verified, 0, 1) == 1;
+    {
+        lock (Gate)
+        {
+            if (_pendingVerifications <= 0)
+                return false;
+            _pendingVerifications--;
+            return true;
+        }
+    }
 }

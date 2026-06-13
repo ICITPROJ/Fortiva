@@ -61,8 +61,14 @@ public class VaultSessionDomainTests : IDisposable
         Assert.Equal("user", hit.Username);
         Assert.Equal("secret", hit.Password);
 
-        var parentMiss = ResolveWithNonce(session, new CredentialRequest { Domain = "example.com" });
-        Assert.False(parentMiss.Found);
+        // Listing uses registrable-domain rules; password release requires exact host.
+        var parentListed = session.ListMatchesForDomain(new CredentialRequest { Domain = "example.com" });
+        Assert.True(parentListed.Found);
+        Assert.Single(parentListed.Matches!);
+
+        var parentRelease = ResolveWithNonce(session, new CredentialRequest { Domain = "example.com" });
+        Assert.False(parentRelease.Found);
+        Assert.Equal("no_match", parentRelease.Error);
 
         var evilHit = ResolveWithNonce(session, new CredentialRequest
         {
@@ -74,7 +80,7 @@ public class VaultSessionDomainTests : IDisposable
     }
 
     [Fact]
-    public void ResolveForDomain_RequiresExactHostMatch()
+    public void ResolveForDomain_MatchesSameRegistrableDomain()
     {
         var engine = new VaultEngine(_dir, DpapiScope.CurrentUser);
         engine.CreateVault("subdomain-test!", SecurityLevel.Standard);
@@ -97,8 +103,197 @@ public class VaultSessionDomainTests : IDisposable
         Assert.True(exact.Found);
         Assert.Equal("alice", exact.Username);
 
-        var parent = ResolveWithNonce(session, new CredentialRequest { Domain = "example.com" });
-        Assert.False(parent.Found);
+        var parentListed = session.ListMatchesForDomain(new CredentialRequest { Domain = "example.com" });
+        Assert.True(parentListed.Found);
+        Assert.Single(parentListed.Matches!);
+
+        var parentRelease = ResolveWithNonce(session, new CredentialRequest { Domain = "example.com" });
+        Assert.False(parentRelease.Found);
+        Assert.Equal("no_match", parentRelease.Error);
+    }
+
+    [Fact]
+    public void ListMatchesForDomain_MatchesIonos_FromTitleWhenUrlMissing()
+    {
+        var engine = new VaultEngine(_dir, DpapiScope.CurrentUser);
+        engine.CreateVault("ionos-title!", SecurityLevel.Standard);
+        var session = new VaultSession(_dir, DpapiScope.CurrentUser);
+        session.Unlock("ionos-title!");
+
+        session.AddEntry(new VaultEntry
+        {
+            Title = "www.ionos.co.uk",
+            Username = "edge-import@example.com",
+            Password = "pw"
+        });
+
+        var listed = session.ListMatchesForDomain(new CredentialRequest
+        {
+            Domain = "login.ionos.co.uk",
+            Url = "https://login.ionos.co.uk/"
+        });
+
+        Assert.NotNull(listed.Matches);
+        Assert.Single(listed.Matches!);
+        Assert.Equal("edge-import@example.com", listed.Matches![0].Username);
+    }
+
+    [Fact]
+    public void ListMatchesForDomain_MatchesIonos_FromEmbeddedTitleHost()
+    {
+        var engine = new VaultEngine(_dir, DpapiScope.CurrentUser);
+        engine.CreateVault("embedded-title!", SecurityLevel.Standard);
+        var session = new VaultSession(_dir, DpapiScope.CurrentUser);
+        session.Unlock("embedded-title!");
+
+        session.AddEntry(new VaultEntry
+        {
+            Title = "IONOS account login.ionos.co.uk",
+            Username = "user@example.com",
+            Password = "pw"
+        });
+
+        var listed = session.ListMatchesForDomain(new CredentialRequest
+        {
+            Domain = "login.ionos.co.uk",
+            Url = "https://login.ionos.co.uk/"
+        });
+
+        Assert.NotNull(listed.Matches);
+        Assert.Single(listed.Matches!);
+        Assert.Equal("user@example.com", listed.Matches![0].Username);
+    }
+
+    [Fact]
+    public void ResolveForDomain_MatchesIonosSubdomains()
+    {
+        var engine = new VaultEngine(_dir, DpapiScope.CurrentUser);
+        engine.CreateVault("ionos-test!", SecurityLevel.Standard);
+        var session = new VaultSession(_dir, DpapiScope.CurrentUser);
+        session.Unlock("ionos-test!");
+
+        session.AddEntry(new VaultEntry
+        {
+            Title = "IONOS",
+            Username = "user@example.com",
+            Password = "pw",
+            Url = "https://login.ionos.co.uk/"
+        });
+
+        var loginPage = ResolveWithNonce(session, new CredentialRequest
+        {
+            Domain = "login.ionos.co.uk",
+            Url = "https://login.ionos.co.uk/"
+        });
+        Assert.True(loginPage.Found);
+        Assert.Equal("user@example.com", loginPage.Username);
+    }
+
+    [Fact]
+    public void ResolveForDomain_RejectsCrossSubdomainCredentialRelease()
+    {
+        var engine = new VaultEngine(_dir, DpapiScope.CurrentUser);
+        engine.CreateVault("cross-sub!", SecurityLevel.Standard);
+        var session = new VaultSession(_dir, DpapiScope.CurrentUser);
+        session.Unlock("cross-sub!");
+
+        session.AddEntry(new VaultEntry
+        {
+            Title = "IONOS marketing",
+            Username = "user@example.com",
+            Password = "pw",
+            Url = "https://www.ionos.co.uk/"
+        });
+
+        var listed = session.ListMatchesForDomain(new CredentialRequest
+        {
+            Domain = "login.ionos.co.uk",
+            Url = "https://login.ionos.co.uk/"
+        });
+        Assert.Single(listed.Matches!);
+        Assert.False(listed.Matches![0].Releasable);
+
+        var denied = ResolveWithNonce(session, new CredentialRequest
+        {
+            Domain = "login.ionos.co.uk",
+            Url = "https://login.ionos.co.uk/"
+        });
+        Assert.False(denied.Found);
+        Assert.Equal("no_match", denied.Error);
+
+        var entryId = listed.Matches![0].Id;
+        var listedAgain = session.ListMatchesForDomain(new CredentialRequest
+        {
+            Domain = "login.ionos.co.uk",
+            Url = "https://login.ionos.co.uk/"
+        });
+        var byId = ResolveWithNonce(session, new CredentialRequest
+        {
+            Domain = "login.ionos.co.uk",
+            Url = "https://login.ionos.co.uk/",
+            EntryId = entryId,
+            FillNonce = listedAgain.FillNonce
+        });
+        Assert.False(byId.Found);
+        Assert.Equal("no_match", byId.Error);
+    }
+
+    [Fact]
+    public void ResolveForDomain_RejectsSecureNote_EvenWithMatchingUrl()
+    {
+        var engine = new VaultEngine(_dir, DpapiScope.CurrentUser);
+        engine.CreateVault("secure-note!", SecurityLevel.Standard);
+        var session = new VaultSession(_dir, DpapiScope.CurrentUser);
+        session.Unlock("secure-note!");
+
+        session.AddEntry(new VaultEntry
+        {
+            Title = "Secret note",
+            Username = "note-user",
+            Password = "note-secret",
+            Url = "https://login.example.com/note",
+            IsSecureNote = true
+        });
+
+        var listed = session.ListMatchesForDomain(new CredentialRequest
+        {
+            Domain = "login.example.com",
+            Url = "https://login.example.com/note"
+        });
+        Assert.Empty(listed.Matches!);
+
+        session.AddEntry(new VaultEntry
+        {
+            Title = "Real login",
+            Username = "user",
+            Password = "pw",
+            Url = "https://login.example.com"
+        });
+
+        var listedLogin = session.ListMatchesForDomain(new CredentialRequest
+        {
+            Domain = "login.example.com",
+            Url = "https://login.example.com/"
+        });
+        Assert.Single(listedLogin.Matches!);
+
+        session.AddEntry(new VaultEntry
+        {
+            Title = "Hidden secure",
+            Username = "hidden",
+            Password = "hidden-pw",
+            Url = "https://login.example.com/hidden",
+            IsSecureNote = true
+        });
+
+        var resolve = ResolveWithNonce(session, new CredentialRequest
+        {
+            Domain = "login.example.com",
+            Url = "https://login.example.com/hidden",
+            EntryId = session.Context!.Payload.Entries.First(e => e.IsSecureNote && e.Title == "Hidden secure").Id
+        });
+        Assert.False(resolve.Found);
+        Assert.Equal("no_match", resolve.Error);
     }
 
     [Fact]

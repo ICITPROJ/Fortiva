@@ -38,7 +38,8 @@ public static class BrowserBridgeInstallService
         var extensionReady = Directory.Exists(staging)
             && File.Exists(Path.Combine(staging, "manifest.json"));
         var bridgeReady = !string.IsNullOrEmpty(bridgePath) && File.Exists(bridgePath);
-        var registered = IsNativeHostRegistered(hostName, manifestPath, enterprise);
+        var manifestValid = bridgeReady && IsManifestBridgePathValid(manifestPath, bridgePath!);
+        var registered = manifestValid && IsNativeHostRegistered(hostName, manifestPath, enterprise);
         var forceInstall = enterprise && BrowserExtensionPolicyService.IsForceInstallConfigured();
 
         return new BrowserBridgeInstallStatus(
@@ -52,6 +53,54 @@ public static class BrowserBridgeInstallService
             hostName,
             extensionReady ? TryReadExtensionId(staging) : null,
             forceInstall);
+    }
+
+    /// <summary>
+    /// Repairs stale native-messaging manifests (e.g. bridge path pointing at deleted temp folders).
+    /// Returns full <see cref="EnsureInstalled"/> when extension staging also needs refresh.
+    /// </summary>
+    public static BrowserBridgeInstallResult RepairNativeHostIfStale(string appBaseDirectory, bool enterprise)
+    {
+        var bridgePath = ResolveBridgeExecutable(appBaseDirectory);
+        if (string.IsNullOrEmpty(bridgePath) || !File.Exists(bridgePath))
+        {
+            return BrowserBridgeInstallResult.Fail(
+                "Fortiva browser bridge is missing. Reinstall Fortiva.");
+        }
+
+        var hostName = HostNameForEdition(enterprise);
+        var manifestPath = GetNativeMessagingManifestPath(enterprise);
+        var stagingPath = GetExtensionStagingPath(enterprise);
+        var extensionReady = Directory.Exists(stagingPath)
+            && File.Exists(Path.Combine(stagingPath, "manifest.json"));
+
+        if (!extensionReady)
+            return EnsureInstalled(appBaseDirectory, enterprise);
+
+        string extensionId;
+        try
+        {
+            extensionId = ExtensionIdHelper.ReadFromManifestFile(Path.Combine(stagingPath, "manifest.json"));
+        }
+        catch (Exception ex)
+        {
+            return BrowserBridgeInstallResult.Fail($"Invalid extension manifest: {ex.Message}");
+        }
+
+        var fullManifest = Path.GetFullPath(manifestPath);
+        if (IsManifestBridgePathValid(manifestPath, bridgePath)
+            && IsNativeHostRegistered(hostName, fullManifest, enterprise))
+        {
+            BridgeInstallIntegrity.RecordBridgeHostHash(bridgePath);
+            return BrowserBridgeInstallResult.Ok(stagingPath, bridgePath, extensionId, hostName, manifestPath);
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
+        File.WriteAllText(manifestPath, BuildManifestJson(hostName, bridgePath, extensionId));
+        RegisterNativeHost(hostName, manifestPath);
+        TryRegisterMachineNativeHost(appBaseDirectory, hostName, extensionId, enterprise);
+        BridgeInstallIntegrity.RecordBridgeHostHash(bridgePath);
+        return BrowserBridgeInstallResult.Ok(stagingPath, bridgePath, extensionId, hostName, manifestPath);
     }
 
     public static BrowserBridgeInstallResult EnsureInstalled(string appBaseDirectory, bool enterprise)
@@ -84,15 +133,20 @@ public static class BrowserBridgeInstallService
             return BrowserBridgeInstallResult.Fail($"Invalid extension manifest: {ex.Message}");
         }
 
+        if (!BrowserExtensionConstants.IsStableExtensionId(extensionId))
+        {
+            return BrowserBridgeInstallResult.Fail(
+                "Extension ID does not match the pinned Fortiva release. Reinstall from an official build.");
+        }
+
         var manifestPath = GetNativeMessagingManifestPath(enterprise);
         Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
         var manifestJson = BuildManifestJson(hostName, bridgePath, extensionId);
         File.WriteAllText(manifestPath, manifestJson);
 
         RegisterNativeHost(hostName, manifestPath);
-
-        if (enterprise)
-            TryRegisterMachineNativeHost(appBaseDirectory, hostName, extensionId);
+        TryRegisterMachineNativeHost(appBaseDirectory, hostName, extensionId, enterprise);
+        BridgeInstallIntegrity.RecordBridgeHostHash(bridgePath);
 
         return BrowserBridgeInstallResult.Ok(stagingPath, bridgePath, extensionId, hostName, manifestPath);
     }
@@ -198,16 +252,39 @@ public static class BrowserBridgeInstallService
         }
     }
 
+    internal static bool IsManifestBridgePathValid(string manifestPath, string expectedBridgePath)
+    {
+        if (!File.Exists(manifestPath))
+            return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(manifestPath));
+            var pathInManifest = doc.RootElement.GetProperty("path").GetString();
+            if (string.IsNullOrWhiteSpace(pathInManifest))
+                return false;
+
+            var fullExpected = Path.GetFullPath(expectedBridgePath);
+            var fullManifest = Path.GetFullPath(pathInManifest);
+            return string.Equals(fullManifest, fullExpected, StringComparison.OrdinalIgnoreCase)
+                && File.Exists(fullManifest);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static bool IsNativeHostRegistered(string hostName, string expectedManifestPath, bool enterprise)
     {
         var expected = Path.GetFullPath(expectedManifestPath);
-        if (UserNativeHostMatches(hostName, expected))
-            return File.Exists(expected);
+        if (UserNativeHostMatches(hostName, expected) && File.Exists(expected))
+            return true;
 
         if (!enterprise)
             return false;
 
-        var machineManifest = ResolveMachineNativeMessagingManifestPath(hostName);
+        var machineManifest = ResolveMachineNativeMessagingManifestPath(hostName, enterprise);
         return machineManifest is not null
             && BrowserExtensionPolicyService.IsNativeHostRegisteredMachineWide(hostName, machineManifest);
     }
@@ -224,8 +301,9 @@ public static class BrowserBridgeInstallService
         return true;
     }
 
-    internal static string? ResolveMachineNativeMessagingManifestPath(string hostName)
+    internal static string? ResolveMachineNativeMessagingManifestPath(string hostName, bool enterprise)
     {
+        var productFolder = enterprise ? "Fortiva Enterprise" : "Fortiva Personal";
         foreach (var programFiles in new[]
                  {
                      Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
@@ -238,7 +316,7 @@ public static class BrowserBridgeInstallService
             var candidate = Path.Combine(
                 programFiles,
                 "icmclab studio",
-                "Fortiva Enterprise",
+                productFolder,
                 "NativeMessaging",
                 hostName + ".json");
             if (File.Exists(candidate))
@@ -248,12 +326,16 @@ public static class BrowserBridgeInstallService
         return null;
     }
 
-    private static void TryRegisterMachineNativeHost(string appBaseDirectory, string hostName, string extensionId)
+    private static void TryRegisterMachineNativeHost(
+        string appBaseDirectory,
+        string hostName,
+        string extensionId,
+        bool enterprise)
     {
         if (!OperatingSystem.IsWindows())
             return;
 
-        var machineManifest = ResolveMachineNativeMessagingManifestPath(hostName);
+        var machineManifest = ResolveMachineNativeMessagingManifestPath(hostName, enterprise);
         if (machineManifest is not null
             && BrowserExtensionPolicyService.IsNativeHostRegisteredMachineWide(hostName, machineManifest))
             return;
@@ -264,6 +346,9 @@ public static class BrowserBridgeInstallService
 
         var installRoot = Path.GetDirectoryName(Path.GetDirectoryName(bridgePath));
         if (string.IsNullOrEmpty(installRoot))
+            return;
+
+        if (!enterprise && !IsMachineWideInstallRoot(installRoot))
             return;
 
         var manifestPath = Path.Combine(installRoot, "NativeMessaging", hostName + ".json");
@@ -291,6 +376,22 @@ public static class BrowserBridgeInstallService
     {
         yield return $@"Software\Google\Chrome\NativeMessagingHosts\{hostName}";
         yield return $@"Software\Microsoft\Edge\NativeMessagingHosts\{hostName}";
+    }
+
+    private static bool IsMachineWideInstallRoot(string installRoot)
+    {
+        foreach (var programFiles in new[]
+                 {
+                     Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                     Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)
+                 })
+        {
+            if (!string.IsNullOrEmpty(programFiles)
+                && installRoot.StartsWith(programFiles, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 
     private static void RegisterNativeHost(string hostName, string manifestPath)

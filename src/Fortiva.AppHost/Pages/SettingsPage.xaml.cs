@@ -3,6 +3,7 @@ using Fortiva.AppHost.ViewModels;
 using Fortiva.Core.Password;
 using Fortiva.Core.Platform;
 using Fortiva.Core.Policy;
+using Fortiva.Core.Vault;
 using Fortiva.Core.Updates;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -20,6 +21,7 @@ public sealed partial class SettingsPage : Page
     private int _clipboardSeconds = 30;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _autoLockSaveTimer;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _clipboardSaveTimer;
+    private Action? _stateChangedHandler;
 
     public SettingsPage()
     {
@@ -45,7 +47,17 @@ public sealed partial class SettingsPage : Page
     {
         base.OnNavigatedTo(e);
         ThemeService.ApplyToElement(this);
+        _stateChangedHandler ??= () => DispatcherQueue.TryEnqueue(RefreshBrowserExtensionUi);
+        _vm.StateChanged += _stateChangedHandler;
+        _bridgeHealthCheckedThisVisit = false;
         LoadSettings();
+    }
+
+    protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        if (_stateChangedHandler is not null)
+            _vm.StateChanged -= _stateChangedHandler;
     }
 
     private void LoadSettings()
@@ -77,6 +89,9 @@ public sealed partial class SettingsPage : Page
 
         AutoLockLabel.Text = FormatSeconds(_autoLockSeconds);
         ClipboardLabel.Text = $"Clipboard clears after {_clipboardSeconds} seconds";
+        SettingsSubtitle.Text = _vm.IsEnterprise
+            ? "Security, browser extension, and enterprise policy."
+            : "Appearance, security, browser Fill, and updates.";
         LoadThemeCombo();
         ParanoiaModeSwitch.Toggled -= ParanoiaMode_Toggled;
         ParanoiaModeSwitch.IsOn = policy?.MandatoryParanoiaMode == true || _vm.PersonalSettings.ParanoiaMode;
@@ -92,8 +107,8 @@ public sealed partial class SettingsPage : Page
 
         HelloStatus.Text = _hello.IsConfigured
             ? _hello.IsHardwareBacked
-                ? "Windows Hello is configured (hardware-backed)."
-                : "Windows Hello is configured."
+                ? "Windows Hello is configured (hardware-backed TPM)."
+                : "Windows Hello is configured (software protection — upgrade to TPM when available)."
             : "Windows Hello is not configured.";
         _ = RefreshHelloUpgradeBannerAsync();
 
@@ -139,7 +154,16 @@ public sealed partial class SettingsPage : Page
 
         RefreshPortableUi();
         RefreshSharedVaultUi();
-        RefreshBrowserExtensionUi();
+        try
+        {
+            RefreshBrowserExtensionUi();
+        }
+        catch (Exception ex)
+        {
+            App.LogException("SettingsPage.LoadSettings.RefreshBrowserExtensionUi", ex);
+            BrowserExtensionHealthHeadline.Text = "Browser extension status unavailable";
+            BrowserExtensionStatusText.Text = "Open Settings again after unlock, or restart Fortiva.";
+        }
     }
 
     private void RefreshBrowserExtensionUi()
@@ -151,13 +175,122 @@ public sealed partial class SettingsPage : Page
             return;
 
         var status = BrowserExtensionSetupHelper.GetStatus(_vm);
-        BrowserExtensionStatusText.Text = BrowserExtensionSetupHelper.FormatStatusMessage(status);
 
-        BrowserExtensionPathText.Text = status.ExtensionFilesReady
+        var readiness = BrowserExtensionSetupHelper.GetFillReadiness(_vm);
+        var (headline, detail, glyph) = BrowserExtensionSetupHelper.DescribeFillReadiness(readiness);
+        BrowserExtensionHealthHeadline.Text = headline;
+        BrowserExtensionStatusText.Text = detail;
+        BridgeHealthIcon.Glyph = glyph;
+        BridgeHealthIcon.Foreground = readiness switch
+        {
+            BrowserExtensionSetupHelper.BridgeFillReadiness.Ready => FortivaThemeResources.StatusSuccess,
+            BrowserExtensionSetupHelper.BridgeFillReadiness.VaultLocked or
+            BrowserExtensionSetupHelper.BridgeFillReadiness.BridgeStarting => FortivaThemeResources.StatusWarning,
+            BrowserExtensionSetupHelper.BridgeFillReadiness.FilesMissing => FortivaThemeResources.StatusError,
+            _ => FortivaControlTheme.GetBrush("FortivaAccentBrush", null, BridgeHealthIcon),
+        };
+
+        ConnectBrowserBtn.IsEnabled = readiness != BrowserExtensionSetupHelper.BridgeFillReadiness.PolicyManaged;
+        RestartBridgeBtn.IsEnabled = _vm.IsUnlocked;
+        OpenExtensionsBtn.IsEnabled = status.IsReadyForBrowser;
+
+        var browser = BrowserExtensionSetupHelper.DetectPreferredBrowser();
+        var browserName = browser == BrowserExtensionSetupHelper.SupportedBrowser.Chrome ? "Chrome" : "Edge";
+        OpenExtensionsBtn.Content = $"Open {browserName} extensions";
+
+        var pathLines = status.ExtensionFilesReady
             ? $"Extension folder: {status.ExtensionStagingPath}"
             : status.ExtensionSourcePath is not null
                 ? $"Will copy extension from: {status.ExtensionSourcePath}"
                 : "Extension folder not prepared yet.";
+
+        if (BrowserExtensionSetupHelper.ExtensionVersionNeedsReload(_vm, out var extVer, out var appVer))
+        {
+            pathLines += $"\nReload Fortiva Autofill in {browserName} — extension v{extVer}, app v{appVer}.";
+        }
+
+        BrowserExtensionPathText.Text = pathLines;
+
+        if (_vm.IsUnlocked
+            && readiness != BrowserExtensionSetupHelper.BridgeFillReadiness.Ready
+            && !_bridgeHealthCheckedThisVisit)
+        {
+            _bridgeHealthCheckedThisVisit = true;
+            ScheduleBridgeHealthRefresh();
+        }
+    }
+
+    private bool _bridgeHealthRefreshPending;
+    private bool _bridgeHealthCheckedThisVisit;
+
+    private void ScheduleBridgeHealthRefresh()
+    {
+        if (_bridgeHealthRefreshPending)
+            return;
+        _bridgeHealthRefreshPending = true;
+
+        _ = Task.Run(() =>
+        {
+            try { _vm.EnsureBridgeInfrastructureHealthy(); }
+            catch (Exception ex) { App.LogException("SettingsPage.EnsureBridgeInfrastructureHealthy", ex); }
+        }).ContinueWith(_ =>
+        {
+            _bridgeHealthRefreshPending = false;
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                try { RefreshBrowserExtensionUi(); }
+                catch (Exception ex) { App.LogException("SettingsPage.RefreshBrowserExtensionUi.afterBridge", ex); }
+            });
+        }, TaskScheduler.Default);
+    }
+
+    private async void RestartBridge_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_vm.IsUnlocked)
+        {
+            ShowInfo("Unlock the vault before restarting the browser bridge.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        RestartBridgeBtn.IsEnabled = false;
+        try
+        {
+            await _vm.RestartBridgeInfrastructureAsync();
+            RefreshBrowserExtensionUi();
+            var browser = BrowserExtensionSetupHelper.DetectPreferredBrowser();
+            var browserName = browser == BrowserExtensionSetupHelper.SupportedBrowser.Chrome ? "Chrome" : "Edge";
+            ShowInfo($"Browser bridge restarted. Reload the Fortiva extension in {browserName} if Fill still fails.",
+                InfoBarSeverity.Success);
+        }
+        catch (Exception ex)
+        {
+            ShowInfo(App.DescribeException(ex), InfoBarSeverity.Error);
+        }
+        finally
+        {
+            RestartBridgeBtn.IsEnabled = _vm.IsUnlocked;
+        }
+    }
+
+    private async void OpenExtensions_Click(object sender, RoutedEventArgs e)
+    {
+        OpenExtensionsBtn.IsEnabled = false;
+        try
+        {
+            var browser = BrowserExtensionSetupHelper.DetectPreferredBrowser();
+            await BrowserExtensionSetupHelper.OpenBrowserExtensionsAsync(browser);
+            var browserName = browser == BrowserExtensionSetupHelper.SupportedBrowser.Chrome ? "Chrome" : "Edge";
+            ShowInfo($"In {browserName}, find Fortiva Autofill and click Reload after Fortiva updates.",
+                InfoBarSeverity.Informational);
+        }
+        catch (Exception ex)
+        {
+            ShowInfo(App.DescribeException(ex), InfoBarSeverity.Warning);
+        }
+        finally
+        {
+            OpenExtensionsBtn.IsEnabled = true;
+        }
     }
 
     private async void ConnectBrowser_Click(object sender, RoutedEventArgs e)
@@ -174,10 +307,13 @@ public sealed partial class SettingsPage : Page
             }
 
             var browser = result.Browser == BrowserExtensionSetupHelper.SupportedBrowser.Chrome ? "Chrome" : "Edge";
+            var reloadHint = BrowserExtensionSetupHelper.ExtensionVersionNeedsReload(_vm, out var extVer, out var appVer)
+                ? $" Reload Fortiva Autofill in {browser} (extension v{extVer}, app v{appVer})."
+                : "";
             var msg = result.Mode switch
             {
                 BrowserExtensionSetupHelper.ExtensionConnectMode.AutoLoaded =>
-                    $"Fortiva opened {browser} with the extension. Click the Fortiva icon on a login page to fill credentials.",
+                    $"Fortiva opened {browser} with the extension. On a login page, click the Fortiva icon → Fill.{reloadHint}",
                 BrowserExtensionSetupHelper.ExtensionConnectMode.PolicyManaged =>
                     "IT policy will install the browser extension. Restart Chrome or Edge if the Fortiva icon is not visible yet.",
                 _ =>
@@ -294,6 +430,16 @@ public sealed partial class SettingsPage : Page
 
         if (!allowed)
             PortableStatusText.Text += "\nPortable mode is disabled by policy.";
+
+        var localDir = _vm.VaultDirectory;
+        var otherDir = _vm.CounterpartVaultDirectory;
+        if (!string.IsNullOrWhiteSpace(otherDir)
+            && (VaultSyncMarker.Exists(localDir) || VaultSyncMarker.Exists(otherDir)))
+        {
+            var marker = VaultSyncMarker.Read(localDir) ?? VaultSyncMarker.Read(otherDir);
+            PortableStatusText.Text += "\n\nWarning: " + (marker?.Message
+                ?? "A previous sync did not finish cleanly. Verify both vault copies, then use Sync.");
+        }
     }
 
     private void RefreshAboutLogo()
@@ -418,7 +564,21 @@ public sealed partial class SettingsPage : Page
             await _vm.ChangeMasterPasswordAsync(NewPwd.Password);
 
             if (_hello.IsConfigured)
-                await _vm.SyncHelloCredentialAsync(NewPwd.Password);
+            {
+                var helloResult = await HelloService.VerifyAsync("Fortiva - confirm Windows Hello");
+                if (!helloResult.Verified)
+                {
+                    ShowInfo(
+                        "Master password changed, but Windows Hello was not re-bound: "
+                        + (helloResult.ErrorMessage ?? "verification failed.")
+                        + " Re-enable Hello in Settings when ready.",
+                        InfoBarSeverity.Warning);
+                }
+                else
+                {
+                    await _vm.SyncHelloCredentialAsync(NewPwd.Password);
+                }
+            }
 
             ShowInfo("Master password changed successfully.", InfoBarSeverity.Success);
             CurrentPwd.Password = NewPwd.Password = NewPwdConfirm.Password = "";
@@ -440,6 +600,7 @@ public sealed partial class SettingsPage : Page
     {
         if (!_vm.IsUnlocked) { ShowInfo("Unlock the vault before setting up Windows Hello."); return; }
         if (_vm.IsReadOnly) { ShowInfo("Vault is read-only. Confirm rollback on the unlock screen first.", InfoBarSeverity.Warning); return; }
+        SetupHelloBtn.IsEnabled = false;
         var pwdBox = new PasswordBox { PlaceholderText = "Enter your current master password" };
         var desc   = new TextBlock
         {
@@ -460,37 +621,55 @@ public sealed partial class SettingsPage : Page
             Content             = panel,
             PrimaryButtonText   = "Continue",
             SecondaryButtonText = "Cancel",
+            DefaultButton       = ContentDialogButton.Primary,
             XamlRoot            = XamlRoot
         };
 
         FortivaDialogs.Configure(dialog, XamlRoot);
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            SetupHelloBtn.IsEnabled = true;
+            return;
+        }
         if (string.IsNullOrEmpty(pwdBox.Password))
         {
             ShowInfo("Master password is required.", InfoBarSeverity.Error);
+            SetupHelloBtn.IsEnabled = true;
             return;
         }
 
         if (!_vm.VerifyMasterPassword(pwdBox.Password))
         {
             ShowInfo("Master password is incorrect.", InfoBarSeverity.Error);
+            SetupHelloBtn.IsEnabled = true;
             return;
         }
 
-        var helloResult = await HelloService.VerifyAsync("Fortiva - set up Windows Hello");
-        if (!helloResult.Verified)
+        try
         {
-            ShowInfo(helloResult.ErrorMessage ?? "Windows Hello verification failed.", InfoBarSeverity.Error);
-            return;
-        }
+            var helloResult = await HelloService.VerifyAsync("Fortiva - set up Windows Hello");
+            if (!helloResult.Verified)
+            {
+                ShowInfo(helloResult.ErrorMessage ?? "Windows Hello verification failed.", InfoBarSeverity.Error);
+                return;
+            }
 
-        await _vm.SyncHelloCredentialAsync(pwdBox.Password);
-        HelloStatus.Text = _hello.IsHardwareBacked
-            ? "Windows Hello is configured (hardware-backed)."
-            : "Windows Hello is configured.";
-        HelloUpgradeInfo.IsOpen = false;
-        RemoveHelloBtn.IsEnabled = true;
-        ShowInfo("Windows Hello set up. You can unlock with face, fingerprint, or PIN.", InfoBarSeverity.Success);
+            await _vm.SyncHelloCredentialAsync(pwdBox.Password);
+            HelloStatus.Text = _hello.IsHardwareBacked
+                ? "Windows Hello is configured (hardware-backed)."
+                : "Windows Hello is configured.";
+            HelloUpgradeInfo.IsOpen = false;
+            RemoveHelloBtn.IsEnabled = true;
+            ShowInfo("Windows Hello set up. You can unlock with face, fingerprint, or PIN.", InfoBarSeverity.Success);
+        }
+        catch (Exception ex)
+        {
+            ShowInfo(App.DescribeException(ex), InfoBarSeverity.Error);
+        }
+        finally
+        {
+            SetupHelloBtn.IsEnabled = true;
+        }
     }
 
     private async void RemoveHello_Click(object sender, RoutedEventArgs e)
@@ -622,6 +801,21 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
+        var confirm = new ContentDialog
+        {
+            Title = "Switch to portable vault?",
+            Content = "Your local vault at %APPDATA%\\Fortiva is not deleted — it stays on this PC.\n\n" +
+                      "Use \"Use local vault\" in Settings anytime to switch back.\n\n" +
+                      $"Portable vault: {vaultDirectory}",
+            PrimaryButtonText = "Switch",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Content.XamlRoot
+        };
+        FortivaDialogs.Configure(confirm, Content.XamlRoot);
+        if (await confirm.ShowAsync() != ContentDialogResult.Primary)
+            return;
+
         try
         {
             _vm.SwitchToPortableVault(vaultDirectory);
@@ -660,6 +854,25 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
+        var localDir = _vm.VaultDirectory;
+        if (VaultSyncMarker.Exists(localDir) || VaultSyncMarker.Exists(other))
+        {
+            var marker = VaultSyncMarker.Read(localDir) ?? VaultSyncMarker.Read(other);
+            var warn = new ContentDialog
+            {
+                Title = "Sync divergence warning",
+                Content = (marker?.Message ?? "A previous sync did not complete cleanly.")
+                    + "\n\nOnly continue if you have verified both vault copies. Sync will clear this warning.",
+                PrimaryButtonText = "I've verified — continue",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = XamlRoot
+            };
+            FortivaDialogs.Configure(warn, XamlRoot);
+            if (await warn.ShowAsync() != ContentDialogResult.Primary)
+                return;
+        }
+
         var counterpartLabel = _vm.IsPortableMode ? "your local vault" : "the USB vault";
         var pwdBox = new PasswordBox { PlaceholderText = $"Master password for {counterpartLabel}" };
         var desc = new TextBlock
@@ -695,6 +908,9 @@ public sealed partial class SettingsPage : Page
         SyncBtn.IsEnabled = false;
         try
         {
+            if (VaultSyncMarker.Exists(localDir) || VaultSyncMarker.Exists(other))
+                VaultSyncMarker.ClearBoth(localDir, other);
+
             var result = await _vm.SyncWithPortableAsync(pwdBox.Password);
             ShowInfo(
                 $"Sync complete. This vault: +{result.Local.Added} added, {result.Local.Updated} updated, " +
@@ -709,6 +925,14 @@ public sealed partial class SettingsPage : Page
         {
             ShowInfo("Master password for the counterpart vault is incorrect.", InfoBarSeverity.Error);
         }
+        catch (VaultSyncDivergedException ex)
+        {
+            ShowInfo(ex.Message, InfoBarSeverity.Error);
+        }
+        catch (VaultSyncPartialException ex)
+        {
+            ShowInfo(ex.Message, InfoBarSeverity.Warning);
+        }
         catch (Exception ex)
         {
             ShowInfo(App.DescribeException(ex), InfoBarSeverity.Error);
@@ -719,11 +943,11 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private async Task RefreshHelloUpgradeBannerAsync()
+    private Task RefreshHelloUpgradeBannerAsync()
     {
-        var show = !_vm.PersonalSettings.HelloHardwareUpgradeDismissed &&
-                   await _hello.ShouldPromptHardwareUpgradeAsync();
-        HelloUpgradeInfo.IsOpen = show;
+        HelloUpgradeInfo.IsOpen = !_vm.PersonalSettings.HelloHardwareUpgradeDismissed
+            && _hello.UsesSoftwareOnlyHello;
+        return Task.CompletedTask;
     }
 
     private void HelloUpgradeInfo_Closed(InfoBar sender, InfoBarClosedEventArgs args)

@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using Fortiva.AppHost.Services;
 using Fortiva.AppHost.ViewModels;
+using Fortiva.Core.BrowserBridge;
 using Fortiva.Core.Licensing;
 using Fortiva.Core.Platform;
 
@@ -16,7 +17,7 @@ public partial class App : Application
     public static IntPtr MainWindowHandle { get; private set; }
 
     private static DispatcherQueue? _uiDispatcher;
-    private Window? _window;
+    private static Window? _window;
 
     internal static void RegisterUiDispatcher(DispatcherQueue dispatcher) => _uiDispatcher = dispatcher;
 
@@ -99,6 +100,22 @@ public partial class App : Application
         catch { }
     }
 
+    /// <summary>Refreshes the cached HWND so WinRT UI (Hello, pickers) parents to the live window.</summary>
+    public static IntPtr EnsureMainWindowHandle()
+    {
+        try
+        {
+            if (_window is not null)
+                MainWindowHandle = WinRT.Interop.WindowNative.GetWindowHandle(_window);
+        }
+        catch (Exception ex)
+        {
+            LogException("EnsureMainWindowHandle", ex);
+        }
+
+        return MainWindowHandle;
+    }
+
     internal static string DescribeException(Exception ex)
     {
         if (ex is AggregateException aggregate)
@@ -147,9 +164,27 @@ public partial class App : Application
 
             ThemeService.ApplyApplicationThemeEarly(ShellViewModel.Current.ThemePreference);
 
+            if (Edition is "Personal" or "Enterprise")
+            {
+                var installRoot = AppContext.BaseDirectory;
+                var enterprise = Edition == "Enterprise";
+                BridgeClientValidator.ConfigureAllowedInstallRoots(installRoot);
+                ShellViewModel.Current.StartBridgeUnlockListener(installRoot);
+                try
+                {
+                    BrowserBridgeInstallService.RepairNativeHostIfStale(installRoot, enterprise);
+                }
+                catch (Exception ex)
+                {
+                    LogException("RepairNativeHostIfStale", ex);
+                }
+            }
+
             _window = new MainWindow();
             MainWindowHandle = WinRT.Interop.WindowNative.GetWindowHandle(_window);
+            _window.Activated += (_, _) => EnsureMainWindowHandle();
             _window.Activate();
+            EnsureMainWindowHandle();
 
             if (Edition == "Personal")
                 _ = UpdateService.Current.TryAutoUpdateOnLaunchAsync();

@@ -61,7 +61,7 @@ dotnet test  tests/Fortiva.AppHost.Tests/ -p:Platform=x64     # ViewModel + Hell
 
 ```powershell
 ./build-release.ps1
-./build-installers.ps1 -Version 1.0.0
+./build-installers.ps1   # version from Directory.Build.props (or -Version x.y.z)
 ```
 
 `build-installers.ps1` downloads **WebView2** and **VC++ redistributable** bootstrappers and embeds them in each setup EXE. Clients receive silent prerequisite installation on first run.

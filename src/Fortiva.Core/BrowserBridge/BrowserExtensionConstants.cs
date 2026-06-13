@@ -16,4 +16,8 @@ public static class BrowserExtensionConstants
 
     public static string FormatForceInstallListValue(string updateManifestUrl)
         => $"{StableExtensionId};{updateManifestUrl}";
+
+    public static bool IsStableExtensionId(string? extensionId)
+        => !string.IsNullOrWhiteSpace(extensionId)
+            && string.Equals(extensionId.Trim(), StableExtensionId, StringComparison.OrdinalIgnoreCase);
 }

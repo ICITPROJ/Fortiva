@@ -1,6 +1,7 @@
 using Fortiva.AppHost.Services;
 using Fortiva.AppHost.ViewModels;
 using Fortiva.Core.Otp;
+using Fortiva.Core.Vault;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -15,7 +16,15 @@ public sealed partial class VaultPage : Page
     private Action? _stateChangedHandler;
     private Action? _vaultLocationHandler;
     private string _selectedCategoryKey = VaultCategoryFilter.AllKey;
+    private Guid? _importBatchFilter;
     private bool _categoryListInitialized;
+    private bool _listViewMode;
+    private VaultEntryViewModel? _selectedEntry;
+    private VaultEntryPaneHost? _paneHost;
+    private CancellationTokenSource? _faviconCts;
+    private bool _syncingSelection;
+    private Guid? _pendingRestoreEntryId;
+    private const double MasterDetailMinWidth = 1080;
 
     public VaultPage()
     {
@@ -30,18 +39,63 @@ public sealed partial class VaultPage : Page
         _clipboard.RefreshPolicy(_vm.Policy, _vm.PersonalSettings.ClipboardClearSeconds);
         _stateChangedHandler = () => DispatcherQueue.TryEnqueue(() =>
         {
+            ApplyReadOnlyChrome();
             RefreshCategories();
             RefreshList();
         });
         _vm.StateChanged += _stateChangedHandler;
         _vaultLocationHandler = () => DispatcherQueue.TryEnqueue(() => RefreshList());
         _vm.VaultLocationChanged += _vaultLocationHandler;
+        _vm.ConfirmDiscardBeforeLockAsync = async () =>
+        {
+            if (_paneHost?.ConfirmCloseAsync is { } confirm)
+                return await confirm();
+            return true;
+        };
         ReadOnlyBar.IsOpen = _vm.IsReadOnly;
         if (_vm.IsReadOnly && !string.IsNullOrEmpty(_vm.Session?.RollbackWarning))
             ReadOnlyBar.Message = _vm.Session.RollbackWarning +
                 " You can view entries but not edit. Use Enable editing below to confirm and unlock write access.";
+
+        var pendingQuickAdd = false;
+        Guid? openEntryId = null;
+        if (e.Parameter is VaultPageNavigationContext ctx)
+        {
+            if (!string.IsNullOrWhiteSpace(ctx.SearchQuery))
+                SearchBox.Text = ctx.SearchQuery;
+            _importBatchFilter = ctx.ImportBatchId ?? _vm.VaultImportBatchFilter;
+            pendingQuickAdd = ctx.QuickAdd;
+            openEntryId = ctx.OpenEntryId;
+        }
+        else if (e.Parameter is Guid batchId)
+        {
+            _importBatchFilter = batchId;
+        }
+        else
+        {
+            _importBatchFilter = _vm.VaultImportBatchFilter;
+            var pendingSearch = _vm.ConsumePendingVaultSearch();
+            if (!string.IsNullOrWhiteSpace(pendingSearch))
+                SearchBox.Text = pendingSearch;
+        }
+
+        if (_importBatchFilter.HasValue)
+            _vm.VaultImportBatchFilter = _importBatchFilter;
+
+        _listViewMode = _vm.PersonalSettings.VaultUseListView;
+        GridViewBtn.IsChecked = !_listViewMode;
+        ListViewBtn.IsChecked = _listViewMode;
+        ApplyViewToggleChrome();
+
+        ApplyReadOnlyChrome();
+
         RefreshCategories();
         RefreshList();
+
+        if (openEntryId is { } entryId)
+            TryOpenEntry(entryId);
+        else if (pendingQuickAdd)
+            _ = QuickAddAsync();
     }
 
     protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
@@ -56,6 +110,30 @@ public sealed partial class VaultPage : Page
         {
             _vm.VaultLocationChanged -= _vaultLocationHandler;
             _vaultLocationHandler = null;
+        }
+
+        if (_vm.ConfirmDiscardBeforeLockAsync is not null)
+            _vm.ConfirmDiscardBeforeLockAsync = null;
+
+        _faviconCts?.Cancel();
+        _faviconCts = null;
+        HideDetailPaneCore();
+    }
+
+    private void Page_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (e.NewSize.Width < MasterDetailMinWidth)
+        {
+            if (_selectedEntry is not null)
+                _pendingRestoreEntryId = _selectedEntry.Id;
+            _ = HideDetailPaneAsync(force: true);
+            return;
+        }
+
+        if (e.NewSize.Width >= MasterDetailMinWidth && _pendingRestoreEntryId is { } restoreId)
+        {
+            _pendingRestoreEntryId = null;
+            TryOpenEntry(restoreId);
         }
     }
 
@@ -81,6 +159,8 @@ public sealed partial class VaultPage : Page
     {
         var q = SearchBox.Text?.Trim();
         IEnumerable<VaultEntryViewModel> source = string.IsNullOrEmpty(q) ? _vm.Entries : _vm.Search(q);
+        if (_importBatchFilter is { } batchFilter)
+            source = source.Where(e => e.ImportBatchId == batchFilter);
         source = VaultCategoryFilter.Apply(source, _selectedCategoryKey);
 
         var list = source
@@ -88,15 +168,46 @@ public sealed partial class VaultPage : Page
             .ThenBy(e => e.Title, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        var keepDetailId = DetailPane.Visibility == Visibility.Visible ? _selectedEntry?.Id : null;
+
         EntryGrid.ItemsSource = list;
+        EntryList.ItemsSource = list;
+
+        if (keepDetailId is { } detailId)
+        {
+            var refreshed = list.FirstOrDefault(e => e.Id == detailId);
+            if (refreshed is not null)
+            {
+                SelectSingleEntry(refreshed);
+                _selectedEntry = refreshed;
+            }
+            else
+            {
+                HideDetailPaneCore();
+            }
+        }
 
         var total = _vm.Entries.Count;
         var favorites = _vm.Entries.Count(e => e.IsFavorite);
         var totp = _vm.Entries.Count(e => e.HasTotp);
 
-        VaultSubtitle.Text = total == 0
-            ? "Encrypted on this device · nothing leaves your PC"
-            : $"{total} {(total == 1 ? "entry" : "entries")} · favorites first · tap a card to open";
+        ClearImportFilterBtn.Visibility = _importBatchFilter.HasValue
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        if (_importBatchFilter is { } filterId)
+        {
+            var batch = _vm.ImportHistory().FirstOrDefault(b => b.Id == filterId);
+            VaultSubtitle.Text = batch is null
+                ? "Showing entries from one import"
+                : FormatImportFilterSubtitle(batch);
+        }
+        else
+        {
+            VaultSubtitle.Text = total == 0
+                ? "Encrypted on this device · nothing leaves your PC"
+                : $"{total} {(total == 1 ? "entry" : "entries")} · favorites first · tap to open";
+        }
 
         StatFavorites.Text = $"{favorites} fav{(favorites == 1 ? "" : "s")}";
         StatTotp.Text = $"{totp} · 2FA";
@@ -115,7 +226,183 @@ public sealed partial class VaultPage : Page
 
         EmptyState.Visibility = vaultEmpty ? Visibility.Visible : Visibility.Collapsed;
         EmptyCategoryState.Visibility = categoryEmpty ? Visibility.Visible : Visibility.Collapsed;
-        EntryGrid.Visibility = showing > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (showing > 0)
+        {
+            EntryGrid.Visibility = _listViewMode ? Visibility.Collapsed : Visibility.Visible;
+            EntryList.Visibility = _listViewMode ? Visibility.Visible : Visibility.Collapsed;
+        }
+        else
+        {
+            EntryGrid.Visibility = Visibility.Collapsed;
+            EntryList.Visibility = Visibility.Collapsed;
+        }
+
+        PrefetchFavicons(list);
+    }
+
+    private void PrefetchFavicons(IReadOnlyList<VaultEntryViewModel> entries)
+    {
+        foreach (var entry in entries)
+            entry.RefreshCachedFavicon();
+
+        _faviconCts?.Cancel();
+        _faviconCts = new CancellationTokenSource();
+        var token = _faviconCts.Token;
+        var urls = entries.Select(e => e.Url).ToList();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await EntryFaviconService.PrefetchAsync(urls, (host, path) =>
+                {
+                    if (token.IsCancellationRequested)
+                        return;
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        foreach (var vm in entries)
+                        {
+                            if (string.Equals(TryGetHost(vm.Url), host, StringComparison.OrdinalIgnoreCase))
+                                vm.SetFaviconPath(path);
+                        }
+                    });
+                }, token);
+            }
+            catch (OperationCanceledException)
+            {
+                /* navigated away */
+            }
+        }, token);
+    }
+
+    private static string? TryGetHost(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return null;
+        try { return new Uri(url.Trim()).Host.ToLowerInvariant(); }
+        catch { return null; }
+    }
+
+    private void ViewMode_Click(object sender, RoutedEventArgs e)
+    {
+        _listViewMode = ReferenceEquals(sender, ListViewBtn);
+        GridViewBtn.IsChecked = !_listViewMode;
+        ListViewBtn.IsChecked = _listViewMode;
+        _vm.PersonalSettings.VaultUseListView = _listViewMode;
+        _vm.SavePersonalSettings();
+        ApplyViewToggleChrome();
+        ClearEntrySelection();
+        BulkActionBar.Visibility = Visibility.Collapsed;
+        StatusBar.Visibility = Visibility.Visible;
+        HideDetailPane();
+        RefreshList();
+    }
+
+    private void ApplyViewToggleChrome()
+    {
+        var theme = FortivaControlTheme.ResolveAppTheme();
+        var accent = FortivaControlTheme.GetBrush("FortivaAccentGlowBrush", theme, GridViewBtn);
+        var glass = FortivaControlTheme.GetBrush("FortivaGlassFillBrush", theme, GridViewBtn);
+        var border = FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", theme, GridViewBtn);
+        var accentFg = FortivaControlTheme.GetBrush("FortivaAccentBrush", theme, GridViewBtn);
+
+        GridViewBtn.Background = GridViewBtn.IsChecked == true ? accent : glass;
+        GridViewBtn.BorderBrush = GridViewBtn.IsChecked == true ? accentFg : border;
+        GridViewBtn.Foreground = GridViewBtn.IsChecked == true ? accentFg : FortivaControlTheme.GetBrush("FortivaMutedBrush", theme, GridViewBtn);
+
+        ListViewBtn.Background = ListViewBtn.IsChecked == true ? accent : glass;
+        ListViewBtn.BorderBrush = ListViewBtn.IsChecked == true ? accentFg : border;
+        ListViewBtn.Foreground = ListViewBtn.IsChecked == true ? accentFg : FortivaControlTheme.GetBrush("FortivaMutedBrush", theme, ListViewBtn);
+    }
+
+    private void EntryContainer_ContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        if (args.InRecycleQueue)
+            return;
+
+        args.RegisterUpdateCallback(static (_, itemArgs) =>
+        {
+            if (itemArgs.ItemContainer.ContentTemplateRoot is Border card)
+                FortivaSurfaceEffects.ApplyHoverLift(card);
+        });
+    }
+
+    private void EntryGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        => _ = OnEntrySelectionChangedAsync(EntryGrid.SelectedItems.Cast<VaultEntryViewModel>().ToList());
+
+    private void EntryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        => _ = OnEntrySelectionChangedAsync(EntryList.SelectedItems.Cast<VaultEntryViewModel>().ToList());
+
+    private async Task OnEntrySelectionChangedAsync(IReadOnlyList<VaultEntryViewModel> selected)
+    {
+        if (_syncingSelection)
+            return;
+
+        if (selected.Count > 1)
+        {
+            if (!await HideDetailPaneAsync())
+            {
+                RestoreSingleSelection(_selectedEntry);
+                return;
+            }
+
+            BulkActionBar.Visibility = Visibility.Visible;
+            StatusBar.Visibility = Visibility.Collapsed;
+            BulkCountText.Text = $"{selected.Count} entries selected";
+            return;
+        }
+
+        BulkActionBar.Visibility = Visibility.Collapsed;
+        StatusBar.Visibility = Visibility.Visible;
+
+        if (selected.Count == 1)
+        {
+            if (DetailPane.Visibility == Visibility.Visible
+                && _selectedEntry?.Id != selected[0].Id
+                && !await HideDetailPaneAsync())
+            {
+                RestoreSingleSelection(_selectedEntry);
+                return;
+            }
+
+            if (UseMasterDetail())
+                ShowDetail(selected[0]);
+            else
+                NavigateToEntry(selected[0]);
+            return;
+        }
+
+        await HideDetailPaneAsync();
+    }
+
+    private void RestoreSingleSelection(VaultEntryViewModel? vm)
+    {
+        if (vm is null)
+            return;
+
+        SelectSingleEntry(vm);
+    }
+
+    private void SelectSingleEntry(VaultEntryViewModel vm)
+    {
+        _syncingSelection = true;
+        try
+        {
+            if (_listViewMode)
+            {
+                EntryList.SelectedItems.Clear();
+                EntryList.SelectedItems.Add(vm);
+            }
+            else
+            {
+                EntryGrid.SelectedItems.Clear();
+                EntryGrid.SelectedItems.Add(vm);
+            }
+        }
+        finally
+        {
+            _syncingSelection = false;
+        }
     }
 
     private void RefreshCategories()
@@ -182,13 +469,199 @@ public sealed partial class VaultPage : Page
     private void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
         => RefreshList();
 
-    private void EntryGrid_ItemClick(object sender, ItemClickEventArgs e)
+    private bool UseMasterDetail() => ActualWidth >= MasterDetailMinWidth;
+
+    private void ShowDetail(VaultEntryViewModel vm)
     {
-        if (e.ClickedItem is VaultEntryViewModel vm)
+        if (_selectedEntry?.Id == vm.Id && DetailPane.Visibility == Visibility.Visible)
+            return;
+
+        _selectedEntry = vm;
+        DetailColumn.Width = new GridLength(420);
+        DetailPane.Visibility = Visibility.Visible;
+
+        _paneHost = new VaultEntryPaneHost
         {
-            NavigationService.Current.ResetCurrent();
-            NavigationService.Current.Navigate<EntryPage>(vm.Entry, animate: true);
+            CloseRequested = () => DispatcherQueue.TryEnqueue(HideDetailPaneCore),
+            Saved = () => DispatcherQueue.TryEnqueue(() =>
+            {
+                RefreshList();
+                var refreshed = _vm.Entries.FirstOrDefault(e => e.Id == vm.Id);
+                if (refreshed is not null && UseMasterDetail())
+                    ShowDetail(refreshed);
+            })
+        };
+
+        DetailEditorFrame.Content = null;
+        DetailEditorFrame.Navigate(
+            typeof(EntryPage),
+            new EntryPaneNavigationContext(vm.Entry, _paneHost));
+    }
+
+    private async Task<bool> HideDetailPaneAsync(bool force = false)
+    {
+        if (!force && _paneHost?.ConfirmCloseAsync is { } confirm && !await confirm())
+            return false;
+
+        HideDetailPaneCore();
+        return true;
+    }
+
+    private void HideDetailPane() => _ = HideDetailPaneAsync(force: true);
+
+    private void HideDetailPaneCore()
+    {
+        _selectedEntry = null;
+        _paneHost = null;
+        DetailColumn.Width = new GridLength(0);
+        DetailPane.Visibility = Visibility.Collapsed;
+        ClearEntrySelection();
+    }
+
+    private async void CloseDetail_Click(object sender, RoutedEventArgs e)
+    {
+        if (await HideDetailPaneAsync())
+            _pendingRestoreEntryId = null;
+    }
+
+    private void ClearEntrySelection()
+    {
+        _syncingSelection = true;
+        try
+        {
+            EntryGrid.SelectedItems.Clear();
+            EntryList.SelectedItems.Clear();
         }
+        finally
+        {
+            _syncingSelection = false;
+        }
+    }
+
+    private IReadOnlyList<VaultEntryViewModel> GetBulkSelection()
+    {
+        var source = _listViewMode ? EntryList.SelectedItems : EntryGrid.SelectedItems;
+        return source.Cast<VaultEntryViewModel>().ToList();
+    }
+
+    private async void BulkDelete_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.IsReadOnly)
+        {
+            await ShowInfoAsync("Vault is read-only.");
+            return;
+        }
+
+        var selected = GetBulkSelection();
+        if (selected.Count == 0)
+            return;
+
+        var dlg = new ContentDialog
+        {
+            Title = "Delete entries?",
+            Content = new TextBlock
+            {
+                Text = $"Permanently delete {selected.Count} entries?",
+                TextWrapping = TextWrapping.WrapWholeWords
+            },
+            PrimaryButtonText = "Delete",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = Content.XamlRoot
+        };
+        FortivaDialogs.Configure(dlg, Content.XamlRoot);
+        if (await dlg.ShowAsync() != ContentDialogResult.Primary)
+            return;
+
+        try
+        {
+            var count = _vm.BulkDeleteEntries(selected.Select(s => s.Id));
+            BulkActionBar.Visibility = Visibility.Collapsed;
+            StatusBar.Visibility = Visibility.Visible;
+            HideDetailPane();
+            RefreshList();
+            _vm.StatusMessage = $"Deleted {count} entries.";
+        }
+        catch (Exception ex)
+        {
+            await ShowInfoAsync(ex.Message);
+        }
+    }
+
+    private async void BulkTag_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.IsReadOnly)
+        {
+            await ShowInfoAsync("Vault is read-only.");
+            return;
+        }
+
+        var selected = GetBulkSelection();
+        if (selected.Count == 0)
+            return;
+
+        var tag = await VaultCategoryDialog.ShowCreateAsync(Content.XamlRoot, _vm, title: "Add tag to selection");
+        if (tag is null)
+            return;
+
+        try
+        {
+            var (updated, skippedAlready, skippedMax) = _vm.BulkAddTag(selected.Select(s => s.Id), tag);
+            RefreshCategories();
+            RefreshList();
+            _vm.StatusMessage = updated > 0
+                ? $"Tagged {updated} entries with “{tag}”."
+                : skippedMax > 0
+                    ? $"No entries updated — {skippedMax} already at the tag limit."
+                    : "No entries were updated (tag may already apply).";
+            if (updated > 0 && (skippedAlready > 0 || skippedMax > 0))
+                _vm.StatusMessage += $" ({skippedAlready + skippedMax} skipped)";
+        }
+        catch (Exception ex)
+        {
+            await ShowInfoAsync(ex.Message);
+        }
+    }
+
+    private void BulkClear_Click(object sender, RoutedEventArgs e)
+    {
+        ClearEntrySelection();
+        BulkActionBar.Visibility = Visibility.Collapsed;
+        StatusBar.Visibility = Visibility.Visible;
+    }
+
+    private void TryOpenEntry(Guid entryId)
+    {
+        var vm = _vm.Entries.FirstOrDefault(e => e.Id == entryId);
+        if (vm is null)
+            return;
+
+        if (UseMasterDetail())
+            ShowDetail(vm);
+        else
+            NavigateToEntry(vm);
+    }
+
+    private void ClearImportFilter_Click(object sender, RoutedEventArgs e)
+    {
+        _importBatchFilter = null;
+        _vm.VaultImportBatchFilter = null;
+        RefreshList();
+    }
+
+    private void ApplyReadOnlyChrome()
+    {
+        var readOnly = _vm.IsReadOnly;
+        GeneratePasswordBtn.IsEnabled = !readOnly;
+        AddEntryBtn.IsEnabled = !readOnly;
+        NewCategoryBtn.IsEnabled = !readOnly;
+    }
+
+    private void NavigateToEntry(VaultEntryViewModel vm)
+    {
+        ClearEntrySelection();
+        NavigationService.Current.ResetCurrent();
+        NavigationService.Current.Navigate<EntryPage>(vm.Entry, animate: true);
     }
 
     private void EnableEditing_Click(object sender, RoutedEventArgs e)
@@ -199,17 +672,17 @@ public sealed partial class VaultPage : Page
 
     private void CopyPassword_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { Tag: VaultEntryViewModel vm })
-            CopyEntryField(vm.Entry.Password, isPassword: true);
+        if (sender is FrameworkElement { Tag: VaultEntryViewModel vm } fe)
+            CopyEntryField(vm.Entry.Password, isPassword: true, pulseTarget: fe);
     }
 
     private void CopyUsername_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { Tag: VaultEntryViewModel vm })
+        if (sender is FrameworkElement { Tag: VaultEntryViewModel vm } fe)
         {
             if (string.IsNullOrWhiteSpace(vm.Username))
                 return;
-            CopyEntryField(vm.Username, isPassword: false);
+            CopyEntryField(vm.Username, isPassword: false, pulseTarget: fe);
         }
     }
 
@@ -233,7 +706,7 @@ public sealed partial class VaultPage : Page
         }
     }
 
-    private void CopyEntryField(string text, bool isPassword, string? status = null)
+    private void CopyEntryField(string text, bool isPassword, string? status = null, FrameworkElement? pulseTarget = null)
     {
         try
         {
@@ -243,6 +716,8 @@ public sealed partial class VaultPage : Page
                 _clipboard.CopyText(text);
             _vm.ResetAutoLock();
             _vm.StatusMessage = status ?? "Password copied — clipboard will clear automatically.";
+            if (pulseTarget is not null)
+                FortivaSurfaceEffects.PulseSuccess(pulseTarget);
         }
         catch (InvalidOperationException ex)
         {
@@ -306,6 +781,14 @@ public sealed partial class VaultPage : Page
             new EntryDraft { Tags = GetPreselectedTagsForNewEntry() }, animate: true);
     }
 
+    private static string FormatImportFilterSubtitle(ImportBatch batch)
+    {
+        var line = $"From import: {batch.ProvenanceLabel} · {batch.ImportedAt.LocalDateTime:g}";
+        if (!string.IsNullOrWhiteSpace(batch.SourceHint))
+            line += $" · {batch.SourceHint.Trim()}";
+        return line;
+    }
+
     private async Task ShowInfoAsync(string message)
     {
         var dlg = new ContentDialog
@@ -313,6 +796,7 @@ public sealed partial class VaultPage : Page
             Title          = "Fortiva",
             Content        = new TextBlock { Text = message, TextWrapping = TextWrapping.WrapWholeWords },
             CloseButtonText = "OK",
+            DefaultButton  = ContentDialogButton.Close,
             XamlRoot       = Content.XamlRoot
         };
         FortivaDialogs.Configure(dlg, Content.XamlRoot);

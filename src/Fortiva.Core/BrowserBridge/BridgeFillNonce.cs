@@ -11,19 +11,22 @@ namespace Fortiva.Core.BrowserBridge;
 public sealed class BridgeFillNonce
 {
     private readonly object _gate = new();
-    private readonly Dictionary<string, string> _pending = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (string Host, DateTimeOffset IssuedAt)> _pending = new(StringComparer.Ordinal);
     private readonly HashSet<string> _consumed = new(StringComparer.Ordinal);
     private const int MaxTracked = 64;
+    private static readonly TimeSpan NonceTtl = TimeSpan.FromMinutes(2);
 
     /// <summary>Issues a nonce bound to <paramref name="host"/> (normalized, lower-cased).</summary>
     public string Issue(string host)
     {
-        var nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
         var boundHost = NormalizeHost(host);
+        var nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
         lock (_gate)
         {
+            PruneExpired();
+            InvalidatePendingForHost(boundHost);
+            _pending[nonce] = (boundHost, DateTimeOffset.UtcNow);
             PruneIfNeeded();
-            _pending[nonce] = boundHost;
         }
 
         return nonce;
@@ -40,10 +43,11 @@ public sealed class BridgeFillNonce
         var boundHost = NormalizeHost(host);
         lock (_gate)
         {
-            if (!_pending.TryGetValue(nonce, out var issuedHost))
+            PruneExpired();
+            if (!_pending.TryGetValue(nonce, out var entry))
                 return false;
 
-            if (!string.Equals(issuedHost, boundHost, StringComparison.Ordinal))
+            if (!string.Equals(entry.Host, boundHost, StringComparison.Ordinal))
                 return false;
 
             _pending.Remove(nonce);
@@ -63,7 +67,20 @@ public sealed class BridgeFillNonce
     }
 
     private static string NormalizeHost(string? host)
-        => string.IsNullOrWhiteSpace(host) ? "" : host.Trim().ToLowerInvariant();
+        => string.IsNullOrWhiteSpace(host) ? "" : DomainSafety.NormalizeHost(host);
+
+    private void InvalidatePendingForHost(string host)
+    {
+        foreach (var key in _pending.Where(kv => kv.Value.Host == host).Select(kv => kv.Key).ToList())
+            _pending.Remove(key);
+    }
+
+    private void PruneExpired()
+    {
+        var cutoff = DateTimeOffset.UtcNow - NonceTtl;
+        foreach (var key in _pending.Where(kv => kv.Value.IssuedAt < cutoff).Select(kv => kv.Key).ToList())
+            _pending.Remove(key);
+    }
 
     private void PruneIfNeeded()
     {

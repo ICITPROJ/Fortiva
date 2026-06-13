@@ -73,7 +73,7 @@ public static class QuickAddEntryDialog
 
         var titleLabel = CreateLabel("Title");
         var usernameLabel = CreateLabel("Username / email");
-        var urlLabel = CreateLabel("URL");
+        var urlLabel = CreateLabel("Website (for autofill)");
         var categoryLabel = CreateLabel("Categories");
         var passwordLabel = CreateLabel("Password (auto-generated)");
 
@@ -176,14 +176,16 @@ public static class QuickAddEntryDialog
 
                 try
                 {
-                    vm.AddEntry(new VaultEntry
+                    var entry = new VaultEntry
                     {
                         Title = titleBox.Text.Trim(),
                         Username = usernameBox.Text.Trim(),
                         Password = passwordBox.Text,
                         Url = urlBox.Text.Trim(),
                         Tags = tags.ToList()
-                    });
+                    };
+                    VaultEntryWebsite.NormalizeWebsite(entry);
+                    vm.AddEntry(entry);
                     return new Outcome { Result = QuickAddResult.Saved };
                 }
                 catch (Exception ex)

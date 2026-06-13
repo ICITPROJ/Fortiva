@@ -67,6 +67,24 @@ public sealed class VaultEntry
     public string? TotpSecret { get; set; }
     public string? CustomFields { get; set; }
 
+    /// <summary>Human-readable import origin, e.g. "Microsoft Edge (PC)".</summary>
+    public string? ImportSource { get; set; }
+
+    /// <summary>Links to <see cref="ImportBatch"/> in the vault payload.</summary>
+    public Guid? ImportBatchId { get; set; }
+
+    /// <summary>When this entry was imported into Fortiva.</summary>
+    public DateTimeOffset? ImportedAt { get; set; }
+
+    /// <summary>Original created date from the export file, when available.</summary>
+    public DateTimeOffset? SourceCreatedAt { get; set; }
+
+    /// <summary>Last-used date from browser exports, when available.</summary>
+    public DateTimeOffset? SourceLastUsedAt { get; set; }
+
+    public bool HasImportProvenance =>
+        !string.IsNullOrWhiteSpace(ImportSource) || ImportBatchId.HasValue;
+
     public VaultEntry Clone() => new()
     {
         Id = Id,
@@ -84,8 +102,44 @@ public sealed class VaultEntry
         PasskeyCredentialId = PasskeyCredentialId,
         PasskeyRpId = PasskeyRpId,
         TotpSecret = TotpSecret,
-        CustomFields = CustomFields
+        CustomFields = CustomFields,
+        ImportSource = ImportSource,
+        ImportBatchId = ImportBatchId,
+        ImportedAt = ImportedAt,
+        SourceCreatedAt = SourceCreatedAt,
+        SourceLastUsedAt = SourceLastUsedAt
     };
+}
+
+/// <summary>Summary of one import operation for audit and history UI.</summary>
+public sealed class ImportBatch
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public DateTimeOffset ImportedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>Format-derived label (e.g. "CSV import"). Kept for older vaults and filters.</summary>
+    public string SourceLabel { get; set; } = "";
+
+    /// <summary>User-chosen name for this import batch.</summary>
+    public string DisplayName { get; set; } = "";
+
+    /// <summary>Optional origin hint, e.g. device, browser profile, or account.</summary>
+    public string? SourceHint { get; set; }
+
+    /// <summary>Optional freeform notes about why or where the export came from.</summary>
+    public string? Notes { get; set; }
+
+    public string? FileName { get; set; }
+    public string Format { get; set; } = "";
+    public int AddedCount { get; set; }
+    public int SkippedDuplicateCount { get; set; }
+    public int ConflictKeptExistingCount { get; set; }
+    public int ConflictUpdatedCount { get; set; }
+    public int ConflictKeptBothCount { get; set; }
+
+    /// <summary>Label stored on imported entries and shown in history UI.</summary>
+    public string ProvenanceLabel =>
+        !string.IsNullOrWhiteSpace(DisplayName) ? DisplayName.Trim() : SourceLabel;
 }
 
 public sealed class IntegrityLogEntry
@@ -101,6 +155,7 @@ public sealed class VaultPayload
 {
     public List<VaultEntry> Entries { get; set; } = [];
     public List<IntegrityLogEntry> IntegrityLog { get; set; } = [];
+    public List<ImportBatch> ImportBatches { get; set; } = [];
 }
 
 public sealed class VaultUnlockContext

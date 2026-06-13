@@ -12,14 +12,14 @@ wraps the EXE installer. This enables silent deployment via Microsoft Intune or 
 ```powershell
 IntuneWinAppUtil.exe `
   -c .\dist\installers\ `
-  -s FortivaEnterprise-1.0.0-Setup.exe `
+  -s FortivaEnterprise-{version}-Setup.exe `
   -o .\intune-output\
 ```
 
 2. **Create Win32 App in Intune**:
    - App type: Windows app (Win32)
    - Package file: `FortivaEnterprise.intunewin`
-   - Install command: `FortivaEnterprise-1.0.0-Setup.exe /VERYSILENT`
+   - Install command: `FortivaEnterprise-{version}-Setup.exe /VERYSILENT` (use the build version from `Directory.Build.props`)
    - Uninstall command: `"C:\Program Files\icmclab studio\Fortiva Enterprise\unins000.exe" /VERYSILENT`
    - Detection rule: File exists → `%ProgramFiles%\icmclab studio\Fortiva Enterprise\Fortiva.Enterprise.exe`
 
@@ -58,7 +58,12 @@ IntuneWinAppUtil.exe `
    `fortiva-extension-updates.xml` (built by `scripts/pack-extension-crx.ps1` when
    `EXTENSION_PRIVATE_KEY_PEM` is configured). See `packaging/extension-keys/README.md`.
 
-   Users should restart Chrome/Edge after install. Fortiva app must stay unlocked while browsing.
+   Users should restart Chrome/Edge after install. Fortiva does not need to stay open — on a login page, users click the Fortiva icon → **Fill**; Fortiva launches and unlocks when needed.
+
+   **Code signing:** Not required for Personal. For Enterprise IT trust (SmartScreen), provision
+   [Azure Trusted Signing](https://learn.microsoft.com/azure/trusted-signing/) or a traditional OV/EV
+   certificate when a customer engages — see `docs/CODESIGNING.md`. The release pipeline is already
+   wired; signing stays off until repository secrets are added.
 
 ## Group Policy (ADMX)
 

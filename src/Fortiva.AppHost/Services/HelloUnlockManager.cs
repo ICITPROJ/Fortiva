@@ -29,14 +29,21 @@ public sealed class HelloUnlockManager
         return await HelloCredentialStore.IsAvailableAsync();
     }
 
-    public async Task StoreFromMasterKeyAsync(byte[] masterKey)
+    /// <param name="useHardwareBacking">
+    /// When null, uses TPM-backed v4 when KeyCredential is available; otherwise v3 DPAPI.
+    /// </param>
+    public async Task StoreFromMasterKeyAsync(byte[] masterKey, bool? useHardwareBacking = null)
     {
-        if (await HelloCredentialStore.IsAvailableAsync())
+        var preferHardware = useHardwareBacking ?? await HelloCredentialStore.IsAvailableAsync();
+        if (preferHardware && await HelloCredentialStore.IsAvailableAsync())
         {
+            // Write v4 first — never delete the existing v3 bundle until hardware store succeeds.
             await HelloCredentialStore.StoreAsync(_dataDirectory, masterKey);
+            _protector.Clear();
             return;
         }
 
+        await HelloCredentialStore.DeleteCredentialAsync();
         _protector.StoreHelloBundle(masterKey, helloVerified: true);
     }
 

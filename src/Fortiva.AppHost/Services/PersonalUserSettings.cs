@@ -29,6 +29,8 @@ public sealed class PersonalUserSettings
     public bool BrowserExtensionSetupDismissed { get; set; }
     /// <summary>User-defined sidebar categories (tags), including empty ones.</summary>
     public List<string> VaultCategories { get; set; } = [];
+    /// <summary>Vault uses compact list rows instead of cards.</summary>
+    public bool VaultUseListView { get; set; }
 
     private static string SettingsPath =>
         Path.Combine(FortivaPaths.PersonalDataRoot, "user.prefs.json");
@@ -42,16 +44,19 @@ public sealed class PersonalUserSettings
         var loadedFromLegacy = false;
 
         if (File.Exists(SettingsPath))
-        {
             settings = TryDeserializeFromFile(SettingsPath);
-        }
-        else if (File.Exists(LegacySettingsPath))
+
+        if (settings is null && File.Exists(LegacySettingsPath))
         {
             settings = TryDeserializeFromFile(LegacySettingsPath);
             loadedFromLegacy = settings is not null;
         }
 
-        settings ??= new PersonalUserSettings();
+        if (settings is null)
+        {
+            // Corrupt prefs were moved to *.corrupt-*.bak — do not write fresh defaults over user data.
+            return new PersonalUserSettings();
+        }
 
         var changed = settings.EnsureDefaults();
         if (loadedFromLegacy || changed)

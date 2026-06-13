@@ -22,18 +22,18 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <Button Background="Transparent" BorderThickness="0" Click="Back_Click" Padding="4">
+            <Button x:Name="BackBtn" Style="{StaticResource FortivaIconButton}" Click="Back_Click">
                 <FontIcon Glyph="&#xE76B;" FontSize="16"/>
             </Button>
             <TextBlock x:Name="PageTitle" Grid.Column="1" Style="{StaticResource FortivaPageTitle}"
                        FontSize="20" VerticalAlignment="Center" Margin="8,0"/>
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
                 <Button x:Name="DeleteBtn" Visibility="Collapsed" Click="Delete_Click"
-                        Background="Transparent" BorderThickness="0">
+                        Style="{StaticResource FortivaIconButton}">
                     <FontIcon Glyph="&#xE74D;" FontSize="16"
                               Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
                 </Button>
-                <ToggleButton x:Name="FavoriteBtn" Background="Transparent" BorderThickness="0">
+                <ToggleButton x:Name="FavoriteBtn" Style="{StaticResource FortivaIconToggleButton}">
                     <FontIcon x:Name="FavoriteIcon" Glyph="&#xE734;" FontSize="16"/>
                 </ToggleButton>
             </StackPanel>
@@ -63,6 +63,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <!-- Title -->
@@ -82,22 +83,26 @@
                             </Grid.ColumnDefinitions>
                             <TextBox x:Name="UsernameBox" Style="{StaticResource FortivaTextBox}"
                                      PlaceholderText="username or email"/>
-                            <Button Grid.Column="1" ToolTipService.ToolTip="Copy username" Click="CopyUsername_Click">
-                                <FontIcon Glyph="&#xE8C8;" FontSize="14"/>
+                            <Button Grid.Column="1" ToolTipService.ToolTip="Copy username" Click="CopyUsername_Click"
+                                    Style="{StaticResource FortivaIconButton}">
+                                <FontIcon Glyph="&#xE779;" FontSize="14"/>
                             </Button>
                         </Grid>
                     </StackPanel>
 
-                    <!-- URL -->
+                    <!-- Website -->
                     <StackPanel x:Name="UrlPanel" Grid.Row="1" Grid.Column="1" Spacing="6">
-                        <TextBlock Text="URL" Style="{StaticResource FortivaFieldLabel}"/>
+                        <TextBlock Text="Website (browser Fill)" Style="{StaticResource FortivaFieldLabel}"/>
+                        <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaHelperText}">
+                            Login page URL so the Fortiva extension can match this entry. Example: https://login.example.com
+                        </TextBlock>
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <TextBox x:Name="UrlBox" Style="{StaticResource FortivaTextBox}"
-                                     PlaceholderText="https://example.com"/>
+                                     PlaceholderText="https://login.example.com"/>
                             <HyperlinkButton Grid.Column="1" x:Name="VisitLink" Content="Visit"
                                              Style="{StaticResource FortivaHyperlink}" Click="VisitUrl_Click"/>
                         </Grid>
@@ -117,13 +122,16 @@
                                          PlaceholderText="password" Grid.Column="0"
                                          PasswordRevealMode="Peek"
                                          PasswordChanged="PasswordBox_PasswordChanged"/>
-                            <Button Grid.Column="1" ToolTipService.ToolTip="Copy password" Click="CopyPassword_Click">
+                            <Button Grid.Column="1" ToolTipService.ToolTip="Copy password" Click="CopyPassword_Click"
+                                    Style="{StaticResource FortivaIconButton}">
                                 <FontIcon Glyph="&#xE8C8;" FontSize="14"/>
                             </Button>
-                            <Button Grid.Column="2" ToolTipService.ToolTip="Reveal for 5 s" Click="RevealPassword_Click">
+                            <Button Grid.Column="2" ToolTipService.ToolTip="Reveal for 5 s" Click="RevealPassword_Click"
+                                    Style="{StaticResource FortivaIconButton}">
                                 <FontIcon Glyph="&#xE7B3;" FontSize="14"/>
                             </Button>
-                            <Button Grid.Column="3" ToolTipService.ToolTip="Generate password" Click="GeneratePassword_Click">
+                            <Button Grid.Column="3" ToolTipService.ToolTip="Generate password" Click="GeneratePassword_Click"
+                                    Style="{StaticResource FortivaSecondaryButton}">
                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                     <FontIcon Glyph="&#xE9D5;" FontSize="14"/>
                                     <TextBlock Text="Generate"/>
@@ -143,7 +151,8 @@
                     <!-- Secure note toggle -->
                     <StackPanel x:Name="SecureNotePanel" Grid.Row="3" Grid.Column="1" VerticalAlignment="Bottom" Padding="0,0,0,4">
                         <ToggleSwitch x:Name="SecureNoteToggle" Style="{StaticResource FortivaToggleSwitch}"
-                                      Header="This is a secure note (no password)"/>
+                                      Header="This is a secure note (no password)"
+                                      Toggled="SecureNoteToggle_Toggled"/>
                     </StackPanel>
 
                     <!-- Notes -->
@@ -154,8 +163,15 @@
                                  AcceptsReturn="True" MinHeight="100" MaxHeight="200" TextWrapping="Wrap"/>
                     </StackPanel>
 
+                    <!-- Import provenance -->
+                    <StackPanel x:Name="ProvenancePanel" Grid.Row="5" Grid.ColumnSpan="2" Spacing="6" Visibility="Collapsed">
+                        <TextBlock Text="Import history" Style="{StaticResource FortivaFieldLabel}"/>
+                        <TextBlock x:Name="ProvenanceSourceText" TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13"/>
+                        <TextBlock x:Name="ProvenanceDatesText" TextWrapping="WrapWholeWords" Style="{StaticResource FortivaMutedText}" FontSize="12"/>
+                    </StackPanel>
+
                     <!-- Authenticator / TOTP -->
-                    <StackPanel x:Name="OtpSection" Grid.Row="5" Grid.ColumnSpan="2" Spacing="12" Visibility="Collapsed">
+                    <StackPanel x:Name="OtpSection" Grid.Row="6" Grid.ColumnSpan="2" Spacing="12" Visibility="Collapsed">
                         <TextBlock Text="Authenticator (TOTP)" Style="{StaticResource FortivaFieldLabel}"/>
                         <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaMutedText}">
                             Paste the Base32 secret or otpauth:// URI from your identity provider setup.
@@ -203,7 +219,7 @@
 
         <!-- Footer actions -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-            <Button Content="Cancel" Click="Back_Click"/>
+            <Button Content="Cancel" Click="Back_Click" Style="{StaticResource FortivaSecondaryButton}"/>
             <Button x:Name="SaveBtn" Content="Save" Style="{StaticResource FortivaAccentButton}"
                     ToolTipService.ToolTip="Save entry (Ctrl+S)" Click="Save_Click"/>
         </StackPanel>

@@ -52,21 +52,54 @@ public static class PreUpdateVaultBackup
                 .ToLowerInvariant()[..8];
             var versionTag = SanitizeForPathSegment(targetAppVersion);
             var backupDir = Path.Combine(BackupRoot, $"{stamp}-v{versionTag}-{dirTag}");
-            Directory.CreateDirectory(backupDir);
+            var partialDir = backupDir + ".partial";
 
-            var copied = new List<string>();
-            CopyFile(vaultFile, Path.Combine(backupDir, VaultConstants.VaultFileName), copied);
+            if (Directory.Exists(partialDir))
+                Directory.Delete(partialDir, recursive: true);
 
-            foreach (var name in SidecarFileNames)
-                CopyIfExists(Path.Combine(vaultDirectory, name), Path.Combine(backupDir, name), copied);
+            Directory.CreateDirectory(partialDir);
 
-            var prefs = Path.Combine(FortivaPaths.PersonalDataRoot, "user.prefs.json");
-            CopyIfExists(prefs, Path.Combine(backupDir, "user.prefs.json"), copied);
+            try
+            {
+                var copied = new List<string>();
+                CopyFile(vaultFile, Path.Combine(partialDir, VaultConstants.VaultFileName), copied);
 
-            WriteManifest(backupDir, vaultDirectory, targetAppVersion, copied);
-            PruneOldBackups(BackupRoot);
+                foreach (var name in SidecarFileNames)
+                    CopyIfExists(Path.Combine(vaultDirectory, name), Path.Combine(partialDir, name), copied);
 
-            return new Result { VaultCopied = true, BackupDirectory = backupDir };
+                var prefs = Path.Combine(FortivaPaths.PersonalDataRoot, "user.prefs.json");
+                CopyIfExists(prefs, Path.Combine(partialDir, "user.prefs.json"), copied);
+
+                var legacyPrefs = Path.Combine(FortivaPaths.PersonalLegacyDataRoot, "user.prefs.json");
+                CopyIfExists(legacyPrefs, Path.Combine(partialDir, "user.prefs.legacy.json"), copied);
+
+                foreach (var name in FortivaPaths.PersonalLocalPreferenceFileNames)
+                {
+                    CopyIfExists(
+                        Path.Combine(FortivaPaths.PersonalCrashLogDirectory, name),
+                        Path.Combine(partialDir, name),
+                        copied);
+                }
+
+                WriteManifest(partialDir, vaultDirectory, targetAppVersion, copied);
+                if (Directory.Exists(backupDir))
+                    Directory.Delete(backupDir, recursive: true);
+                Directory.Move(partialDir, backupDir);
+                PruneOldBackups(BackupRoot);
+
+                return new Result { VaultCopied = true, BackupDirectory = backupDir };
+            }
+            catch
+            {
+                try
+                {
+                    if (Directory.Exists(partialDir))
+                        Directory.Delete(partialDir, recursive: true);
+                }
+                catch { /* best effort */ }
+
+                throw;
+            }
         }
         catch (Exception ex)
         {

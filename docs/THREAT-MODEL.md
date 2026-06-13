@@ -30,12 +30,14 @@
 - **Corruption**: header MAC, sample decrypt checks, encrypted snapshots (`vault.fva.snapshot1..N`).
 - **Memory**: `CryptographicOperations.ZeroMemory` / `RtlSecureZeroMemory`; panic lock scrubs entry secrets and session keys; process mitigations at startup.
 - **Hello unlock**: v4 uses `KeyCredentialManager` + `RequestSignAsync` (TPM when available); v3 requires recent UserConsentVerifier success via `HelloVerificationGate`.
-- **Browser autofill**: user-initiated Fill only; exact hostname match; single-use fill nonce; tab re-validated on Fill click.
+- **Browser autofill**: user-initiated Fill only; registrable-domain match for listing, **exact hostname** for password release; punycode (`xn--`) rejected; single-use fill nonce; tab re-validated on Fill click.
+- **Bridge IPC**: token and credential pipes validate client PID/path (only `Fortiva.BrowserBridge.Host.exe` under install root); session token in-memory only while unlocked; released credentials seal username + password on the pipe (AES-GCM).
 - **Clipboard**: explicit copy, auto-clear, policy disable.
 - **Export**: encrypted default; plaintext requires explicit confirmation (Personal) or blocked (Enterprise policy).
 - **Enterprise seats**: `MaxSeats` enforced via `%PROGRAMDATA%\Fortiva\seats.dat` on unlock.
 - **Shared vaults**: Admin configures paths; Enterprise client selects active vault in Settings.
 - **Security audit export**: JSON/HTML reports contain findings and counts only — no secrets.
+- **Updates (Personal)**: HTTPS-only manifest URL with redirect validation; installer SHA-256 verified before launch. Authenticode is **optional** and deferred for Personal (`docs/CODESIGNING.md`); integrity does not depend on code signing.
 
 ## Out of scope (explicit non-goals)
 

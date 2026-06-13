@@ -23,6 +23,18 @@ public static class BrowserExtensionSetupHelper
         PolicyManaged
     }
 
+    /// <summary>Live state for Settings and onboarding browser-extension panels.</summary>
+    public enum BridgeFillReadiness
+    {
+        FilesMissing,
+        SetupNeeded,
+        PolicyManaged,
+        VaultMissing,
+        VaultLocked,
+        BridgeStarting,
+        Ready
+    }
+
     public sealed record BrowserConnectResult(
         bool Success,
         string? ExtensionPath,
@@ -41,6 +53,42 @@ public static class BrowserExtensionSetupHelper
 
     public static BrowserBridgeInstallStatus GetStatus(ShellViewModel vm)
         => BrowserBridgeInstallService.GetStatus(AppContext.BaseDirectory, vm.IsEnterprise);
+
+    /// <summary>
+    /// True when staged extension manifest version does not match the installed Fortiva app
+    /// (user should Reload in edge://extensions or chrome://extensions).
+    /// </summary>
+    public static bool ExtensionVersionNeedsReload(ShellViewModel vm, out string? stagedVersion, out string? appVersion)
+    {
+        stagedVersion = null;
+        appVersion = Fortiva.Core.Updates.AppVersion.Current;
+        var staging = GetStagingPath(vm);
+        var manifestPath = Path.Combine(staging, "manifest.json");
+        if (!File.Exists(manifestPath))
+            return false;
+
+        try
+        {
+            stagedVersion = ExtensionIdHelper.ReadVersionFromManifestFile(manifestPath);
+        }
+        catch
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(stagedVersion))
+            return false;
+
+        static string Normalize(string v)
+        {
+            var parts = v.Trim().Split('.');
+            return parts.Length >= 3
+                ? string.Join('.', parts.Take(3))
+                : v.Trim();
+        }
+
+        return !string.Equals(Normalize(stagedVersion), Normalize(appVersion), StringComparison.Ordinal);
+    }
 
     public static BrowserBridgeInstallResult EnsureReady(ShellViewModel vm)
         => BrowserBridgeInstallService.EnsureInstalled(AppContext.BaseDirectory, vm.IsEnterprise);
@@ -121,6 +169,19 @@ public static class BrowserExtensionSetupHelper
         if (!setup.Success)
             return BrowserConnectResult.Fail(setup.Error ?? "Browser setup failed.");
 
+        try { BridgeHostProcessCleanup.StopOrphanedHosts(); } catch { /* best effort */ }
+        if (vm.IsUnlocked)
+        {
+            try
+            {
+                if (vm.IsBridgeHealthy())
+                    vm.EnsureBridgeInfrastructureHealthy();
+                else
+                    await vm.RestartBridgeInfrastructureAsync().ConfigureAwait(true);
+            }
+            catch { /* best effort — setup can still continue */ }
+        }
+
         var path = setup.ExtensionStagingPath!;
         var browser = DetectPreferredBrowser();
 
@@ -143,9 +204,9 @@ public static class BrowserExtensionSetupHelper
             if (choice == CloseBrowserChoice.Cancel)
                 return BrowserConnectResult.Fail("Browser setup cancelled.");
 
-            if (choice == CloseBrowserChoice.CloseAndInstall && TryCloseBrowser(browser))
+            if (choice == CloseBrowserChoice.CloseAndInstall && await TryCloseBrowserAsync(browser).ConfigureAwait(true))
             {
-                await Task.Delay(2000);
+                await Task.Delay(2000).ConfigureAwait(true);
                 if (TryLaunchBrowserWithExtension(browser, path))
                     mode = ExtensionConnectMode.AutoLoaded;
             }
@@ -191,6 +252,57 @@ public static class BrowserExtensionSetupHelper
         vm.SetBrowserExtensionSetupDismissed();
     }
 
+    public static BridgeFillReadiness GetFillReadiness(ShellViewModel vm)
+    {
+        var status = GetStatus(vm);
+        if (!status.BridgeExecutableFound || status.ExtensionSourcePath is null)
+            return BridgeFillReadiness.FilesMissing;
+        if (!status.IsReadyForBrowser)
+            return BridgeFillReadiness.SetupNeeded;
+        if (status.ExtensionForceInstallConfigured)
+            return BridgeFillReadiness.PolicyManaged;
+        if (!vm.VaultExists)
+            return BridgeFillReadiness.VaultMissing;
+        if (!vm.IsUnlocked)
+            return BridgeFillReadiness.VaultLocked;
+        if (vm.IsBridgeHealthy())
+            return BridgeFillReadiness.Ready;
+        return BridgeFillReadiness.BridgeStarting;
+    }
+
+    public static (string Headline, string Detail, string IconGlyph) DescribeFillReadiness(BridgeFillReadiness readiness)
+        => readiness switch
+        {
+            BridgeFillReadiness.Ready =>
+                ("Ready to fill",
+                    "On any login page, click the Fortiva icon in Edge or Chrome, then Fill. Fortiva can launch and unlock automatically.",
+                    "\uE73E"),
+            BridgeFillReadiness.VaultLocked =>
+                ("Vault locked",
+                    "Fortiva does not need to stay open. On a login page, click Fill — Fortiva will open and ask for Windows Hello or your master password.",
+                    "\uE72E"),
+            BridgeFillReadiness.BridgeStarting =>
+                ("Bridge starting",
+                    "The secure connection to your browser is still starting. Wait a few seconds or click Restart bridge below.",
+                    "\uE895"),
+            BridgeFillReadiness.SetupNeeded =>
+                ("One-time setup",
+                    "Click Connect browser below (~30 seconds). Then reload the extension in Edge or Chrome after Fortiva updates.",
+                    "\uE8E5"),
+            BridgeFillReadiness.PolicyManaged =>
+                ("Managed by IT",
+                    "Your organization installs the extension via policy. Restart Chrome or Edge if the Fortiva icon is missing.",
+                    "\uE774"),
+            BridgeFillReadiness.VaultMissing =>
+                ("Create your vault first",
+                    "Complete Fortiva setup, then return here to connect your browser.",
+                    "\uE7BA"),
+            _ =>
+                ("Extension files missing",
+                    "Reinstall Fortiva or run Connect browser after a repair install.",
+                    "\uE946")
+        };
+
     public static string FormatStatusMessage(BrowserBridgeInstallStatus status)
     {
         if (!status.BridgeExecutableFound || status.ExtensionSourcePath is null)
@@ -202,8 +314,12 @@ public static class BrowserExtensionSetupHelper
         if (status.ExtensionForceInstallConfigured)
             return "IT policy will install the browser extension. Restart Chrome or Edge if it is not visible yet.";
 
-        return "Connected. On any login page, click the Fortiva icon in your browser toolbar and choose Fill.";
+        return "Extension installed. Live status updates when the vault is unlocked.";
     }
+
+    /// <summary>Install state plus live bridge health (requires Fortiva running).</summary>
+    public static string FormatLiveStatusMessage(BrowserBridgeInstallStatus status, ShellViewModel vm)
+        => DescribeFillReadiness(GetFillReadiness(vm)).Detail;
 
     public static SupportedBrowser DetectPreferredBrowser()
     {
@@ -231,41 +347,42 @@ public static class BrowserExtensionSetupHelper
         return Process.GetProcessesByName(processName).Length > 0;
     }
 
-    public static bool TryCloseBrowser(SupportedBrowser browser)
-    {
-        var processName = browser == SupportedBrowser.Edge ? "msedge" : "chrome";
-        try
+    public static Task<bool> TryCloseBrowserAsync(SupportedBrowser browser)
+        => Task.Run(async () =>
         {
-            foreach (var process in Process.GetProcessesByName(processName))
+            var processName = browser == SupportedBrowser.Edge ? "msedge" : "chrome";
+            try
             {
-                try
+                foreach (var process in Process.GetProcessesByName(processName))
                 {
-                    if (process.MainWindowHandle != IntPtr.Zero)
-                        process.CloseMainWindow();
+                    try
+                    {
+                        if (process.MainWindowHandle != IntPtr.Zero)
+                            process.CloseMainWindow();
+                    }
+                    catch
+                    {
+                        /* best effort */
+                    }
                 }
-                catch
+
+                await Task.Delay(1500).ConfigureAwait(false);
+                if (!IsBrowserRunning(browser))
+                    return true;
+
+                foreach (var process in Process.GetProcessesByName(processName))
                 {
-                    /* best effort */
+                    try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
                 }
+
+                await Task.Delay(500).ConfigureAwait(false);
+                return !IsBrowserRunning(browser);
             }
-
-            Thread.Sleep(1500);
-            if (!IsBrowserRunning(browser))
-                return true;
-
-            foreach (var process in Process.GetProcessesByName(processName))
+            catch
             {
-                try { process.Kill(entireProcessTree: true); } catch { /* best effort */ }
+                return false;
             }
-
-            Thread.Sleep(500);
-            return !IsBrowserRunning(browser);
-        }
-        catch
-        {
-            return false;
-        }
-    }
+        });
 
     public static bool TryLaunchBrowserWithExtension(SupportedBrowser browser, string extensionPath)
     {
@@ -391,8 +508,8 @@ public static class BrowserExtensionSetupHelper
                     $"via organization policy.\n\n" +
                     $"1. Restart {browserName} if the Fortiva icon is not in the toolbar\n" +
                     "2. Open any login page\n" +
-                    "3. Click the Fortiva icon and choose Fill login\n\n" +
-                    "Keep Fortiva unlocked on this PC while you browse."
+                    "3. Click the Fortiva icon, then Fill\n\n" +
+                    "On any login page, click the Fortiva icon → Fill — Fortiva will open if needed and ask you to unlock."
             },
             PrimaryButtonText = $"Open {browserName} extensions",
             CloseButtonText = "Done",
@@ -421,8 +538,8 @@ public static class BrowserExtensionSetupHelper
                 "Try it now:\n" +
                 "1. Open any login page\n" +
                 "2. Click the Fortiva icon in the toolbar\n" +
-                "3. Click Fill login on this page\n\n" +
-                "Keep Fortiva unlocked on this PC while you browse.",
+                "3. Click Fill\n\n" +
+                "On any login page, click the Fortiva icon → Fill — Fortiva will open if needed and ask you to unlock.",
             ExtensionConnectMode.PolicyManaged =>
                 "IT policy will install the extension. Restart your browser if needed, then use the Fortiva toolbar icon on login pages.",
             _ =>

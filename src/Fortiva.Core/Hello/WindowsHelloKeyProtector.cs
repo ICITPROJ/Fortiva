@@ -17,7 +17,7 @@ public sealed class WindowsHelloKeyProtector
 
     private readonly string _protectorPath;
     private readonly DataProtectionScope _scope;
-    private readonly byte[] _bindingEntropy;
+    private byte[] _bindingEntropy;
 
     public WindowsHelloKeyProtector(string dataDirectory, bool machineScope = false)
     {
@@ -25,7 +25,7 @@ public sealed class WindowsHelloKeyProtector
         _protectorPath = Path.Combine(dataDirectory, "hello.keyprotect");
         _scope = DataProtectionScope.CurrentUser;
         _ = machineScope;
-        _bindingEntropy = LoadOrCreateBindingEntropy(dataDirectory);
+        _bindingEntropy = LoadExistingBindingEntropy(dataDirectory);
     }
 
     public bool IsConfigured => File.Exists(_protectorPath);
@@ -51,9 +51,10 @@ public sealed class WindowsHelloKeyProtector
     /// <summary>Store Hello unlock material derived from the current session master key.</summary>
     public void StoreHelloBundle(ReadOnlySpan<byte> masterKey, bool helloVerified = true)
     {
-        if (!helloVerified)
+        if (!helloVerified || !HelloVerificationGate.TryConsumeVerification())
             throw new InvalidOperationException("Windows Hello verification is required before storing Hello credentials.");
 
+        EnsureBindingEntropy();
         var unlockKey = RandomNumberGenerator.GetBytes(32);
         byte[]? wrappedMk = null;
         try
@@ -141,14 +142,19 @@ public sealed class WindowsHelloKeyProtector
         return combined;
     }
 
-    private static byte[] LoadOrCreateBindingEntropy(string dataDirectory)
+    private void EnsureBindingEntropy()
     {
-        var path = Path.Combine(dataDirectory, "hello.binding");
-        if (File.Exists(path))
-            return File.ReadAllBytes(path);
+        if (_bindingEntropy.Length > 0)
+            return;
 
         var entropy = RandomNumberGenerator.GetBytes(32);
-        HelloFileSecurity.WriteRestrictedFile(path, entropy);
-        return entropy;
+        HelloFileSecurity.WriteRestrictedFile(BindingPath, entropy);
+        _bindingEntropy = entropy;
+    }
+
+    private static byte[] LoadExistingBindingEntropy(string dataDirectory)
+    {
+        var path = Path.Combine(dataDirectory, "hello.binding");
+        return File.Exists(path) ? File.ReadAllBytes(path) : [];
     }
 }

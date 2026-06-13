@@ -85,6 +85,30 @@ public class VaultEngineTests : IDisposable
     }
 
     [Fact]
+    public void ConcurrentChangeMasterPassword_FromSecondInstance_IsRejected()
+    {
+        var engineA = new VaultEngine(_dir, DpapiScope.CurrentUser);
+        engineA.CreateVault("change-pw-concurrency!", SecurityLevel.Standard);
+
+        var ctxA = engineA.Unlock("change-pw-concurrency!");
+        var engineB = new VaultEngine(_dir, DpapiScope.CurrentUser);
+        var ctxB = engineB.Unlock("change-pw-concurrency!");
+        try
+        {
+            engineA.AddEntry(ctxA, new VaultEntry { Title = "entry", Username = "u", Password = "p" });
+            engineA.ChangeMasterPassword(ctxA, "new-password-abc-123!");
+
+            Assert.Throws<VaultConcurrencyException>(() =>
+                engineB.ChangeMasterPassword(ctxB, "other-password-xyz-987!"));
+        }
+        finally
+        {
+            ctxA.Keys.Dispose();
+            ctxB.Keys.Dispose();
+        }
+    }
+
+    [Fact]
     public void ConcurrentSave_FromSecondInstance_IsRejected()
     {
         var engineA = new VaultEngine(_dir, DpapiScope.CurrentUser);

@@ -2,16 +2,55 @@ using Fortiva.Core.BrowserBridge;
 
 namespace Fortiva.Core.Tests.BrowserBridge;
 
+[Collection("BrowserBridgeSerial")]
 public class BridgeUnlockBrokerTests
 {
     [Fact]
-    public async Task ProcessUnlockRequest_InvalidLine_ReturnsInvalid()
+    public async Task ProcessRequest_InvalidLine_ReturnsInvalid()
     {
         var broker = new BridgeUnlockBroker(() => true, () => true, _ => Task.FromResult(true));
 
-        var response = await broker.ProcessUnlockRequestAsync("nope", CancellationToken.None);
+        var response = await broker.ProcessRequestAsync("nope", CancellationToken.None);
 
         Assert.Equal("INVALID", response);
+    }
+
+    [Fact]
+    public async Task ProcessRequest_Status_ReturnsLockedWhenVaultExistsButLocked()
+    {
+        var broker = new BridgeUnlockBroker(() => false, () => true, _ => Task.FromResult(true));
+
+        var response = await broker.ProcessRequestAsync("STATUS", CancellationToken.None);
+
+        Assert.Equal("LOCKED", response);
+    }
+
+    [Fact]
+    public async Task ProcessRequest_Status_ReturnsUnlockedBridgeReadyWhenHealthy()
+    {
+        var broker = new BridgeUnlockBroker(
+            () => true,
+            () => true,
+            _ => Task.FromResult(true),
+            () => true);
+
+        var response = await broker.ProcessRequestAsync("STATUS", CancellationToken.None);
+
+        Assert.Equal(BridgePresenceStatus.UnlockedBridgeReady, response);
+    }
+
+    [Fact]
+    public async Task ProcessRequest_Status_ReturnsUnlockedBridgeDownWhenPipesNotReady()
+    {
+        var broker = new BridgeUnlockBroker(
+            () => true,
+            () => true,
+            _ => Task.FromResult(true),
+            () => false);
+
+        var response = await broker.ProcessRequestAsync("STATUS", CancellationToken.None);
+
+        Assert.Equal(BridgePresenceStatus.UnlockedBridgeDown, response);
     }
 
     [Fact]
@@ -19,7 +58,7 @@ public class BridgeUnlockBrokerTests
     {
         var broker = new BridgeUnlockBroker(() => false, () => false, _ => Task.FromResult(true));
 
-        var response = await broker.ProcessUnlockRequestAsync("UNLOCK", CancellationToken.None);
+        var response = await broker.ProcessRequestAsync("UNLOCK", CancellationToken.None);
 
         Assert.Equal("NO_VAULT", response);
     }
@@ -29,7 +68,7 @@ public class BridgeUnlockBrokerTests
     {
         var broker = new BridgeUnlockBroker(() => true, () => true, _ => Task.FromResult(true));
 
-        var response = await broker.ProcessUnlockRequestAsync("UNLOCK", CancellationToken.None);
+        var response = await broker.ProcessRequestAsync("UNLOCK", CancellationToken.None);
 
         Assert.Equal("ALREADY_UNLOCKED", response);
     }
@@ -47,7 +86,7 @@ public class BridgeUnlockBrokerTests
                 return Task.FromResult(true);
             });
 
-        var response = await broker.ProcessUnlockRequestAsync("UNLOCK", CancellationToken.None);
+        var response = await broker.ProcessRequestAsync("UNLOCK", CancellationToken.None);
 
         Assert.Equal("OK", response);
         Assert.True(unlockCalled);
@@ -61,7 +100,7 @@ public class BridgeUnlockBrokerTests
             () => true,
             _ => Task.FromResult(false));
 
-        var response = await broker.ProcessUnlockRequestAsync("UNLOCK", CancellationToken.None);
+        var response = await broker.ProcessRequestAsync("UNLOCK", CancellationToken.None);
 
         Assert.Equal("FAILED", response);
     }

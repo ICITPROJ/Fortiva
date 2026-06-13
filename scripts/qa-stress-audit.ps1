@@ -323,7 +323,7 @@ if (-not $SkipInstall) {
             }
             Start-Sleep -Seconds 3
             Stop-FortivaProcesses
-            Remove-FortivaPersonalUserData
+            Remove-FortivaPersonalUserData -ConfirmProductionWipe
 
             if (Test-FortivaPersonalVaultExists) { throw "Vault survived uninstall cycle $cycle" }
             foreach ($p in Get-FortivaPersonalDataPaths) {

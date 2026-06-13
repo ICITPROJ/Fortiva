@@ -27,6 +27,7 @@ public sealed class WindowsHelloKeyProtectorTests : IDisposable
         var protector = new WindowsHelloKeyProtector(_dir);
         var masterKey = RandomNumberGenerator.GetBytes(32);
 
+        HelloVerificationGate.MarkVerified();
         protector.StoreHelloBundle(masterKey, helloVerified: true);
         HelloVerificationGate.MarkVerified();
         var loaded = protector.TryLoadMasterKey(helloVerified: true);
@@ -57,6 +58,7 @@ public sealed class WindowsHelloKeyProtectorTests : IDisposable
     {
         var protector = new WindowsHelloKeyProtector(_dir);
         var mk = RandomNumberGenerator.GetBytes(32);
+        HelloVerificationGate.MarkVerified();
         protector.StoreHelloBundle(mk, helloVerified: true);
         Assert.True(protector.IsConfigured);
         Assert.True(File.Exists(Path.Combine(_dir, "hello.binding")));
@@ -75,10 +77,20 @@ public sealed class WindowsHelloKeyProtectorTests : IDisposable
     }
 
     [Fact]
+    public void Store_RequiresVerificationGate()
+    {
+        var protector = new WindowsHelloKeyProtector(_dir);
+        var masterKey = RandomNumberGenerator.GetBytes(32);
+
+        Assert.Throws<InvalidOperationException>(() => protector.StoreHelloBundle(masterKey, helloVerified: true));
+    }
+
+    [Fact]
     public void TryLoad_RequiresVerificationGate()
     {
         var protector = new WindowsHelloKeyProtector(_dir);
         var masterKey = RandomNumberGenerator.GetBytes(32);
+        HelloVerificationGate.MarkVerified();
         protector.StoreHelloBundle(masterKey, helloVerified: true);
 
         Assert.Null(protector.TryLoadMasterKey(helloVerified: true));

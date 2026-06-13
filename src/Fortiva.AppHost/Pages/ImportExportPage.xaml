@@ -5,36 +5,76 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="Transparent">
 
-    <ScrollViewer x:Name="PageScroll"
+    <Grid RowSpacing="0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Style="{StaticResource FortivaToolbar}" Padding="24,20,24,16">
+            <StackPanel Spacing="4">
+                <TextBlock Text="Import / Export" Style="{StaticResource FortivaHeroTitle}"/>
+                <TextBlock Text="Move credentials in or out — previews and conflicts before anything is saved."
+                           Style="{StaticResource FortivaMutedText}"/>
+            </StackPanel>
+        </Border>
+
+    <ScrollViewer x:Name="PageScroll" Grid.Row="1"
                   HorizontalScrollBarVisibility="Disabled"
                   HorizontalContentAlignment="Stretch">
         <Border Style="{StaticResource FortivaGlassPanel}" Margin="24"
                 HorizontalAlignment="Stretch" MinWidth="320"
                 Width="{Binding ViewportWidth, ElementName=PageScroll}">
         <StackPanel Spacing="24">
-            <TextBlock Text="Import / Export" Style="{StaticResource FortivaPageTitle}"/>
 
             <!-- Import section -->
             <StackPanel Spacing="16">
                 <TextBlock Text="Import" Style="{StaticResource FortivaSectionTitle}"/>
                 <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13">
-                    Import credentials from a CSV file, KeePass CSV export, or a browser export.
-                    Imported entries are added to your existing vault.
+                    Import credentials from another password manager or browser export.
+                    Fortiva previews new, duplicate, and conflicting entries before anything is saved —
+                    nothing is overwritten without your choice.
                 </TextBlock>
-                <ComboBox x:Name="ImportFormatBox" Header="Source format" Style="{StaticResource FortivaComboBox}" Width="280" SelectedIndex="0">
+                <ComboBox x:Name="ImportFormatBox" Header="Source format" Style="{StaticResource FortivaComboBox}" Width="360" SelectedIndex="0">
                     <ComboBoxItem>Generic CSV (name, username, password, url, notes)</ComboBoxItem>
                     <ComboBoxItem>KeePass CSV export</ComboBoxItem>
-                    <ComboBoxItem>Browser CSV (Chrome / Edge / Firefox - same columns)</ComboBoxItem>
+                    <ComboBoxItem>Browser CSV (Chrome / Edge / Firefox)</ComboBoxItem>
+                    <ComboBoxItem>Apple iPhone / iCloud Keychain CSV</ComboBoxItem>
+                    <ComboBoxItem>Fortiva encrypted backup (.fva)</ComboBoxItem>
                 </ComboBox>
                 <Button x:Name="ImportBtn" Style="{StaticResource FortivaSecondaryButton}" Click="Import_Click">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE8B5;" FontSize="14"/>
-                        <TextBlock Text="Choose file and import…"/>
+                        <TextBlock Text="Choose file and review import…"/>
                     </StackPanel>
                 </Button>
             </StackPanel>
 
-            <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}"/>
+            <Border Style="{StaticResource FortivaSectionDivider}"/>
+
+            <!-- Import history -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="Import history" Style="{StaticResource FortivaSectionTitle}"/>
+                <TextBlock x:Name="ImportHistoryHint" TextWrapping="WrapWholeWords" Style="{StaticResource FortivaMutedText}" FontSize="13"
+                           Text="After you import, each batch appears here with your name, notes, date, and counts. View entries from any import."/>
+                <ListView x:Name="ImportHistoryList" SelectionMode="Single" SelectionChanged="ImportHistory_SelectionChanged"
+                          MaxHeight="280" Visibility="Collapsed">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Spacing="2" Padding="4,8">
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding Subtitle}" Style="{StaticResource FortivaMutedText}" FontSize="12"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+                <Button x:Name="ViewImportEntriesBtn" Style="{StaticResource FortivaSecondaryButton}"
+                        Visibility="Collapsed" Click="ViewImportEntries_Click">
+                    <TextBlock Text="View entries from selected import"/>
+                </Button>
+            </StackPanel>
+
+            <Border Style="{StaticResource FortivaSectionDivider}"/>
 
             <!-- Export section -->
             <StackPanel Spacing="16">
@@ -62,4 +102,5 @@
         </StackPanel>
         </Border>
     </ScrollViewer>
+    </Grid>
 </Page>

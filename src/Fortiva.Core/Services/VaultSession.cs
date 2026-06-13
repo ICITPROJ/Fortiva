@@ -1,5 +1,6 @@
 using Fortiva.Core.Audit;
 using Fortiva.Core.BrowserBridge;
+using Fortiva.Core.ImportExport;
 using Fortiva.Core.Crypto;
 using Fortiva.Core.Licensing;
 using Fortiva.Core.LocalState;
@@ -23,10 +24,12 @@ public sealed class VaultSession : IDisposable
     private VaultUnlockContext? _context;
     private string? _bridgeSessionToken;
     private readonly object _payloadLock = new();
+    private readonly object _sessionGate = new();
     private int _autoLockSuppressCount;
     private int _autoLockTimeoutSeconds = 300;
     private readonly string _rollbackStateDirectory;
     private BridgeFillNonce? _fillNonce;
+    private Task? _bridgeShutdownTask;
 
     public VaultSession(
         string vaultDirectory,
@@ -39,7 +42,7 @@ public sealed class VaultSession : IDisposable
         string? rollbackStateDirectory = null)
     {
         _rollbackStateDirectory = rollbackStateDirectory ?? vaultDirectory;
-        _engine = new VaultEngine(vaultDirectory, DpapiScope.CurrentUser, policy, _rollbackStateDirectory);
+        _engine = new VaultEngine(vaultDirectory, scope, policy, _rollbackStateDirectory);
         _policy = policy;
         _requireEnterpriseLicense = requireEnterpriseLicense;
         _enterpriseClient = enterpriseClient;
@@ -51,81 +54,118 @@ public sealed class VaultSession : IDisposable
 
     public bool IsUnlocked => _context is not null;
     public bool IsReadOnly => _context?.ReadOnly ?? false;
+
+    /// <summary>
+    /// True when unlocked and bridge pipes are listening. Uses the in-process session token
+    /// (not a pipe GET — the token broker only accepts BrowserBridge.Host clients).
+    /// </summary>
+    public bool IsBridgeHealthy() =>
+        _context is not null
+        && !string.IsNullOrEmpty(_bridgeSessionToken)
+        && _bridge is not null
+        && _tokenBroker is not null
+        && BridgeHealthCheck.AreListenersActive();
     public VaultUnlockContext? Context => _context;
     public string? RollbackWarning => _context?.RollbackWarning;
     public bool VaultExists => _engine.VaultExists;
+
+    /// <summary>Thread-safe snapshot for browser bridge STATUS (same gate as unlock/lock).</summary>
+    public BridgePresenceSnapshot GetBridgePresenceSnapshot()
+    {
+        lock (_sessionGate)
+        {
+            if (_context is null)
+                return new BridgePresenceSnapshot(_engine.VaultExists, Unlocked: false, BridgeReady: false);
+
+            var bridgeReady = !string.IsNullOrEmpty(_bridgeSessionToken)
+                && _bridge is not null
+                && _tokenBroker is not null
+                && BridgeHealthCheck.AreListenersActive(300);
+
+            return new BridgePresenceSnapshot(_engine.VaultExists, Unlocked: true, BridgeReady: bridgeReady);
+        }
+    }
 
     public void CreateVault(string masterPassword, SecurityLevel level)
         => _engine.CreateVault(masterPassword, level);
 
     public void Unlock(string masterPassword, bool paranoiaMode = false, bool confirmRollback = false)
     {
-        RuntimeIntegrity.EnsureSafeForSensitiveOperation();
-        EnsureEnterpriseLicense();
-        EnsureEnterpriseSeat();
-        _audit?.Log(AuditEventType.UnlockAttempt, "Unlock attempted");
-        try
+        lock (_sessionGate)
         {
-            DisposeSession();
-            _context = _engine.Unlock(masterPassword, paranoiaMode, confirmRollback);
-            RegisterEnterpriseSeat();
-            _audit?.Log(AuditEventType.UnlockSuccess, "Unlock succeeded");
-            StartInfrastructure();
-            StateChanged?.Invoke();
-        }
-        catch (Exception)
-        {
-            _audit?.Log(AuditEventType.UnlockFailure, "Unlock failed", success: false);
-            throw;
+            RuntimeIntegrity.EnsureSafeForSensitiveOperation();
+            EnsureEnterpriseLicense();
+            EnsureEnterpriseSeat();
+            _audit?.Log(AuditEventType.UnlockAttempt, "Unlock attempted");
+            try
+            {
+                DisposeSessionCore();
+                _context = _engine.Unlock(masterPassword, paranoiaMode, confirmRollback);
+                RegisterEnterpriseSeat();
+                _audit?.Log(AuditEventType.UnlockSuccess, "Unlock succeeded");
+                StartInfrastructure();
+                StateChanged?.Invoke();
+            }
+            catch (Exception)
+            {
+                _audit?.Log(AuditEventType.UnlockFailure, "Unlock failed", success: false);
+                throw;
+            }
         }
     }
 
     public void UnlockWithMasterKey(byte[] masterKey, bool paranoiaMode = false, bool confirmRollback = false)
     {
-        RuntimeIntegrity.EnsureSafeForSensitiveOperation();
-        EnsureEnterpriseLicense();
-        EnsureEnterpriseSeat();
-        _audit?.Log(AuditEventType.UnlockAttempt, "Hello unlock attempted");
-        byte[]? mkCopy = null;
-        try
+        lock (_sessionGate)
         {
-            mkCopy = masterKey.ToArray();
-            DisposeSession();
-            _context = _engine.UnlockWithMasterKey(mkCopy, paranoiaMode, confirmRollback);
-            RegisterEnterpriseSeat();
-            _audit?.Log(AuditEventType.UnlockSuccess, "Hello unlock succeeded");
-            StartInfrastructure();
-            StateChanged?.Invoke();
-        }
-        catch (Exception)
-        {
-            _audit?.Log(AuditEventType.UnlockFailure, "Hello unlock failed", success: false);
-            throw;
-        }
-        finally
-        {
-            if (mkCopy is not null) SecureMemory.Zero(mkCopy);
+            RuntimeIntegrity.EnsureSafeForSensitiveOperation();
+            EnsureEnterpriseLicense();
+            EnsureEnterpriseSeat();
+            _audit?.Log(AuditEventType.UnlockAttempt, "Hello unlock attempted");
+            byte[]? mkCopy = null;
+            try
+            {
+                mkCopy = masterKey.ToArray();
+                DisposeSessionCore();
+                _context = _engine.UnlockWithMasterKey(mkCopy, paranoiaMode, confirmRollback);
+                RegisterEnterpriseSeat();
+                _audit?.Log(AuditEventType.UnlockSuccess, "Hello unlock succeeded");
+                StartInfrastructure();
+                StateChanged?.Invoke();
+            }
+            catch (Exception)
+            {
+                _audit?.Log(AuditEventType.UnlockFailure, "Hello unlock failed", success: false);
+                throw;
+            }
+            finally
+            {
+                if (mkCopy is not null) SecureMemory.Zero(mkCopy);
+            }
         }
     }
 
     public void Lock()
     {
-        // Clear plaintext secrets from the entry objects before tearing down the session. The
-        // entries can outlive the session if the UI still references them, so dropping the
-        // decrypted strings here (not only in PanicLock) limits how long they linger in memory.
-        ScrubPayloadSecrets();
-        DisposeSession();
-        _audit?.Log(AuditEventType.Lock, "Vault locked");
-        StateChanged?.Invoke();
+        lock (_sessionGate)
+        {
+            ScrubPayloadSecrets();
+            DisposeSessionCore();
+            _audit?.Log(AuditEventType.Lock, "Vault locked");
+            StateChanged?.Invoke();
+        }
     }
 
     public void PanicLock()
     {
-        ScrubPayloadSecrets();
-        ForceGarbageCollectionBestEffort();
-        DisposeSession();
-        _audit?.Log(AuditEventType.Lock, "Panic lock");
-        StateChanged?.Invoke();
+        lock (_sessionGate)
+        {
+            ScrubPayloadSecrets();
+            ForceGarbageCollectionBestEffort();
+            DisposeSessionCore();
+            _audit?.Log(AuditEventType.Lock, "Panic lock");
+            StateChanged?.Invoke();
+        }
     }
 
     public VaultUnlockContext UnlockFromSnapshot(
@@ -134,13 +174,19 @@ public sealed class VaultSession : IDisposable
         bool paranoiaMode = true,
         bool confirmRollback = false)
     {
-        EnsureEnterpriseLicense();
-        DisposeSession();
-        _context = _engine.UnlockFromSnapshot(snapshotIndex, masterPassword, paranoiaMode, confirmRollback);
-        _audit?.Log(AuditEventType.SnapshotRestore, $"Restored from snapshot {snapshotIndex}");
-        StartInfrastructure();
-        StateChanged?.Invoke();
-        return _context;
+        lock (_sessionGate)
+        {
+            RuntimeIntegrity.EnsureSafeForSensitiveOperation();
+            EnsureEnterpriseLicense();
+            EnsureEnterpriseSeat();
+            DisposeSessionCore();
+            _context = _engine.UnlockFromSnapshot(snapshotIndex, masterPassword, paranoiaMode, confirmRollback);
+            RegisterEnterpriseSeat();
+            _audit?.Log(AuditEventType.SnapshotRestore, $"Restored from snapshot {snapshotIndex}");
+            StartInfrastructure();
+            StateChanged?.Invoke();
+            return _context;
+        }
     }
 
     public byte[] CopyMasterKeyForHelloSetup()
@@ -152,7 +198,8 @@ public sealed class VaultSession : IDisposable
     public void ChangeMasterPassword(string newPassword, Argon2Parameters? kdf = null)
     {
         EnsureWritable();
-        _engine.ChangeMasterPassword(_context!, newPassword, kdf);
+        lock (_payloadLock)
+            _engine.ChangeMasterPassword(_context!, newPassword, kdf);
         _audit?.Log(AuditEventType.ConfigurationChange, "Master password changed");
     }
 
@@ -165,6 +212,7 @@ public sealed class VaultSession : IDisposable
     public void AddEntry(VaultEntry entry)
     {
         EnsureWritable();
+        EnsureEntryCompliesWithPolicy(entry);
         lock (_payloadLock)
             _engine.AddEntry(_context!, entry);
         StateChanged?.Invoke();
@@ -173,6 +221,7 @@ public sealed class VaultSession : IDisposable
     public void UpdateEntry(VaultEntry entry)
     {
         EnsureWritable();
+        EnsureEntryCompliesWithPolicy(entry);
         lock (_payloadLock)
             _engine.UpdateEntry(_context!, entry);
         StateChanged?.Invoke();
@@ -186,13 +235,115 @@ public sealed class VaultSession : IDisposable
         StateChanged?.Invoke();
     }
 
+    public int BulkDeleteEntries(IEnumerable<Guid> entryIds)
+    {
+        EnsureWritable();
+        int count;
+        lock (_payloadLock)
+            count = _engine.BulkDeleteEntries(_context!, entryIds);
+        if (count > 0)
+            StateChanged?.Invoke();
+        return count;
+    }
+
+    public (int Updated, int SkippedAlreadyTagged, int SkippedMaxTags) BulkAddTag(
+        IEnumerable<Guid> entryIds,
+        string normalizedTag)
+    {
+        EnsureWritable();
+        (int updated, int skippedAlready, int skippedMax) result;
+        lock (_payloadLock)
+            result = _engine.BulkAddTag(_context!, entryIds, normalizedTag);
+        if (result.updated > 0)
+            StateChanged?.Invoke();
+        return result;
+    }
+
     public void BulkImport(IEnumerable<VaultEntry> entries)
     {
         EnsureWritable();
+        foreach (var entry in entries)
+            EnsureEntryCompliesWithPolicy(entry);
         lock (_payloadLock)
             _engine.BulkImport(_context!, entries);
         _audit?.Log(AuditEventType.ConfigurationChange, "Bulk import completed");
         StateChanged?.Invoke();
+    }
+
+    public void ApplyImport(ImportExport.ImportApplyPlan plan)
+    {
+        EnsureWritable();
+        lock (_payloadLock)
+            _engine.ApplyImport(_context!, plan);
+        _audit?.Log(AuditEventType.ConfigurationChange,
+            $"Import “{plan.Batch.ProvenanceLabel}”: +{plan.Batch.AddedCount} added, "
+            + $"{plan.Batch.SkippedDuplicateCount} duplicates skipped");
+        StateChanged?.Invoke();
+    }
+
+    public IReadOnlyList<ImportBatch> ImportHistory()
+    {
+        lock (_payloadLock)
+        {
+            if (_context is null) return [];
+            return _context.Payload.ImportBatches
+                .OrderByDescending(b => b.ImportedAt)
+                .ToList();
+        }
+    }
+
+    public IReadOnlyList<VaultEntry> EntriesForImportBatch(Guid batchId)
+    {
+        lock (_payloadLock)
+        {
+            if (_context is null) return [];
+            return _context.Payload.Entries
+                .Where(e => e.ImportBatchId == batchId)
+                .OrderByDescending(e => e.ImportedAt ?? e.CreatedAt)
+                .ToList();
+        }
+    }
+
+    /// <summary>Recreates browser bridge pipes (e.g. after a stuck token broker). Vault must be unlocked.</summary>
+    public void RestartBridgeInfrastructure()
+    {
+        lock (_sessionGate)
+        {
+            if (_context is null)
+                throw new InvalidOperationException("Unlock the vault before reconnecting the browser.");
+
+            StartInfrastructure();
+            StateChanged?.Invoke();
+        }
+    }
+
+    /// <summary>Restarts bridge pipes when the token broker or credential server is not listening.</summary>
+    public void EnsureBridgeInfrastructureHealthy()
+    {
+        lock (_sessionGate)
+        {
+            if (_context is null)
+                return;
+
+            if (_bridgeShutdownTask is { IsCompleted: false })
+            {
+                WaitForBridgeShutdown();
+                if (_bridgeShutdownTask is { IsCompleted: false })
+                {
+                    _audit?.Log(
+                        AuditEventType.BrowserBridgeAccess,
+                        "Bridge shutdown did not finish; forcing pipe restart",
+                        success: false);
+                    _bridgeShutdownTask = null;
+                }
+            }
+
+            if (BridgeHealthCheck.AreListenersActive())
+                return;
+
+            StartInfrastructure();
+            StateChanged?.Invoke();
+        }
     }
 
     public void Save()
@@ -233,19 +384,20 @@ public sealed class VaultSession : IDisposable
 
     public IEnumerable<VaultEntry> Search(string query)
     {
+        List<VaultEntry> snapshot;
         lock (_payloadLock)
         {
-            if (_context is null) yield break;
-            foreach (var e in _context.Payload.Entries)
-            {
-                if (string.IsNullOrEmpty(query) ||
-                    e.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    e.Username.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    e.Url.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    e.Tags.Any(t => t.Contains(query, StringComparison.OrdinalIgnoreCase)))
-                    yield return e;
-            }
+            if (_context is null)
+                return [];
+            snapshot = _context.Payload.Entries.ToList();
         }
+
+        return snapshot.Where(e =>
+            string.IsNullOrEmpty(query) ||
+            e.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+            e.Username.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+            e.Url.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+            e.Tags.Any(t => t.Contains(query, StringComparison.OrdinalIgnoreCase)));
     }
 
     public IReadOnlyList<string> ListSnapshots()
@@ -274,7 +426,7 @@ public sealed class VaultSession : IDisposable
             VaultEntry? match = null;
             if (req.EntryId is { } entryId)
             {
-                match = _context.Payload.Entries.FirstOrDefault(e => e.Id == entryId);
+                match = matches.Select(m => m.Entry).FirstOrDefault(e => e.Id == entryId);
             }
             else if (matches.Count == 1)
             {
@@ -286,16 +438,18 @@ public sealed class VaultSession : IDisposable
                 {
                     Found = false,
                     Error = "multiple_matches",
-                    Matches = matches.Select(m => new CredentialMatchSummary
-                    {
-                        Id = m.Entry.Id,
-                        Title = m.Entry.Title,
-                        Username = m.Entry.Username
-                    }).ToList()
+                    Matches = matches.Select(m => ToMatchSummary(m.Entry, requestHost)).ToList()
                 };
             }
 
-            if (match is null || !EntryHostMatches(match.Url, requestHost))
+            if (match is null)
+                return new CredentialResponse { Error = "no_match" };
+
+            if (match.IsSecureNote)
+                return new CredentialResponse { Error = "no_match" };
+
+            var matchUrl = GetEffectiveEntryUrl(match) ?? match.Url;
+            if (string.IsNullOrEmpty(matchUrl) || !EntryHostMatchesForCredentialRelease(matchUrl, requestHost))
                 return new CredentialResponse { Error = "no_match" };
 
             _audit?.Log(AuditEventType.BrowserBridgeAccess,
@@ -323,12 +477,7 @@ public sealed class VaultSession : IDisposable
                 return hostError;
 
             var matches = ListMatchesForHost(requestHost)
-                .Select(m => new CredentialMatchSummary
-                {
-                    Id = m.Entry.Id,
-                    Title = m.Entry.Title,
-                    Username = m.Entry.Username
-                })
+                .Select(m => ToMatchSummary(m.Entry, requestHost))
                 .ToList();
 
             _audit?.Log(AuditEventType.BrowserBridgeAccess,
@@ -351,8 +500,11 @@ public sealed class VaultSession : IDisposable
     private List<(VaultEntry Entry, int Score)> ListMatchesForHost(string requestHost)
     {
         return _context!.Payload.Entries
-            .Where(e => !e.IsSecureNote && !string.IsNullOrEmpty(e.Url))
-            .Where(e => EntryHostMatches(e.Url, requestHost))
+            .Where(e => !e.IsSecureNote)
+            .Select(e => (Entry: e, Url: GetEffectiveEntryUrl(e)))
+            .Where(x => !string.IsNullOrEmpty(x.Url))
+            .Where(x => EntryHostMatches(x.Url!, requestHost))
+            .Select(x => x.Entry)
             .Select(e => (Entry: e, Score: MatchScore(e, requestHost)))
             .OrderByDescending(x => x.Score)
             .ThenBy(x => x.Entry.Title, StringComparer.OrdinalIgnoreCase)
@@ -361,8 +513,15 @@ public sealed class VaultSession : IDisposable
 
     private static int MatchScore(VaultEntry entry, string requestHost)
     {
-        var host = ExtractHost(entry.Url);
-        return string.Equals(host, requestHost, StringComparison.OrdinalIgnoreCase) ? 2 : 0;
+        var host = ExtractHost(GetEffectiveEntryUrl(entry) ?? entry.Url);
+        if (string.IsNullOrEmpty(host))
+            return 0;
+
+        host = DomainSafety.NormalizeHost(host);
+        if (string.Equals(host, requestHost, StringComparison.OrdinalIgnoreCase))
+            return 3;
+
+        return DomainSafety.ShareRegistrableDomain(host, requestHost) ? 1 : 0;
     }
 
     private static bool TryNormalizeRequest(
@@ -378,14 +537,17 @@ public sealed class VaultSession : IDisposable
             ? ""
             : req.Domain.Trim().ToLowerInvariant();
 
-        if (!string.IsNullOrEmpty(fromUrl) && !string.IsNullOrEmpty(fromDomain) &&
-            !string.Equals(fromUrl, fromDomain, StringComparison.OrdinalIgnoreCase))
+        var normalizedUrl = string.IsNullOrEmpty(fromUrl) ? "" : DomainSafety.NormalizeHost(fromUrl);
+        var normalizedDomain = string.IsNullOrEmpty(fromDomain) ? "" : DomainSafety.NormalizeHost(fromDomain);
+
+        if (!string.IsNullOrEmpty(normalizedUrl) && !string.IsNullOrEmpty(normalizedDomain) &&
+            !string.Equals(normalizedUrl, normalizedDomain, StringComparison.OrdinalIgnoreCase))
         {
             errorResponse = new CredentialResponse { Error = "host_mismatch" };
             return false;
         }
 
-        requestHost = !string.IsNullOrEmpty(fromUrl) ? fromUrl : fromDomain;
+        requestHost = !string.IsNullOrEmpty(normalizedUrl) ? normalizedUrl : normalizedDomain;
         if (string.IsNullOrEmpty(requestHost))
             return false;
 
@@ -395,7 +557,6 @@ public sealed class VaultSession : IDisposable
             return false;
         }
 
-        requestHost = DomainSafety.NormalizeHost(requestHost);
         return true;
     }
 
@@ -409,9 +570,38 @@ public sealed class VaultSession : IDisposable
     private static bool EntryHostMatches(string entryUrl, string requestHost)
     {
         var entryHost = ExtractHost(entryUrl);
-        return entryHost is not null &&
-               string.Equals(entryHost, requestHost, StringComparison.OrdinalIgnoreCase);
+        if (entryHost is null)
+            return false;
+
+        return DomainSafety.HostsMatchForAutofill(entryHost, requestHost);
     }
+
+    private static bool EntryHostMatchesForCredentialRelease(string entryUrl, string requestHost)
+    {
+        var entryHost = ExtractHost(entryUrl);
+        if (entryHost is null)
+            return false;
+
+        return DomainSafety.HostsMatchForCredentialRelease(entryHost, requestHost);
+    }
+
+    private static CredentialMatchSummary ToMatchSummary(VaultEntry entry, string requestHost)
+    {
+        var entryUrl = GetEffectiveEntryUrl(entry) ?? entry.Url;
+        var releasable = !string.IsNullOrEmpty(entryUrl)
+            && EntryHostMatchesForCredentialRelease(entryUrl, requestHost);
+
+        return new CredentialMatchSummary
+        {
+            Id = entry.Id,
+            Title = entry.Title,
+            Username = entry.Username,
+            Releasable = releasable
+        };
+    }
+
+    private static string? GetEffectiveEntryUrl(VaultEntry entry)
+        => VaultEntryWebsite.GetEffectiveUrl(entry);
 
     private static string? ExtractHost(string? url)
     {
@@ -492,21 +682,61 @@ public sealed class VaultSession : IDisposable
     {
         if (_context is null) throw new InvalidOperationException("Vault not unlocked.");
         if (_context.ReadOnly) throw new InvalidOperationException("Vault is read-only.");
+        PolicyEnforcer.EnsureWritableSecurityLevel(_context.Header.SecurityLevel, _policy);
+    }
+
+    private void EnsureEntryCompliesWithPolicy(VaultEntry entry)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.TotpSecret)
+            && !PolicyEnforcer.CanUseTotp(_enterpriseClient, _policy))
+        {
+            throw new InvalidOperationException("Authenticator codes are not permitted by policy.");
+        }
     }
 
     private void StartInfrastructure()
     {
-        _bridge?.Dispose();
-        _tokenBroker?.Dispose();
+        BridgeHostProcessCleanup.StopOrphanedHosts();
+        WaitForBridgeShutdown();
+        StopBridgeInfrastructure(waitForListeners: true);
+
         BridgeSessionAuth.ConfigureTokenDirectory(FortivaPaths.GetBridgeSessionDirectory(_enterpriseClient));
         BridgeSessionAuth.ClearSessionToken();
         _bridgeSessionToken = BridgeSessionAuth.CreateSessionToken();
-        _tokenBroker = new BridgeTokenBroker(_bridgeSessionToken);
-        _tokenBroker.Start();
-        _fillNonce = new BridgeFillNonce();
         BridgeClientValidator.ConfigureAllowedInstallRoots(AppContext.BaseDirectory);
-        _bridge = new BrowserBridgeServer(ResolveForDomain, ListMatchesForDomain, _bridgeSessionToken);
-        _bridge.Start();
+        _fillNonce = new BridgeFillNonce();
+
+        try
+        {
+            BrowserBridgeInstallService.RepairNativeHostIfStale(AppContext.BaseDirectory, _enterpriseClient);
+        }
+        catch
+        {
+            /* best effort — re-pin HKCU native messaging after unlock */
+        }
+
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            _tokenBroker = new BridgeTokenBroker(_bridgeSessionToken);
+            _tokenBroker.Start();
+            _bridge = new BrowserBridgeServer(ResolveForDomain, ListMatchesForDomain, _bridgeSessionToken);
+            _bridge.Start();
+
+            if (BridgeHealthCheck.AreListenersActive(BridgeHealthCheck.StartupHealthTimeoutMs))
+                break;
+
+            StopBridgeInfrastructure(waitForListeners: true);
+            if (attempt < 2)
+                Thread.Sleep(100 * (attempt + 1));
+        }
+
+        if (!BridgeHealthCheck.AreListenersActive())
+        {
+            _audit?.Log(
+                AuditEventType.BrowserBridgeAccess,
+                "Bridge pipes failed to start after unlock",
+                success: false);
+        }
 
         _autoLock?.Dispose();
         var timeout = PolicyEnforcer.EnforceAutoLock(_autoLockTimeoutSeconds, _policy ?? new FortivaPolicy());
@@ -518,12 +748,48 @@ public sealed class VaultSession : IDisposable
         };
     }
 
-    private void DisposeSession()
+    private void StopBridgeInfrastructure(bool waitForListeners)
     {
-        _bridge?.Dispose();
+        var bridge = _bridge;
+        var broker = _tokenBroker;
         _bridge = null;
-        _tokenBroker?.Dispose();
         _tokenBroker = null;
+
+        if (bridge is not null || broker is not null)
+        {
+            var prior = _bridgeShutdownTask;
+            _bridgeShutdownTask = Task.Run(async () =>
+            {
+                if (prior is not null)
+                {
+                    try { await prior.ConfigureAwait(false); } catch { /* best effort */ }
+                }
+
+                bridge?.DisposeBlocking();
+                broker?.DisposeBlocking();
+            });
+        }
+
+        if (waitForListeners)
+            WaitForBridgeShutdown();
+    }
+
+    private void WaitForBridgeShutdown()
+    {
+        var shutdown = _bridgeShutdownTask;
+        if (shutdown is null)
+            return;
+
+        try { shutdown.Wait(TimeSpan.FromSeconds(8)); }
+        catch { /* best effort */ }
+
+        if (shutdown.IsCompleted)
+            _bridgeShutdownTask = null;
+    }
+
+    private void DisposeSessionCore()
+    {
+        StopBridgeInfrastructure(waitForListeners: false);
         BridgeSessionAuth.ClearSessionToken();
         _bridgeSessionToken = null;
         _fillNonce?.Reset();
@@ -544,8 +810,12 @@ public sealed class VaultSession : IDisposable
 
             foreach (var entry in _context.Payload.Entries)
             {
+                entry.Username = "";
                 entry.Password = "";
+                entry.Notes = "";
                 entry.TotpSecret = null;
+                entry.PasskeyCredentialId = null;
+                entry.Tags ??= [];
             }
         }
     }
@@ -563,5 +833,21 @@ public sealed class VaultSession : IDisposable
         }
     }
 
-    public void Dispose() => DisposeSession();
+    public void Dispose()
+    {
+        lock (_sessionGate)
+        {
+            ScrubPayloadSecrets();
+            StopBridgeInfrastructure(waitForListeners: true);
+            BridgeSessionAuth.ClearSessionToken();
+            _bridgeSessionToken = null;
+            _fillNonce?.Reset();
+            _fillNonce = null;
+            _autoLock?.Dispose();
+            _autoLock = null;
+            _context?.Keys.Lock();
+            _context?.Keys.Dispose();
+            _context = null;
+        }
+    }
 }

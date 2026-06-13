@@ -6,7 +6,7 @@ namespace Fortiva.AppHost.Services;
 
 public static class VaultCategoryDialog
 {
-    public static async Task<string?> ShowCreateAsync(XamlRoot xamlRoot, ShellViewModel vm)
+    public static async Task<string?> ShowCreateAsync(XamlRoot xamlRoot, ShellViewModel vm, string title = "New category")
     {
         var box = new TextBox
         {
@@ -28,7 +28,7 @@ public static class VaultCategoryDialog
 
         var dlg = new ContentDialog
         {
-            Title = "New category",
+            Title = title,
             Content = form,
             PrimaryButtonText = "Create",
             CloseButtonText = "Cancel",

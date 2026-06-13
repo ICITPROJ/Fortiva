@@ -50,7 +50,7 @@ public sealed partial class AuditPage : Page
         CountLabel.Text = $"{events.Count} events";
     }
 
-    private static Grid BuildRow(AuditEvent ev)
+    private static Border BuildRow(AuditEvent ev)
     {
         var row = new Grid();
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
@@ -104,8 +104,17 @@ public sealed partial class AuditPage : Page
         row.Children.Add(time);
         row.Children.Add(badge);
         row.Children.Add(msg);
-        row.Margin = new Thickness(0, 4, 0, 4);
-        return row;
+
+        return new Border
+        {
+            Background = FortivaThemeResources.GetBrush("FortivaGlassFillBrush"),
+            BorderBrush = FortivaThemeResources.GetBrush("FortivaGlassBorderBrush"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(14, 10, 14, 10),
+            Margin = new Thickness(0, 0, 0, 8),
+            Child = row
+        };
     }
 
     private async void Export_Click(object sender, RoutedEventArgs e)
