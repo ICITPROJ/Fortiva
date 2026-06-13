@@ -5,6 +5,36 @@
 Fortiva Enterprise Client is distributed as a `.intunewin` package (Win32 app), which
 wraps the EXE installer. This enables silent deployment via Microsoft Intune or SCCM.
 
+## PowerShell provisioning scripts
+
+For Intune **Proactive Remediations**, **Win32 app install commands**, or post-install verification:
+
+| Script | Purpose |
+|--------|---------|
+| `Install-FortivaEnterprise.ps1` | Silent `/VERYSILENT` install + HKLM native messaging repair (requires elevation) |
+| `Deploy-Intune.ps1` | Write `{app}\NativeMessaging\*.json` and register **HKLM** `NativeMessagingHosts` for Chrome and Edge |
+
+```powershell
+# After Win32 app delivers the EXE, or on existing installs:
+powershell -ExecutionPolicy Bypass -File .\packaging\intune\Deploy-Intune.ps1
+
+# Full silent install from build output (elevated):
+powershell -ExecutionPolicy Bypass -File .\packaging\intune\Install-FortivaEnterprise.ps1
+```
+
+`Deploy-Intune.ps1` writes:
+
+```
+HKLM\SOFTWARE\Google\Chrome\NativeMessagingHosts\com.fortiva.browserbridge.enterprise
+HKLM\SOFTWARE\Microsoft\Edge\NativeMessagingHosts\com.fortiva.browserbridge.enterprise
+```
+
+Default value = full path to `{InstallRoot}\NativeMessaging\com.fortiva.browserbridge.enterprise.json`
+
+This is **machine-wide** (not HKCU), so all users on the endpoint receive the same native host binding without per-user Developer mode steps.
+
+See also `docs/BRIDGE-ARCHITECTURE.md` for session-bound pipe rules.
+
 ## Steps
 
 1. **Package with IntuneWinAppUtil**:

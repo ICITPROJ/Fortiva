@@ -19,6 +19,58 @@ let fortivaStatus = "setup";
 let pendingMatches = [];
 let selectedEntryId = null;
 let activeFillNonce = null;
+let bridgeListenerRegistered = false;
+
+function connectionLabelForStatus(status) {
+  switch (status) {
+    case "ready":
+      return "Ready to fill";
+    case "locked":
+      return "Locked — click Fill";
+    case "bridge_warming":
+      return "Starting…";
+    case "setup_required":
+    default:
+      return "Click Fill to connect";
+  }
+}
+
+function connectionToneForStatus(status) {
+  if (status === "ready") return "ready";
+  if (status === "locked") return "locked";
+  if (status === "bridge_warming") return "bridge_warming";
+  return "setup";
+}
+
+function applyBridgeSnapshot(snapshot) {
+  if (!snapshot) return;
+
+  const status = snapshot.status || "setup_required";
+  const uiStatus = connectionToneForStatus(status);
+  setConnection(uiStatus, connectionLabelForStatus(status));
+
+  if (snapshot.message && status !== "ready") {
+    const tone =
+      status === "locked" ? "warn" : status === "bridge_warming" ? "loading" : "";
+    setStatus(snapshot.message, tone);
+  } else if (status === "ready") {
+    setStatus(MESSAGES.ready, "success");
+  }
+
+  if (status === "ready" && tabContext?.ok && !activeFillNonce) {
+    void preloadMatches(tabContext);
+  }
+}
+
+function ensureBridgeStateListener() {
+  if (bridgeListenerRegistered) return;
+  bridgeListenerRegistered = true;
+
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type !== "bridge_state_updated" || !message.snapshot) return;
+    applyBridgeSnapshot(message.snapshot);
+  });
+}
 
 const MESSAGES = {
   ready: "Ready. Click Fill when the login fields are visible.",
@@ -458,6 +510,8 @@ async function preloadMatches(context = tabContext) {
 }
 
 async function init() {
+  ensureBridgeStateListener();
+
   try {
     const manifest = chrome.runtime.getManifest();
     versionLine.textContent = manifest?.version ? `v${manifest.version}` : "";
@@ -482,19 +536,22 @@ async function init() {
   renderSiteLine(tabContext);
   setConnection("loading", "Connecting…");
   setStatus("Checking Fortiva on this PC…", "loading");
-  void (async () => {
-    await refreshConnection();
-    if (fortivaStatus === "bridge_warming") await waitForReady(6);
-    if (fortivaStatus === "ready") await preloadMatches(tabContext);
-    const canFill =
-      tabContext?.isFillable &&
-      !tabContext?.suspicious &&
-      (fortivaStatus === "ready" ||
-        fortivaStatus === "locked" ||
-        fortivaStatus === "setup" ||
-        fortivaStatus === "bridge_warming");
-    fillBtn.disabled = !canFill;
-  })();
+
+  const snapshot = await sendMessage({ type: "get_bridge_snapshot" }, 8000);
+  applyBridgeSnapshot(snapshot);
+
+  if (fortivaStatus === "ready" && tabContext?.ok) {
+    await preloadMatches(tabContext);
+  }
+
+  const canFill =
+    tabContext?.isFillable &&
+    !tabContext?.suspicious &&
+    (fortivaStatus === "ready" ||
+      fortivaStatus === "locked" ||
+      fortivaStatus === "setup" ||
+      fortivaStatus === "bridge_warming");
+  fillBtn.disabled = !canFill;
 }
 
 retryBtn.addEventListener("click", async () => {

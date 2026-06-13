@@ -27,5 +27,7 @@ public class BridgeSnapshotPushTests
         Assert.Equal(state.ToString(), push.State);
         Assert.Equal(expectedStatus, push.Status);
         Assert.Equal(expectedOk, push.Ok);
+        if (token is not null)
+            Assert.Equal(token, push.CachedSessionToken);
     }
 }

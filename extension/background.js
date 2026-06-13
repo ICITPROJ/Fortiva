@@ -15,14 +15,21 @@ let currentBridgeSnapshot = {
 };
 let pendingRequest = null;
 
-function snapshotToPingResponse(snapshot) {
+let cachedSessionToken = null;
+
+function snapshotToClientView(snapshot) {
   return {
     ok: snapshot.ok === true,
     status: snapshot.status || "setup_required",
     message: snapshot.message,
     state: snapshot.state,
-    isVaultUnlocked: snapshot.isVaultUnlocked,
+    isVaultUnlocked: snapshot.isVaultUnlocked === true,
+    vaultExists: snapshot.vaultExists,
   };
+}
+
+function snapshotToPingResponse(snapshot) {
+  return snapshotToClientView(snapshot);
 }
 
 function handleIncomingStatePush(message) {
@@ -37,6 +44,7 @@ function handleIncomingStatePush(message) {
     message: message.message ?? message.Message,
     timestamp: message.timestamp ?? message.Timestamp,
   };
+  cachedSessionToken = currentBridgeSnapshot.cachedSessionToken || null;
 
   try {
     chrome.runtime
@@ -233,7 +241,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "get_bridge_snapshot") {
-    sendResponse(snapshotToPingResponse(currentBridgeSnapshot));
+    sendResponse(snapshotToClientView(currentBridgeSnapshot));
     return;
   }
 
