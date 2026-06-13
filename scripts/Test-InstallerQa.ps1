@@ -65,6 +65,15 @@ if ($expected -ne $actual) {
 $iscc = Resolve-IsccPath
 if (-not $iscc) { Fail "ISCC.exe not found - install Inno Setup 6" }
 
+Write-Host "Fetching installer prerequisites..." -ForegroundColor Cyan
+& powershell -ExecutionPolicy Bypass -File (Join-Path $root "scripts\fetch-installer-prerequisites.ps1")
+$prereqExit = if (Test-Path variable:LASTEXITCODE) { $LASTEXITCODE } else { 0 }
+if ($prereqExit -ne 0) { Fail "fetch-installer-prerequisites failed with exit $prereqExit" }
+foreach ($req in @('MicrosoftEdgeWebview2Setup.exe', 'vc_redist.x64.exe')) {
+    $p = Join-Path $root "packaging\prerequisites\$req"
+    if (-not (Test-Path $p)) { Fail "Missing prerequisite: $p" }
+}
+
 & powershell -ExecutionPolicy Bypass -File (Join-Path $root "scripts\ensure-extension-key.ps1") | Out-Null
 $extensionId = & powershell -ExecutionPolicy Bypass -File (Join-Path $root "scripts\compute-extension-id.ps1")
 if ($extensionId -match 'REPLACE|NOT_SET' -or $extensionId.Length -ne 32) {
