@@ -19,6 +19,17 @@ function Fail([string]$Message) {
     exit 1
 }
 
+function Resolve-IsccPath {
+    foreach ($candidate in @(
+            (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
+            (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe'),
+            (Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe')
+        )) {
+        if (Test-Path $candidate) { return $candidate }
+    }
+    return $null
+}
+
 if ([string]::IsNullOrWhiteSpace($Version)) {
     $props = Join-Path $root "Directory.Build.props"
     $m = Select-String -Path $props -Pattern '<Version>([^<]+)</Version>' | Select-Object -First 1
@@ -29,7 +40,8 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
 Write-Host "Installer QA for version $Version" -ForegroundColor Cyan
 
 & (Join-Path $root "scripts\Test-ExtensionManifest.ps1")
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$manifestExit = if (Test-Path variable:LASTEXITCODE) { $LASTEXITCODE } else { 0 }
+if ($manifestExit -ne 0) { exit $manifestExit }
 
 $personalExe = Join-Path $root "dist\Fortiva.Personal\Fortiva.Personal.exe"
 $bridgeExe = Join-Path $root "dist\Fortiva.Personal\BrowserBridge\Fortiva.BrowserBridge.Host.exe"
@@ -41,7 +53,7 @@ foreach ($path in @($personalExe, $bridgeExe, $extManifest)) {
 }
 
 if (-not (Test-Path $sidecar)) {
-    Fail "Missing bridge-host.sha256 — run build-release hash pin step"
+    Fail "Missing bridge-host.sha256 - run build-release hash pin step"
 }
 
 $expected = (Get-Content $sidecar -Raw).Trim().ToLowerInvariant()
@@ -50,13 +62,8 @@ if ($expected -ne $actual) {
     Fail "bridge-host.sha256 mismatch (sidecar=$expected computed=$actual)"
 }
 
-$iscc = @(
-    "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-    "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
-    "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
-) | Where-Object { Test-Path $_ } | Select-Object -First 1
-
-if (-not $iscc) { Fail "ISCC.exe not found — install Inno Setup 6" }
+$iscc = Resolve-IsccPath
+if (-not $iscc) { Fail "ISCC.exe not found - install Inno Setup 6" }
 
 & powershell -ExecutionPolicy Bypass -File (Join-Path $root "scripts\ensure-extension-key.ps1") | Out-Null
 $extensionId = & powershell -ExecutionPolicy Bypass -File (Join-Path $root "scripts\compute-extension-id.ps1")
@@ -66,7 +73,8 @@ if ($extensionId -match 'REPLACE|NOT_SET' -or $extensionId.Length -ne 32) {
 
 $iss = Join-Path $root "packaging\installer\FortivaPersonal.iss"
 & $iscc "/DAppVersion=$Version" $iss
-if ($LASTEXITCODE -ne 0) { Fail "ISCC failed with exit $LASTEXITCODE" }
+$isccExit = if (Test-Path variable:LASTEXITCODE) { $LASTEXITCODE } else { 0 }
+if ($isccExit -ne 0) { Fail "ISCC failed with exit $isccExit" }
 
 $installer = Join-Path $root "dist\installers\FortivaPersonal-$Version-Setup.exe"
 if (-not (Test-Path $installer)) {
