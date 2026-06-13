@@ -14,6 +14,7 @@ public sealed class BridgeCoordinator : IBridgeCoordinator
     private readonly Func<bool> _vaultExists;
     private readonly Func<bool> _isEnterprise;
     private readonly Func<string> _getInstallRoot;
+    private readonly BridgeEventBroadcaster _eventBroadcaster;
     private BridgeReadyState _currentState = BridgeReadyState.Uninitialized;
     private bool _disposed;
 
@@ -27,6 +28,8 @@ public sealed class BridgeCoordinator : IBridgeCoordinator
         _vaultExists = vaultExists ?? throw new ArgumentNullException(nameof(vaultExists));
         _isEnterprise = isEnterprise ?? throw new ArgumentNullException(nameof(isEnterprise));
         _getInstallRoot = getInstallRoot ?? throw new ArgumentNullException(nameof(getInstallRoot));
+        _eventBroadcaster = new BridgeEventBroadcaster(_isEnterprise);
+        _eventBroadcaster.ConfigureSnapshotSource(GetAuthoritativeSnapshot);
     }
 
     public BridgeReadyState CurrentState
@@ -62,6 +65,7 @@ public sealed class BridgeCoordinator : IBridgeCoordinator
 
             SetState(BridgeReadyState.StartingInfrastructure);
             BridgePipeNaming.RotateSessionId(_isEnterprise());
+            _eventBroadcaster.RestartForCurrentSession();
             SessionRotated?.Invoke();
             BridgeHostProcessCleanup.StopAllHosts();
 
@@ -158,6 +162,7 @@ public sealed class BridgeCoordinator : IBridgeCoordinator
         if (_disposed)
             return;
         _disposed = true;
+        _eventBroadcaster.Dispose();
         _lifecycleLock.Dispose();
     }
 
@@ -173,7 +178,22 @@ public sealed class BridgeCoordinator : IBridgeCoordinator
         }
 
         if (previous != state)
+        {
             ReadyStateChanged?.Invoke(state);
+            _ = PushStateToConnectedHostsAsync();
+        }
+    }
+
+    private async Task PushStateToConnectedHostsAsync()
+    {
+        try
+        {
+            await _eventBroadcaster.BroadcastSnapshotAsync(GetAuthoritativeSnapshot()).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            FortivaDiagnosticLog.Write("BridgeCoordinator.PushState", ex);
+        }
     }
 
     private void VerifyAndRepairHashSidecars()

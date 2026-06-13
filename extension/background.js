@@ -3,53 +3,141 @@ const NATIVE_HOSTS = [
   "com.fortiva.browserbridge.enterprise",
 ];
 
-function sendNativeMessage(message, callback, index = 0) {
-  if (index >= NATIVE_HOSTS.length) {
-    callback(null);
+let bridgePort = null;
+let connecting = false;
+let currentBridgeSnapshot = {
+  type: "STATE_CHANGED",
+  state: "Uninitialized",
+  isVaultUnlocked: false,
+  ok: false,
+  status: "setup_required",
+};
+let pendingRequest = null;
+
+function snapshotToPingResponse(snapshot) {
+  return {
+    ok: snapshot.ok === true,
+    status: snapshot.status || "setup_required",
+    message: snapshot.message,
+    state: snapshot.state,
+    isVaultUnlocked: snapshot.isVaultUnlocked,
+  };
+}
+
+function handleIncomingStatePush(message) {
+  currentBridgeSnapshot = {
+    type: "STATE_CHANGED",
+    state: message.state || message.State || "Uninitialized",
+    vaultExists: message.vaultExists ?? message.VaultExists,
+    isVaultUnlocked: message.isVaultUnlocked ?? message.IsVaultUnlocked ?? false,
+    cachedSessionToken: message.cachedSessionToken ?? message.CachedSessionToken,
+    ok: message.ok ?? message.Ok ?? false,
+    status: message.status ?? message.Status ?? "setup_required",
+    message: message.message ?? message.Message,
+    timestamp: message.timestamp ?? message.Timestamp,
+  };
+
+  try {
+    chrome.runtime
+      .sendMessage({ type: "bridge_state_updated", snapshot: currentBridgeSnapshot })
+      .catch(() => {});
+  } catch {
+    /* popup may be closed */
+  }
+}
+
+function establishAuthoritativeBridgeChannel(hostIndex = 0) {
+  if (bridgePort !== null || connecting) return;
+  if (hostIndex >= NATIVE_HOSTS.length) return;
+
+  connecting = true;
+  try {
+    bridgePort = chrome.runtime.connectNative(NATIVE_HOSTS[hostIndex]);
+  } catch {
+    connecting = false;
+    setTimeout(() => establishAuthoritativeBridgeChannel(hostIndex + 1), 3000);
     return;
   }
-  chrome.runtime.sendNativeMessage(NATIVE_HOSTS[index], message, (response) => {
-    if (chrome.runtime.lastError) {
-      sendNativeMessage(message, callback, index + 1);
+
+  bridgePort.onMessage.addListener((message) => {
+    if (!message) return;
+    const pushType = message.type || message.Type;
+    if (pushType === "STATE_CHANGED" || message.state || message.State) {
+      handleIncomingStatePush(message);
       return;
     }
-    callback(response || null);
-  });
-}
 
-const NATIVE_TIMEOUT_MS = 20000;
-const CREDENTIAL_TIMEOUT_MS = 130000;
-
-async function nativeCredentialRequestWithRetry(envelope, attempts = 3) {
-  let last = null;
-  for (let i = 0; i < attempts; i++) {
-    last = await nativeRequest(envelope, CREDENTIAL_TIMEOUT_MS);
-    if (!last?.error || last.error !== "setup_required") return last;
-    if (i < attempts - 1) await new Promise((r) => setTimeout(r, 600 * (i + 1)));
-  }
-  return last;
-}
-
-async function nativeRequestWithRetry(message, attempts = 4) {
-  let last = null;
-  for (let i = 0; i < attempts; i++) {
-    last = await nativeRequest(message);
-    if (last?.ok || last?.status === "locked" || last?.status === "setup_required")
-      return last;
-    if (i < attempts - 1) {
-      const delay = last?.status === "bridge_warming" ? 550 * (i + 1) : 350;
-      await new Promise((r) => setTimeout(r, delay));
+    if (pendingRequest) {
+      const { resolve, timer } = pendingRequest;
+      pendingRequest = null;
+      clearTimeout(timer);
+      resolve(message);
     }
-  }
-  return last;
+  });
+
+  bridgePort.onDisconnect.addListener(() => {
+    bridgePort = null;
+    connecting = false;
+    currentBridgeSnapshot = {
+      type: "STATE_CHANGED",
+      state: "Faulted",
+      isVaultUnlocked: false,
+      ok: false,
+      status: "setup_required",
+    };
+    if (pendingRequest) {
+      const { resolve, timer } = pendingRequest;
+      pendingRequest = null;
+      clearTimeout(timer);
+      resolve({
+        ok: false,
+        status: "setup_required",
+        message: "Fortiva bridge disconnected. Reconnecting…",
+      });
+    }
+    setTimeout(() => establishAuthoritativeBridgeChannel(0), 3000);
+  });
+
+  connecting = false;
 }
 
-function nativeRequest(message, timeoutMs = NATIVE_TIMEOUT_MS) {
+function ensureBridgePort() {
+  if (bridgePort === null && !connecting) {
+    establishAuthoritativeBridgeChannel(0);
+  }
+}
+
+function nativeRequest(message, timeoutMs = 20000) {
   return new Promise((resolve) => {
-    let settled = false;
+    if (message?.command === "ping") {
+      if (currentBridgeSnapshot.status && currentBridgeSnapshot.status !== "setup_required") {
+        resolve(snapshotToPingResponse(currentBridgeSnapshot));
+        return;
+      }
+    }
+
+    ensureBridgePort();
+    if (!bridgePort) {
+      resolve({
+        ok: false,
+        status: "setup_required",
+        message: "Fortiva bridge is not connected. Open Fortiva and unlock, then try again.",
+      });
+      return;
+    }
+
+    if (pendingRequest) {
+      resolve({
+        ok: false,
+        status: "bridge_warming",
+        message: "Fortiva is busy with another request. Try again in a moment.",
+      });
+      return;
+    }
+
     const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
+      if (!pendingRequest) return;
+      pendingRequest = null;
       resolve({
         ok: false,
         status: "setup_required",
@@ -58,14 +146,47 @@ function nativeRequest(message, timeoutMs = NATIVE_TIMEOUT_MS) {
       });
     }, timeoutMs);
 
-    sendNativeMessage(message, (response) => {
-      if (settled) return;
-      settled = true;
+    pendingRequest = { resolve, timer };
+    try {
+      bridgePort.postMessage(message);
+    } catch {
       clearTimeout(timer);
-      resolve(response);
-    });
+      pendingRequest = null;
+      resolve({
+        ok: false,
+        status: "setup_required",
+        message: "Could not reach Fortiva bridge host.",
+      });
+    }
   });
 }
+
+async function nativeRequestWithRetry(message, attempts = 2) {
+  let last = null;
+  for (let i = 0; i < attempts; i++) {
+    last = await nativeRequest(message);
+    if (last?.ok || last?.status === "locked" || last?.status === "setup_required") return last;
+    if (i < attempts - 1) {
+      const delay = last?.status === "bridge_warming" ? 400 : 250;
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  return last;
+}
+
+async function nativeCredentialRequestWithRetry(envelope, attempts = 3) {
+  let last = null;
+  for (let i = 0; i < attempts; i++) {
+    last = await nativeRequest(envelope, 130000);
+    if (!last?.error || last.error !== "setup_required") return last;
+    if (i < attempts - 1) await new Promise((r) => setTimeout(r, 600 * (i + 1)));
+  }
+  return last;
+}
+
+chrome.runtime.onStartup.addListener(() => establishAuthoritativeBridgeChannel(0));
+chrome.runtime.onInstalled.addListener(() => establishAuthoritativeBridgeChannel(0));
+establishAuthoritativeBridgeChannel(0);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message?.type) {
@@ -75,6 +196,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (sender.id !== chrome.runtime.id) {
     sendResponse(null);
+    return;
+  }
+
+  if (message.type === "get_bridge_snapshot") {
+    sendResponse(snapshotToPingResponse(currentBridgeSnapshot));
     return;
   }
 
@@ -95,8 +221,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     ).then(sendResponse);
     return true;
   }
-
-  // Fill flow uses prepare_fill + execute_fill only (popup.js).
 
   if (message.type === "execute_fill") {
     nativeCredentialRequestWithRetry(

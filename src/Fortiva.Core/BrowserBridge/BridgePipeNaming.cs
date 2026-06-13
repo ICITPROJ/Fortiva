@@ -6,6 +6,7 @@ public static class BridgePipeNaming
     public const string CredentialPipePrefix = "Fortiva.BrowserBridge";
     public const string TokenPipePrefix = "Fortiva.Bridge.Token";
     public const string UnlockPipePrefix = "Fortiva.Bridge.UnlockRequest";
+    public const string EventPipePrefix = "Fortiva.Bridge.Events";
 
     private static string? _inProcessSessionId;
 
@@ -22,6 +23,9 @@ public static class BridgePipeNaming
 
     public static string? TryUnlockPipeNameInProcess()
         => TrySuffix(UnlockPipePrefix, _inProcessSessionId);
+
+    public static string? TryEventPipeNameInProcess()
+        => TrySuffix(EventPipePrefix, _inProcessSessionId);
 
     /// <summary>Rotates session id, persists to registry, and returns the new id.</summary>
     public static string RotateSessionId(bool enterprise)
@@ -46,6 +50,9 @@ public static class BridgePipeNaming
     public static string UnlockPipeName(bool enterprise)
         => Suffix(UnlockPipePrefix, RequireSessionId(enterprise));
 
+    public static string EventPipeName(bool enterprise)
+        => Suffix(EventPipePrefix, RequireSessionId(enterprise));
+
     /// <summary>Resolves pipe name for clients; returns null when no active session (host should not wedge).</summary>
     public static string? TryCredentialPipeName(bool enterprise)
         => TrySuffix(CredentialPipePrefix, ResolveActiveSessionId(enterprise));
@@ -55,6 +62,9 @@ public static class BridgePipeNaming
 
     public static string? TryUnlockPipeName(bool enterprise)
         => TrySuffix(UnlockPipePrefix, ResolveActiveSessionId(enterprise));
+
+    public static string? TryEventPipeName(bool enterprise)
+        => TrySuffix(EventPipePrefix, ResolveActiveSessionId(enterprise));
 
     private static string RequireSessionId(bool enterprise)
     {
