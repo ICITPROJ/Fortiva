@@ -390,7 +390,7 @@ public sealed partial class MainWindow : Window
                 RefreshStatusChrome();
                 if (!_vm.IsAdmin)
                     _vm.StartBridgeUnlockListener(AppContext.BaseDirectory);
-                _ = EnsureBrowserBridgeAfterUnlockAsync();
+                _ = ReconcileBridgeAfterUnlockAsync();
                 _vm.SkipNextBrowserExtensionPrompt = true;
                 AppWindow.Hide();
                 return;
@@ -404,7 +404,7 @@ public sealed partial class MainWindow : Window
             RefreshStatusChrome();
             if (!_vm.IsAdmin)
                 _vm.StartBridgeUnlockListener(AppContext.BaseDirectory);
-            _ = EnsureBrowserBridgeAfterUnlockAsync();
+            _ = ReconcileBridgeAfterUnlockAsync();
 
             _suppressNav = true;
             try { NavView.SelectedItem = NavVault; }
@@ -422,28 +422,22 @@ public sealed partial class MainWindow : Window
         if (args.WindowActivationState == WindowActivationState.Deactivated || _vm.IsAdmin || !_vm.IsUnlocked)
             return;
 
-        _ = Task.Run(() =>
-        {
-            BridgeHostProcessCleanup.StopOrphanedHosts();
-            _vm.EnsureBridgeInfrastructureHealthy();
-        });
+        _ = _vm.ReconcileBridgeLifecycleAsync("WindowActivated");
     }
 
-    private async Task EnsureBrowserBridgeAfterUnlockAsync()
+    private async Task ReconcileBridgeAfterUnlockAsync()
     {
         if (_vm.IsAdmin || !_vm.IsUnlocked)
             return;
 
         try
         {
-            BridgeHostProcessCleanup.StopAllHosts();
-            BrowserBridgeInstallService.EnsureInstalled(AppContext.BaseDirectory, _vm.IsEnterprise);
-            await Task.Run(() => _vm.EnsureBridgeInfrastructureHealthy()).ConfigureAwait(true);
+            await _vm.ReconcileBridgeLifecycleAsync("VaultUnlock").ConfigureAwait(true);
             StartBridgeWatchdog();
         }
         catch (Exception ex)
         {
-            App.LogException("EnsureBrowserBridgeAfterUnlock", ex);
+            App.LogException("ReconcileBridgeAfterUnlock", ex);
         }
     }
 
@@ -461,11 +455,7 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
-            _ = Task.Run(() =>
-            {
-                BridgeHostProcessCleanup.StopOrphanedHosts();
-                _vm.EnsureBridgeInfrastructureHealthy();
-            });
+            _ = _vm.ReconcileBridgeLifecycleAsync("Watchdog");
         };
         _bridgeWatchdogTimer.Start();
     }

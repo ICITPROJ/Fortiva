@@ -70,20 +70,28 @@ public sealed class VaultSession : IDisposable
     public bool VaultExists => _engine.VaultExists;
 
     /// <summary>Thread-safe snapshot for browser bridge STATUS (same gate as unlock/lock).</summary>
+    [Obsolete("Use IBridgeCoordinator.GetAuthoritativeSnapshot via ShellViewModel.")]
     public BridgePresenceSnapshot GetBridgePresenceSnapshot()
     {
         lock (_sessionGate)
         {
             if (_context is null)
-                return new BridgePresenceSnapshot(_engine.VaultExists, Unlocked: false, BridgeReady: false);
+                return BridgePresenceSnapshot.NoSession(_engine.VaultExists);
 
             var bridgeReady = !string.IsNullOrEmpty(_bridgeSessionToken)
                 && _bridge is not null
                 && _tokenBroker is not null
                 && BridgeHealthCheck.AreListenersActive(300);
 
-            return new BridgePresenceSnapshot(_engine.VaultExists, Unlocked: true, BridgeReady: bridgeReady);
+            return BridgePresenceSnapshot.FromLegacy(_engine.VaultExists, unlocked: true, bridgeReady);
         }
+    }
+
+    /// <summary>Active bridge session token (read under session gate).</summary>
+    public string? GetActiveSessionToken()
+    {
+        lock (_sessionGate)
+            return _bridgeSessionToken;
     }
 
     public void CreateVault(string masterPassword, SecurityLevel level)
@@ -318,12 +326,12 @@ public sealed class VaultSession : IDisposable
     }
 
     /// <summary>Restarts bridge pipes when the token broker or credential server is not listening.</summary>
-    public void EnsureBridgeInfrastructureHealthy()
+    public bool EnsureBridgeInfrastructureHealthy()
     {
         lock (_sessionGate)
         {
             if (_context is null)
-                return;
+                return false;
 
             if (_bridgeShutdownTask is { IsCompleted: false })
             {
@@ -339,10 +347,11 @@ public sealed class VaultSession : IDisposable
             }
 
             if (BridgeHealthCheck.AreListenersActive())
-                return;
+                return true;
 
             StartInfrastructure();
             StateChanged?.Invoke();
+            return BridgeHealthCheck.AreListenersActive();
         }
     }
 
@@ -696,7 +705,6 @@ public sealed class VaultSession : IDisposable
 
     private void StartInfrastructure()
     {
-        BridgeHostProcessCleanup.StopOrphanedHosts();
         WaitForBridgeShutdown();
         StopBridgeInfrastructure(waitForListeners: true);
 
@@ -705,15 +713,6 @@ public sealed class VaultSession : IDisposable
         _bridgeSessionToken = BridgeSessionAuth.CreateSessionToken();
         BridgeClientValidator.ConfigureAllowedInstallRoots(AppContext.BaseDirectory);
         _fillNonce = new BridgeFillNonce();
-
-        try
-        {
-            BrowserBridgeInstallService.RepairNativeHostIfStale(AppContext.BaseDirectory, _enterpriseClient);
-        }
-        catch
-        {
-            /* best effort — re-pin HKCU native messaging after unlock */
-        }
 
         for (var attempt = 0; attempt < 3; attempt++)
         {

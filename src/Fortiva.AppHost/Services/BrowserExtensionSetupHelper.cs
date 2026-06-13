@@ -169,18 +169,17 @@ public static class BrowserExtensionSetupHelper
         if (!setup.Success)
             return BrowserConnectResult.Fail(setup.Error ?? "Browser setup failed.");
 
-        try { BridgeHostProcessCleanup.StopOrphanedHosts(); } catch { /* best effort */ }
-        if (vm.IsUnlocked)
+        try
         {
-            try
+            if (vm.IsUnlocked)
             {
                 if (vm.IsBridgeHealthy())
-                    vm.EnsureBridgeInfrastructureHealthy();
+                    await vm.ReconcileBridgeLifecycleAsync("ConnectBrowser").ConfigureAwait(true);
                 else
                     await vm.RestartBridgeInfrastructureAsync().ConfigureAwait(true);
             }
-            catch { /* best effort — setup can still continue */ }
         }
+        catch { /* best effort — setup can still continue */ }
 
         var path = setup.ExtensionStagingPath!;
         var browser = DetectPreferredBrowser();

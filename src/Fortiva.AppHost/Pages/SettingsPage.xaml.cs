@@ -229,10 +229,10 @@ public sealed partial class SettingsPage : Page
             return;
         _bridgeHealthRefreshPending = true;
 
-        _ = Task.Run(() =>
+        _ = Task.Run(async () =>
         {
-            try { _vm.EnsureBridgeInfrastructureHealthy(); }
-            catch (Exception ex) { App.LogException("SettingsPage.EnsureBridgeInfrastructureHealthy", ex); }
+            try { await _vm.ReconcileBridgeLifecycleAsync("SettingsHealthRefresh").ConfigureAwait(false); }
+            catch (Exception ex) { App.LogException("SettingsPage.ReconcileBridgeLifecycle", ex); }
         }).ContinueWith(_ =>
         {
             _bridgeHealthRefreshPending = false;

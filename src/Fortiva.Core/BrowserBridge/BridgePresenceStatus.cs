@@ -19,5 +19,35 @@ public static class BridgePresenceStatus
         => string.Equals(status, UnlockedBridgeReady, StringComparison.OrdinalIgnoreCase);
 }
 
-/// <summary>Atomic vault + bridge state for STATUS responses (read under VaultSession gate).</summary>
-public readonly record struct BridgePresenceSnapshot(bool VaultExists, bool Unlocked, bool BridgeReady);
+/// <summary>
+/// Atomic bridge readiness bundle for STATUS, coordinator observability, and Phase 5 token push.
+/// </summary>
+public readonly record struct BridgePresenceSnapshot(
+    BridgeReadyState State,
+    bool VaultExists,
+    bool IsVaultUnlocked,
+    string? CachedSessionToken,
+    DateTime Timestamp)
+{
+    public bool Unlocked => IsVaultUnlocked;
+
+    public bool BridgeReady =>
+        State == BridgeReadyState.Unlocked
+        && IsVaultUnlocked
+        && !string.IsNullOrEmpty(CachedSessionToken);
+
+    public static BridgePresenceSnapshot NoSession(bool vaultExists) =>
+        vaultExists
+            ? new(BridgeReadyState.Locked, true, false, null, DateTime.UtcNow)
+            : new(BridgeReadyState.Uninitialized, false, false, null, DateTime.UtcNow);
+
+    public static BridgePresenceSnapshot FromLegacy(bool vaultExists, bool unlocked, bool bridgeReady)
+    {
+        if (!vaultExists)
+            return NoSession(false);
+        if (!unlocked)
+            return NoSession(true);
+        var state = bridgeReady ? BridgeReadyState.Unlocked : BridgeReadyState.AwaitingHostConnection;
+        return new(state, true, true, bridgeReady ? "legacy" : null, DateTime.UtcNow);
+    }
+}

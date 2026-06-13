@@ -115,6 +115,8 @@ public sealed class ShellViewModel : ViewModelBase
     public event Action? BridgeUnlockRequested;
 
     private BridgeUnlockBroker? _bridgeUnlockBroker;
+    private BridgeCoordinator? _bridgeCoordinator;
+    private string? _bridgeInstallRoot;
     private readonly object _bridgeUnlockGate = new();
     private TaskCompletionSource<bool>? _bridgeUnlockWait;
     private bool _unlockNavigatesToVault = true;
@@ -147,12 +149,29 @@ public sealed class ShellViewModel : ViewModelBase
     /// <summary>Abort a pending browser-extension unlock wait (navigation away, user cancel).</summary>
     public void CancelBridgeUnlockIfPending() => CompleteBridgeUnlockIfPending(false);
 
-    /// <summary>Atomic bridge STATUS source — must match vault session gate, not UI thread cache.</summary>
+    /// <summary>Atomic bridge STATUS source — coordinator is the single authoritative read path.</summary>
     public BridgePresenceSnapshot GetBridgePresenceSnapshot()
+        => EnsureBridgeCoordinator().GetAuthoritativeSnapshot();
+
+    public IBridgeCoordinator BridgeCoordinator => EnsureBridgeCoordinator();
+
+    /// <summary>
+    /// Single lifecycle reconcile entry point (replaces scattered heal/watchdog calls).
+    /// </summary>
+    public Task ReconcileBridgeLifecycleAsync(string triggerReason)
+        => EnsureBridgeCoordinator().ReconcileLifecycleAsync(triggerReason);
+
+    private BridgeCoordinator EnsureBridgeCoordinator()
     {
-        var session = _session;
-        return session?.GetBridgePresenceSnapshot()
-            ?? new BridgePresenceSnapshot(VaultExists, Unlocked: false, BridgeReady: false);
+        if (_bridgeCoordinator is not null)
+            return _bridgeCoordinator;
+
+        _bridgeCoordinator = new BridgeCoordinator(
+            () => _session,
+            () => VaultExists,
+            () => IsEnterprise,
+            () => _bridgeInstallRoot ?? AppContext.BaseDirectory);
+        return _bridgeCoordinator;
     }
 
     /// <summary>Starts unlock listener for browser extension (runs while app is open, even when locked).</summary>
@@ -161,10 +180,12 @@ public sealed class ShellViewModel : ViewModelBase
         if (IsAdmin)
             return;
 
+        _bridgeInstallRoot = installRoot;
         _bridgeUnlockBroker?.Dispose();
         BridgeClientValidator.ConfigureAllowedInstallRoots(installRoot);
         _bridgeUnlockBroker = new BridgeUnlockBroker(GetBridgePresenceSnapshot, RequestUnlockFromBridgeAsync);
         _bridgeUnlockBroker.Start();
+        _ = ReconcileBridgeLifecycleAsync("UnlockListenerStart");
     }
 
     private async Task<bool> RequestUnlockFromBridgeAsync(CancellationToken ct)
@@ -499,6 +520,7 @@ public sealed class ShellViewModel : ViewModelBase
             Entries.Clear();
             VaultImportBatchFilter = null;
             _session?.Lock();
+            EnsureBridgeCoordinator().NotifyVaultLocked();
             StatusMessage = "Locked";
             OnPropertyChanged(nameof(IsUnlocked));
             StateChanged?.Invoke();
@@ -514,6 +536,7 @@ public sealed class ShellViewModel : ViewModelBase
                 App.LogException("ShellViewModel.LockCore.PanicLock", panicEx);
                 try { _session?.Dispose(); } catch { /* best effort */ }
                 _session = null;
+                EnsureBridgeCoordinator().NotifyVaultLocked();
             }
             Entries.Clear();
             VaultImportBatchFilter = null;
@@ -535,6 +558,7 @@ public sealed class ShellViewModel : ViewModelBase
             Entries.Clear();
             VaultImportBatchFilter = null;
             _session?.PanicLock();
+            EnsureBridgeCoordinator().NotifyVaultLocked();
             StatusMessage = "Locked";
             OnPropertyChanged(nameof(IsUnlocked));
             StateChanged?.Invoke();
@@ -546,6 +570,7 @@ public sealed class ShellViewModel : ViewModelBase
             App.LogException("ShellViewModel.PanicLockCore", ex);
             try { _session?.Dispose(); } catch { /* best effort */ }
             _session = null;
+            EnsureBridgeCoordinator().NotifyVaultLocked();
             Entries.Clear();
             VaultImportBatchFilter = null;
             StatusMessage = "Locked";
@@ -693,25 +718,21 @@ public sealed class ShellViewModel : ViewModelBase
         if (!IsUnlocked)
             throw new InvalidOperationException("Unlock the vault before reconnecting the browser.");
         RequireSession().RestartBridgeInfrastructure();
+        _ = ReconcileBridgeLifecycleAsync("UserRestartBridge");
     }
 
     public void EnsureBridgeInfrastructureHealthy()
-    {
-        if (!IsUnlocked)
-            return;
-        RequireSession().EnsureBridgeInfrastructureHealthy();
-    }
+        => _ = ReconcileBridgeLifecycleAsync("LegacyEnsureHealthy");
 
-    public bool IsBridgeHealthy()
-        => IsUnlocked && (_session?.IsBridgeHealthy() ?? false);
-
-    /// <summary>Restarts bridge pipes off the UI thread (Connect browser in Settings).</summary>
     public Task RestartBridgeInfrastructureAsync()
     {
         if (!IsUnlocked)
             throw new InvalidOperationException("Unlock the vault before reconnecting the browser.");
-        return Task.Run(RestartBridgeInfrastructure);
+        return ReconcileBridgeLifecycleAsync("UserRestartBridge");
     }
+
+    public bool IsBridgeHealthy()
+        => IsUnlocked && (_session?.IsBridgeHealthy() ?? false);
 
     /// <summary>When set, Vault page filters to entries from this import batch.</summary>
     public Guid? VaultImportBatchFilter { get; set; }
@@ -1128,6 +1149,8 @@ public sealed class ShellViewModel : ViewModelBase
     {
         _session?.Dispose();
         _session = null;
+        _bridgeCoordinator?.Dispose();
+        _bridgeCoordinator = null;
         Entries.Clear();
         VaultExists = false;
         StatusMessage = "Welcome to Fortiva";

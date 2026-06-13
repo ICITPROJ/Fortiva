@@ -35,7 +35,7 @@ public sealed class BridgeUnlockBroker : IDisposable
         Func<CancellationToken, Task<bool>> requestUnlock,
         Func<bool>? isBridgeReady = null)
         : this(
-            () => new BridgePresenceSnapshot(
+            () => BridgePresenceSnapshot.FromLegacy(
                 vaultExists(),
                 isUnlocked(),
                 isBridgeReady?.Invoke() ?? false),

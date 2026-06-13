@@ -170,14 +170,6 @@ public partial class App : Application
                 var enterprise = Edition == "Enterprise";
                 BridgeClientValidator.ConfigureAllowedInstallRoots(installRoot);
                 ShellViewModel.Current.StartBridgeUnlockListener(installRoot);
-                try
-                {
-                    BrowserBridgeInstallService.RepairNativeHostIfStale(installRoot, enterprise);
-                }
-                catch (Exception ex)
-                {
-                    LogException("RepairNativeHostIfStale", ex);
-                }
             }
 
             _window = new MainWindow();
