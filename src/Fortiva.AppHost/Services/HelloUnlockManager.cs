@@ -34,14 +34,19 @@ public sealed class HelloUnlockManager
     /// </param>
     public async Task StoreFromMasterKeyAsync(byte[] masterKey, bool? useHardwareBacking = null)
     {
-        var preferHardware = useHardwareBacking ?? await HelloCredentialStore.IsAvailableAsync();
-        if (preferHardware && await HelloCredentialStore.IsAvailableAsync())
+        var hardwareAvailable = await HelloCredentialStore.IsAvailableAsync();
+        var preferHardware = useHardwareBacking ?? hardwareAvailable;
+        if (preferHardware && hardwareAvailable)
         {
-            // Write v4 first — never delete the existing v3 bundle until hardware store succeeds.
+            // KeyCredential create/sign is the single Hello prompt — skip UserConsentVerifier here.
             await HelloCredentialStore.StoreAsync(_dataDirectory, masterKey);
             _protector.Clear();
             return;
         }
+
+        var helloResult = await HelloService.VerifyAsync("Fortiva - set up Windows Hello");
+        if (!helloResult.Verified)
+            throw new InvalidOperationException(helloResult.ErrorMessage ?? "Windows Hello verification failed.");
 
         await HelloCredentialStore.DeleteCredentialAsync();
         _protector.StoreHelloBundle(masterKey, helloVerified: true);

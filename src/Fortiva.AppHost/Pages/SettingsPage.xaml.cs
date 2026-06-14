@@ -565,18 +565,17 @@ public sealed partial class SettingsPage : Page
 
             if (_hello.IsConfigured)
             {
-                var helloResult = await HelloService.VerifyAsync("Fortiva - confirm Windows Hello");
-                if (!helloResult.Verified)
+                try
+                {
+                    await _vm.SyncHelloCredentialFromSessionAsync();
+                }
+                catch (Exception helloEx)
                 {
                     ShowInfo(
                         "Master password changed, but Windows Hello was not re-bound: "
-                        + (helloResult.ErrorMessage ?? "verification failed.")
+                        + App.DescribeException(helloEx)
                         + " Re-enable Hello in Settings when ready.",
                         InfoBarSeverity.Warning);
-                }
-                else
-                {
-                    await _vm.SyncHelloCredentialAsync(NewPwd.Password);
                 }
             }
 
@@ -604,7 +603,7 @@ public sealed partial class SettingsPage : Page
         var pwdBox = new PasswordBox { PlaceholderText = "Enter your current master password" };
         var desc   = new TextBlock
         {
-            Text = "Enter your master password to bind Windows Hello. " +
+            Text = "Enter your master password once, then approve Windows Hello when prompted. " +
                    "After setup you can unlock with face, fingerprint, or PIN.",
             TextWrapping = Microsoft.UI.Xaml.TextWrapping.WrapWholeWords,
             Margin = new Microsoft.UI.Xaml.Thickness(0, 0, 0, 12)
@@ -647,13 +646,6 @@ public sealed partial class SettingsPage : Page
 
         try
         {
-            var helloResult = await HelloService.VerifyAsync("Fortiva - set up Windows Hello");
-            if (!helloResult.Verified)
-            {
-                ShowInfo(helloResult.ErrorMessage ?? "Windows Hello verification failed.", InfoBarSeverity.Error);
-                return;
-            }
-
             await _vm.SyncHelloCredentialAsync(pwdBox.Password);
             HelloStatus.Text = _hello.IsHardwareBacked
                 ? "Windows Hello is configured (hardware-backed)."

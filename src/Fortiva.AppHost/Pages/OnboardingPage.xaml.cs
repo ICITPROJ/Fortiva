@@ -205,7 +205,7 @@ public sealed partial class OnboardingPage : Page
         ShowStep(2);
     }
 
-    private async void EnableHello_Click(object sender, RoutedEventArgs e)
+    private void EnableHello_Click(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrEmpty(NewPasswordBox.Password))
         {
@@ -215,21 +215,11 @@ public sealed partial class OnboardingPage : Page
             return;
         }
 
-        var result = await HelloService.VerifyAsync("Fortiva - enable Windows Hello unlock");
-        if (result.Verified)
-        {
-            _helloEnrollmentPending = true;
-            HelloInfoBar.Message = "Windows Hello verified. It will be enabled after your vault is created.";
-            HelloInfoBar.Severity = InfoBarSeverity.Success;
-            HelloInfoBar.IsOpen = true;
-            ShowHelloContinue(hideSkip: true);
-        }
-        else
-        {
-            HelloInfoBar.Message = result.ErrorMessage ?? "Verification failed.";
-            HelloInfoBar.Severity = InfoBarSeverity.Error;
-            HelloInfoBar.IsOpen = true;
-        }
+        _helloEnrollmentPending = true;
+        HelloInfoBar.Message = "Windows Hello will be enabled when your vault is created. You will be prompted once for face, fingerprint, or PIN.";
+        HelloInfoBar.Severity = InfoBarSeverity.Informational;
+        HelloInfoBar.IsOpen = true;
+        ShowHelloContinue(hideSkip: true);
     }
 
     private void RedirectToUnlockIfVaultExists()
