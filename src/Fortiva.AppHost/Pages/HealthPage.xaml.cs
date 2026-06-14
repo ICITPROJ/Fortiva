@@ -543,8 +543,7 @@ public sealed partial class HealthPage : Page
             case "export":
             case "import": NavigationService.Current.Navigate<ImportExportPage>(); break;
             case "import-duplicates":
-                SetCategoryFilter("Vault");
-                ImportDuplicatesExpander.IsExpanded = true;
+                NavigationService.Current.Navigate<ImportExportPage>();
                 break;
             case "audit": NavigationService.Current.Navigate<AuditPage>(); break;
             default: _vm.RequestNavigationTab("Vault"); NavigationService.Current.Navigate<VaultPage>(); break;

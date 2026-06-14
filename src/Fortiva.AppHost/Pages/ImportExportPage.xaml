@@ -72,6 +72,41 @@
                         Visibility="Collapsed" Click="ViewImportEntries_Click">
                     <TextBlock Text="View entries from selected import"/>
                 </Button>
+                <Button x:Name="ReviewImportDuplicatesBtn" Style="{StaticResource FortivaSecondaryButton}"
+                        Visibility="Collapsed" Click="ReviewImportDuplicates_Click">
+                    <TextBlock Text="Review skipped duplicates from selected import"/>
+                </Button>
+            </StackPanel>
+
+            <Border Style="{StaticResource FortivaSectionDivider}"/>
+
+            <!-- Duplicate management -->
+            <StackPanel Spacing="12">
+                <TextBlock Text="Duplicate management" Style="{StaticResource FortivaSectionTitle}"/>
+                <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaMutedText}" FontSize="13"
+                           Text="After imports, review skipped duplicates and scan the vault for overlapping logins. Fortiva never removes entries without your explicit action."/>
+                <Button x:Name="ScanVaultDuplicatesBtn" Style="{StaticResource FortivaSecondaryButton}" Click="ScanVaultDuplicates_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE8C8;" FontSize="14"/>
+                        <TextBlock Text="Scan vault for duplicate logins"/>
+                    </StackPanel>
+                </Button>
+                <TextBlock x:Name="VaultDuplicateSummary" Style="{StaticResource FortivaMutedText}" FontSize="13" Visibility="Collapsed"/>
+                <ListView x:Name="VaultDuplicateList" SelectionMode="Single" MaxHeight="240" Visibility="Collapsed"
+                          SelectionChanged="VaultDuplicateList_SelectionChanged">
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Spacing="2" Padding="4,8">
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding Subtitle}" Style="{StaticResource FortivaMutedText}" FontSize="12"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+                <Button x:Name="OpenVaultDuplicateEntryBtn" Style="{StaticResource FortivaSecondaryButton}"
+                        Visibility="Collapsed" Click="OpenVaultDuplicateEntry_Click">
+                    <TextBlock Text="Open selected entry"/>
+                </Button>
             </StackPanel>
 
             <Border Style="{StaticResource FortivaSectionDivider}"/>

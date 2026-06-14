@@ -14,6 +14,8 @@ public sealed partial class ImportExportPage : Page
     private readonly ShellViewModel _vm = ShellViewModel.Current;
     private Action? _stateChangedHandler;
     private ImportBatch? _selectedBatch;
+    private IReadOnlyList<VaultDuplicateGroup> _vaultDuplicateGroups = [];
+    private Guid? _selectedVaultDuplicateEntryId;
 
     public ImportExportPage() => InitializeComponent();
 
@@ -25,10 +27,12 @@ public sealed partial class ImportExportPage : Page
         {
             RefreshExportState();
             RefreshImportHistory();
+            RefreshVaultDuplicateScan();
         });
         _vm.StateChanged += _stateChangedHandler;
         RefreshExportState();
         RefreshImportHistory();
+        RefreshVaultDuplicateScan();
     }
 
     protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
@@ -59,7 +63,40 @@ public sealed partial class ImportExportPage : Page
         ImportHistoryList.Visibility = batches.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         ImportHistoryHint.Visibility = batches.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
         ViewImportEntriesBtn.Visibility = Visibility.Collapsed;
+        ReviewImportDuplicatesBtn.Visibility = Visibility.Collapsed;
         _selectedBatch = null;
+    }
+
+    private void RefreshVaultDuplicateScan()
+    {
+        if (!_vm.IsUnlocked)
+        {
+            VaultDuplicateSummary.Visibility = Visibility.Collapsed;
+            VaultDuplicateList.Visibility = Visibility.Collapsed;
+            OpenVaultDuplicateEntryBtn.Visibility = Visibility.Collapsed;
+            _vaultDuplicateGroups = [];
+            return;
+        }
+
+        _vaultDuplicateGroups = _vm.GetVaultDuplicateGroups();
+        if (_vaultDuplicateGroups.Count == 0)
+        {
+            VaultDuplicateSummary.Text = "No duplicate login groups found in the vault.";
+            VaultDuplicateSummary.Visibility = Visibility.Visible;
+            VaultDuplicateList.Visibility = Visibility.Collapsed;
+            OpenVaultDuplicateEntryBtn.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var exact = _vaultDuplicateGroups.Count(g => g.Kind == VaultDuplicateKind.Exact);
+        var similar = _vaultDuplicateGroups.Count - exact;
+        VaultDuplicateSummary.Text =
+            $"Found {_vaultDuplicateGroups.Count} group(s): {exact} exact duplicate(s), {similar} similar (same site + username).";
+        VaultDuplicateSummary.Visibility = Visibility.Visible;
+        VaultDuplicateList.ItemsSource = _vaultDuplicateGroups.Select(g => new VaultDuplicateRow(g)).ToList();
+        VaultDuplicateList.Visibility = Visibility.Visible;
+        OpenVaultDuplicateEntryBtn.Visibility = Visibility.Collapsed;
+        _selectedVaultDuplicateEntryId = null;
     }
 
     private bool GuardImport()
@@ -180,9 +217,12 @@ public sealed partial class ImportExportPage : Page
             if (plan.ConflictKeptExistingCount + plan.ConflictUpdatedCount + plan.ConflictKeptBothCount > 0)
                 summary += $", {plan.ConflictKeptExistingCount + plan.ConflictUpdatedCount + plan.ConflictKeptBothCount} conflicts resolved";
             summary += ". No existing entries were removed.";
+            if (plan.SkippedDuplicateCount > 0)
+                summary += " Review skipped duplicates in Import history below.";
 
             Show(summary, InfoBarSeverity.Success);
             RefreshImportHistory();
+            RefreshVaultDuplicateScan();
         }
         catch (Exception ex)
         {
@@ -380,12 +420,138 @@ public sealed partial class ImportExportPage : Page
         {
             _selectedBatch = row.Batch;
             ViewImportEntriesBtn.Visibility = Visibility.Visible;
+            ReviewImportDuplicatesBtn.Visibility =
+                row.Batch.SkippedDuplicateCount > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
         else
         {
             _selectedBatch = null;
             ViewImportEntriesBtn.Visibility = Visibility.Collapsed;
+            ReviewImportDuplicatesBtn.Visibility = Visibility.Collapsed;
         }
+    }
+
+    private async void ReviewImportDuplicates_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedBatch is null || _selectedBatch.SkippedDuplicateCount <= 0)
+            return;
+
+        var rows = BuildImportDuplicateRows(_selectedBatch);
+        var list = new ListView
+        {
+            ItemsSource = rows,
+            SelectionMode = ListViewSelectionMode.Single,
+            MaxHeight = 320
+        };
+
+        var dialog = new ContentDialog
+        {
+            Title = $"Skipped duplicates — {_selectedBatch.ProvenanceLabel}",
+            Content = new StackPanel
+            {
+                Spacing = 12,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = "These rows matched existing vault entries and were not imported. Your original entries were kept.",
+                        TextWrapping = TextWrapping.WrapWholeWords
+                    },
+                    list
+                }
+            },
+            PrimaryButtonText = "Open selected entry",
+            SecondaryButtonText = "Close",
+            DefaultButton = ContentDialogButton.Secondary,
+            XamlRoot = XamlRoot
+        };
+        FortivaDialogs.Configure(dialog, XamlRoot);
+
+        list.SelectionChanged += (_, _) =>
+        {
+            dialog.IsPrimaryButtonEnabled = list.SelectedItem is ImportDuplicateRow;
+        };
+        dialog.IsPrimaryButtonEnabled = false;
+
+        while (true)
+        {
+            var result = await dialog.ShowAsync();
+            if (result != ContentDialogResult.Primary)
+                return;
+            if (list.SelectedItem is not ImportDuplicateRow row || !row.ExistingEntryId.HasValue)
+                return;
+            if (!TryOpenEntry(row.ExistingEntryId.Value))
+                Show("The original entry could not be found. It may have been renamed or removed.", InfoBarSeverity.Warning);
+            return;
+        }
+    }
+
+    private void ScanVaultDuplicates_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_vm.IsUnlocked)
+        {
+            Show("Unlock the vault before scanning for duplicates.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        RefreshVaultDuplicateScan();
+        if (_vaultDuplicateGroups.Count == 0)
+            Show("No duplicate login groups found.", InfoBarSeverity.Success);
+        else
+            Show($"Found {_vaultDuplicateGroups.Count} duplicate group(s). Select one below to open an entry.", InfoBarSeverity.Informational);
+    }
+
+    private void VaultDuplicateList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (VaultDuplicateList.SelectedItem is not VaultDuplicateRow row)
+        {
+            _selectedVaultDuplicateEntryId = null;
+            OpenVaultDuplicateEntryBtn.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        _selectedVaultDuplicateEntryId = row.FirstEntryId;
+        OpenVaultDuplicateEntryBtn.Visibility = Visibility.Visible;
+    }
+
+    private void OpenVaultDuplicateEntry_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_selectedVaultDuplicateEntryId.HasValue)
+            return;
+        if (!TryOpenEntry(_selectedVaultDuplicateEntryId.Value))
+            Show("Entry could not be found.", InfoBarSeverity.Warning);
+    }
+
+    private bool TryOpenEntry(Guid entryId)
+    {
+        var entry = _vm.Entries.FirstOrDefault(e => e.Id == entryId)?.Entry;
+        if (entry is null)
+            return false;
+
+        NavigationService.Current.ResetCurrent();
+        NavigationService.Current.Navigate<EntryPage>(entry, animate: true);
+        return true;
+    }
+
+    private static List<ImportDuplicateRow> BuildImportDuplicateRows(ImportBatch batch)
+    {
+        if (batch.SkippedDuplicates.Count > 0)
+        {
+            return batch.SkippedDuplicates.Select(dup => new ImportDuplicateRow(
+                dup.ExistingEntryId,
+                dup.Title,
+                string.IsNullOrWhiteSpace(dup.Username) ? dup.Url : dup.Username,
+                "Kept existing vault entry")).ToList();
+        }
+
+        return
+        [
+            new ImportDuplicateRow(
+                null,
+                $"{batch.SkippedDuplicateCount} duplicate(s) skipped",
+                "Details were not recorded for this older import",
+                batch.ProvenanceLabel)
+        ];
     }
 
     private void ViewImportEntries_Click(object sender, RoutedEventArgs e)
@@ -531,5 +697,41 @@ public sealed partial class ImportExportPage : Page
                 return string.Join(" · ", parts);
             }
         }
+    }
+
+    private sealed class ImportDuplicateRow
+    {
+        public ImportDuplicateRow(Guid? existingEntryId, string title, string subtitle, string badge)
+        {
+            ExistingEntryId = existingEntryId;
+            Title = title;
+            Subtitle = subtitle;
+            Badge = badge;
+        }
+
+        public Guid? ExistingEntryId { get; }
+        public string Title { get; }
+        public string Subtitle { get; }
+        public string Badge { get; }
+    }
+
+    private sealed class VaultDuplicateRow
+    {
+        public VaultDuplicateRow(VaultDuplicateGroup group)
+        {
+            Group = group;
+            FirstEntryId = group.EntryIds[0];
+        }
+
+        public VaultDuplicateGroup Group { get; }
+        public Guid FirstEntryId { get; }
+        public string Title => Group.Title;
+        public string Subtitle => Group.Kind switch
+        {
+            VaultDuplicateKind.Exact =>
+                $"{Group.Username} · {Group.EntryIds.Count} exact duplicates",
+            _ =>
+                $"{Group.Username} · {Group.EntryIds.Count} entries (same site + username, different passwords)"
+        };
     }
 }

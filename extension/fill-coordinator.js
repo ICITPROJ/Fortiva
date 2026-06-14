@@ -3,8 +3,9 @@
  * Supports multi-step logins (username first, password on next screen) with automatic advance + watch.
  */
 (function () {
-  if (document.documentElement.dataset.fortivaFillCoordinator) return;
-  document.documentElement.dataset.fortivaFillCoordinator = "1";
+  const COORDINATOR_VERSION = "1.0.43";
+  if (document.documentElement.dataset.fortivaFillCoordinator === COORDINATOR_VERSION) return;
+  document.documentElement.dataset.fortivaFillCoordinator = COORDINATOR_VERSION;
 
   const USERNAME_SELECTORS = [
     'input[autocomplete="username"]',
@@ -54,8 +55,11 @@
   function isVisible(el) {
     if (!el || el.disabled || el.readOnly) return false;
     if (el.type === "hidden" || el.type === "search") return false;
+    if (el.getAttribute("aria-hidden") === "true") return false;
+    if (el.tabIndex < 0 && el.type === "password") return false;
+    if (el.classList?.contains("hidden")) return false;
     const style = window.getComputedStyle(el);
-    if (style.visibility === "hidden" || style.display === "none") return false;
+    if (style.visibility === "hidden" || style.display === "none" || style.opacity === "0") return false;
     const rect = el.getBoundingClientRect();
     return rect.width > 0 && rect.height > 0;
   }
@@ -116,7 +120,14 @@
   function findUsernameField(passField) {
     const direct = findVisible(USERNAME_SELECTORS);
     if (direct) return direct;
-    return findUsernameNearPassword(passField);
+    const nearPass = findUsernameNearPassword(passField);
+    if (nearPass) return nearPass;
+    if (!passField) {
+      for (const el of queryDeep("input")) {
+        if (isFillableTextInput(el)) return el;
+      }
+    }
+    return null;
   }
 
   function hasUserInput(el) {

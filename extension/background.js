@@ -177,14 +177,29 @@ function mapMatchesResponse(raw, domain) {
   };
 }
 
-function isUsefulFillResult(result) {
-  return (
-    result?.ok ||
-    result?.reason === "password_step_pending" ||
-    result?.reason === "password_step_watching" ||
-    result?.reason === "fields_not_empty" ||
-    result?.reason === "host_mismatch"
-  );
+function fillResultPriority(result) {
+  if (!result) return -1;
+  if (result.ok) return 100;
+  switch (result.reason) {
+    case "password_step_watching":
+      return 90;
+    case "password_step_pending":
+      return 80;
+    case "fields_not_empty":
+      return 70;
+    case "fill_error":
+      return 60;
+    case "no_password_field":
+      return 50;
+    case "host_mismatch":
+      return 10;
+    default:
+      return 20;
+  }
+}
+
+function isBetterFillResult(candidate, current) {
+  return fillResultPriority(candidate) > fillResultPriority(current);
 }
 
 async function tryFillFrame(tabId, payload, frameId) {
@@ -193,6 +208,23 @@ async function tryFillFrame(tabId, payload, frameId) {
   } catch {
     return null;
   }
+}
+
+async function collectFillResults(tabId, payload) {
+  let best = null;
+  const consider = (result) => {
+    if (isBetterFillResult(result, best)) best = result;
+  };
+
+  consider(await tryFillFrame(tabId, payload, 0));
+
+  const frames = await chrome.webNavigation.getAllFrames({ tabId });
+  for (const frame of frames || []) {
+    if (frame.frameId === 0) continue;
+    consider(await tryFillFrame(tabId, payload, frame.frameId));
+  }
+
+  return best;
 }
 
 async function fillViaContentScript(tabId, username, password, expectedHost) {
@@ -204,14 +236,11 @@ async function fillViaContentScript(tabId, username, password, expectedHost) {
     expectedHost: expectedHost || "",
   };
 
-  let result = await tryFillFrame(tabId, payload, 0);
-  if (isUsefulFillResult(result)) return result;
-
-  const frames = await chrome.webNavigation.getAllFrames({ tabId });
-  for (const frame of frames || []) {
-    if (frame.frameId === 0) continue;
-    result = await tryFillFrame(tabId, payload, frame.frameId);
-    if (isUsefulFillResult(result)) return result;
+  let best = await collectFillResults(tabId, payload);
+  if (best?.ok || best?.reason === "password_step_watching" || best?.reason === "password_step_pending") {
+    payload.password = "";
+    payload.username = "";
+    return best;
   }
 
   await chrome.scripting.executeScript({
@@ -220,27 +249,10 @@ async function fillViaContentScript(tabId, username, password, expectedHost) {
     world: "ISOLATED",
   });
 
-  result = await tryFillFrame(tabId, payload, 0);
-  if (isUsefulFillResult(result)) {
-    payload.password = "";
-    payload.username = "";
-    return result;
-  }
-
-  const framesAfter = await chrome.webNavigation.getAllFrames({ tabId });
-  for (const frame of framesAfter || []) {
-    if (frame.frameId === 0) continue;
-    result = await tryFillFrame(tabId, payload, frame.frameId);
-    if (isUsefulFillResult(result)) {
-      payload.password = "";
-      payload.username = "";
-      return result;
-    }
-  }
-
+  best = await collectFillResults(tabId, payload);
   payload.password = "";
   payload.username = "";
-  return result;
+  return best;
 }
 
 async function performFillOnTab(tabId, domain, url, entryId, fillNonce) {

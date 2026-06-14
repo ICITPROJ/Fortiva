@@ -80,6 +80,12 @@ const MESSAGES = {
   usernamePartial:
     "Password filled, but the username field was not detected on this page. Paste your username manually or click the username box and Fill again.",
   fillFailed: "Could not fill the login fields on this page.",
+  fillFailedDetail: (reason) =>
+    reason === "fill_error"
+      ? "Fortiva reached the page but the site blocked programmatic input. Refresh the tab and try Fill again."
+      : reason === "no_password_field"
+        ? "No login field found on this page. Open the username step, refresh the tab, then click Fill."
+        : "Fortiva could not reach the page script. Refresh the login tab, reload the extension, then try Fill again.",
   cancelled: "Unlock was cancelled. Click Fill again when you're ready.",
   rateLimited:
     "Too many unlock attempts from the browser. Wait five minutes, then click Fill again.",
@@ -262,7 +268,14 @@ function applyFillResult(result, host, title) {
     setStatus(MESSAGES.noPasswordField, "warn");
     return true;
   }
-  setStatus(MESSAGES.fillFailed, "error");
+  if (result?.reason === "fill_error") {
+    setStatus(MESSAGES.fillFailedDetail("fill_error"), "error");
+    return true;
+  }
+  setStatus(
+    result?.reason ? MESSAGES.fillFailedDetail(result.reason) : MESSAGES.fillFailedDetail(""),
+    "error"
+  );
   return true;
 }
 

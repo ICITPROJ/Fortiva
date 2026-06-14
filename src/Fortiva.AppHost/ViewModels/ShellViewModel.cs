@@ -782,6 +782,9 @@ public sealed class ShellViewModel : ViewModelBase
     public IReadOnlyList<VaultEntry> EntriesForImportBatch(Guid batchId)
         => _session?.EntriesForImportBatch(batchId) ?? [];
 
+    public IReadOnlyList<VaultDuplicateGroup> GetVaultDuplicateGroups()
+        => VaultDuplicateAnalyzer.FindGroups(_session?.AllEntries() ?? []);
+
     public void RestartBridgeInfrastructure()
     {
         if (!IsUnlocked)

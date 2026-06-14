@@ -1,4 +1,5 @@
 using Fortiva.Core.Audit;
+using Fortiva.Core.ImportExport;
 using Fortiva.Core.Vault;
 
 namespace Fortiva.Core.Security;
@@ -66,6 +67,7 @@ public static class SecurityAuditRunner
         AddSettingsFindings(findings, context, passwordHealth);
         AddVaultFindings(findings, entries, context);
         AddImportFindings(findings, context);
+        AddVaultDuplicateFindings(findings, entries);
         if (context.IncludeActivityAudit && context.AuditEvents is { Count: > 0 })
             AddActivityFindings(findings, context.AuditEvents);
         else if (context.IncludeActivityAudit)
@@ -305,6 +307,48 @@ public static class SecurityAuditRunner
                 Priority = 22,
                 AffectedCount = noUrl,
                 ActionHint = "vault"
+            });
+        }
+    }
+
+    private static void AddVaultDuplicateFindings(List<SecurityAuditFinding> findings, List<VaultEntry> entries)
+    {
+        var groups = VaultDuplicateAnalyzer.FindGroups(entries);
+        if (groups.Count == 0)
+            return;
+
+        var exact = groups.Where(g => g.Kind == VaultDuplicateKind.Exact).ToList();
+        var similar = groups.Where(g => g.Kind == VaultDuplicateKind.SameSiteUser).ToList();
+
+        if (exact.Count > 0)
+        {
+            var entryCount = exact.Sum(g => g.EntryIds.Count);
+            findings.Add(new SecurityAuditFinding
+            {
+                Category = "Vault",
+                Id = "vault-exact-duplicates",
+                Title = $"{entryCount} entries in {exact.Count} exact duplicate group{(exact.Count == 1 ? "" : "s")}",
+                Detail = "Multiple vault entries share the same site, username, and password. Review and merge manually if needed — Fortiva never deletes entries automatically.",
+                Severity = AuditSeverity.Warning,
+                Priority = 24,
+                AffectedCount = entryCount,
+                ActionHint = "import-duplicates"
+            });
+        }
+
+        if (similar.Count > 0)
+        {
+            var entryCount = similar.Sum(g => g.EntryIds.Count);
+            findings.Add(new SecurityAuditFinding
+            {
+                Category = "Vault",
+                Id = "vault-similar-duplicates",
+                Title = $"{entryCount} entries in {similar.Count} similar login group{(similar.Count == 1 ? "" : "s")}",
+                Detail = "Same site and username appear more than once with different passwords (often from Keep both on import). Review in Import / Export → Duplicate management.",
+                Severity = AuditSeverity.Info,
+                Priority = 25,
+                AffectedCount = entryCount,
+                ActionHint = "import-duplicates"
             });
         }
     }
