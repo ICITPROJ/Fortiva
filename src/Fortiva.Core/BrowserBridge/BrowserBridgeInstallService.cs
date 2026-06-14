@@ -21,9 +21,15 @@ public static class BrowserBridgeInstallService
 
     private static string ResolveLocalApplicationData()
     {
-        var fromEnv = Environment.GetEnvironmentVariable("LOCALAPPDATA");
-        if (!string.IsNullOrWhiteSpace(fromEnv))
-            return fromEnv.Trim();
+        if (string.Equals(
+                Environment.GetEnvironmentVariable("FORTIVA_USE_LOCALAPPDATA_ENV"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            var fromEnv = Environment.GetEnvironmentVariable("LOCALAPPDATA");
+            if (!string.IsNullOrWhiteSpace(fromEnv))
+                return fromEnv.Trim();
+        }
 
         return Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
     }

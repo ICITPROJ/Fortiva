@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text;
 using Fortiva.AppHost.Services;
+using Microsoft.UI.Dispatching;
 using Fortiva.Core.Admin;
 using Fortiva.Core.Audit;
 using Fortiva.Core.BrowserBridge;
@@ -33,6 +34,7 @@ public sealed class ShellViewModel : ViewModelBase
     private bool _vaultExists;
     private bool _isLocking;
     private Action<Action>? _uiInvoker;
+    private DispatcherQueue? _uiDispatcher;
     private PersonalUserSettings _personalSettings = PersonalUserSettings.Load();
     private EnterpriseUserSettings _enterpriseSettings = EnterpriseUserSettings.Load();
     private AppearanceSettings _appearance = AppearanceSettings.Load();
@@ -264,6 +266,8 @@ public sealed class ShellViewModel : ViewModelBase
 
     public void SetUiInvoker(Action<Action> invoker) => _uiInvoker = invoker;
 
+    public void SetUiDispatcher(DispatcherQueue dispatcher) => _uiDispatcher = dispatcher;
+
     public PersonalUserSettings PersonalSettings => _personalSettings;
 
     public AppThemePreference ThemePreference => _appearance.Theme;
@@ -422,7 +426,7 @@ public sealed class ShellViewModel : ViewModelBase
         string masterPassword, bool paranoiaMode = false, bool confirmRollback = false)
     {
         EnterpriseGate.RequireValidLicense(IsEnterprise, IsAdmin, IsLicenseValid);
-        RunOnUi(() => IsBusy = true);
+        await RunOnUiAsync(() => IsBusy = true).ConfigureAwait(true);
         try
         {
             EnsureSession();
@@ -432,7 +436,7 @@ public sealed class ShellViewModel : ViewModelBase
             sw.Stop();
 
             string? rollbackWarning = null;
-            RunOnUi(() =>
+            await RunOnUiAsync(() =>
             {
                 ApplyPersonalAutoLockTimeout();
                 RefreshEntries();
@@ -446,35 +450,35 @@ public sealed class ShellViewModel : ViewModelBase
                 if (!stayOnUnlock)
                     UnlockOccurred?.Invoke();
                 CompleteBridgeUnlockIfPending(!stayOnUnlock);
-            });
+            }).ConfigureAwait(true);
             return (true, rollbackWarning);
         }
         catch (System.Security.Cryptography.CryptographicException)
         {
-            RunOnUi(() =>
+            await RunOnUiAsync(() =>
             {
                 StatusMessage = "Unlock failed.";
                 CompleteBridgeUnlockIfPending(false);
-            });
+            }).ConfigureAwait(true);
             return (false, "Incorrect master password.");
         }
         catch (Exception ex)
         {
-            RunOnUi(() =>
+            await RunOnUiAsync(() =>
             {
                 StatusMessage = "Unlock failed.";
                 CompleteBridgeUnlockIfPending(false);
-            });
+            }).ConfigureAwait(true);
             return (false, FormatError(ex));
         }
-        finally { RunOnUi(() => IsBusy = false); }
+        finally { await RunOnUiAsync(() => IsBusy = false).ConfigureAwait(true); }
     }
 
     public async Task<(bool ok, string? error)> UnlockWithMasterKeyAsync(
         byte[] masterKey, bool paranoiaMode = false, bool confirmRollback = false)
     {
         EnterpriseGate.RequireValidLicense(IsEnterprise, IsAdmin, IsLicenseValid);
-        RunOnUi(() => IsBusy = true);
+        await RunOnUiAsync(() => IsBusy = true).ConfigureAwait(true);
         try
         {
             EnsureSession();
@@ -482,7 +486,7 @@ public sealed class ShellViewModel : ViewModelBase
                 .ConfigureAwait(false);
 
             string? rollbackWarning = null;
-            RunOnUi(() =>
+            await RunOnUiAsync(() =>
             {
                 ApplyPersonalAutoLockTimeout();
                 RefreshEntries();
@@ -496,28 +500,28 @@ public sealed class ShellViewModel : ViewModelBase
                 if (!stayOnUnlock)
                     UnlockOccurred?.Invoke();
                 CompleteBridgeUnlockIfPending(!stayOnUnlock);
-            });
+            }).ConfigureAwait(true);
             return (true, rollbackWarning);
         }
         catch (System.Security.Cryptography.CryptographicException)
         {
-            RunOnUi(() =>
+            await RunOnUiAsync(() =>
             {
                 StatusMessage = "Unlock failed.";
                 CompleteBridgeUnlockIfPending(false);
-            });
+            }).ConfigureAwait(true);
             return (false, "Windows Hello credential is invalid for this vault.");
         }
         catch (Exception ex)
         {
-            RunOnUi(() =>
+            await RunOnUiAsync(() =>
             {
                 StatusMessage = "Unlock failed.";
                 CompleteBridgeUnlockIfPending(false);
-            });
+            }).ConfigureAwait(true);
             return (false, FormatError(ex));
         }
-        finally { RunOnUi(() => IsBusy = false); }
+        finally { await RunOnUiAsync(() => IsBusy = false).ConfigureAwait(true); }
     }
 
     public void Lock() => RunOnUi(LockCore);
@@ -616,6 +620,57 @@ public sealed class ShellViewModel : ViewModelBase
     {
         if (_uiInvoker is null) { action(); return; }
         _uiInvoker(action);
+    }
+
+    private async Task RunOnUiAsync(Action action)
+    {
+        if (_uiDispatcher is not null)
+        {
+            if (_uiDispatcher.HasThreadAccess)
+            {
+                action();
+                return;
+            }
+
+            var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (_uiDispatcher.TryEnqueue(() =>
+                {
+                    try
+                    {
+                        action();
+                        tcs.SetResult();
+                    }
+                    catch (Exception ex)
+                    {
+                        tcs.SetException(ex);
+                    }
+                }))
+            {
+                await tcs.Task.ConfigureAwait(false);
+                return;
+            }
+        }
+
+        if (_uiInvoker is null)
+        {
+            action();
+            return;
+        }
+
+        var fallback = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _uiInvoker(() =>
+        {
+            try
+            {
+                action();
+                fallback.SetResult();
+            }
+            catch (Exception ex)
+            {
+                fallback.SetException(ex);
+            }
+        });
+        await fallback.Task.ConfigureAwait(false);
     }
 
     private static string FormatError(Exception ex) =>

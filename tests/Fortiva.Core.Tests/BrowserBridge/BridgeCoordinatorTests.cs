@@ -66,6 +66,25 @@ public class BridgeCoordinatorTests
     }
 
     [Fact]
+    public async Task ReconcileLifecycleAsync_HealthProbe_DoesNotRotateSession()
+    {
+        BridgeSessionRegistry.ClearActiveSessionId(enterprise: false);
+        var firstId = BridgePipeNaming.RotateSessionId(enterprise: false);
+
+        using var coordinator = new BridgeCoordinator(
+            () => null,
+            () => true,
+            () => false,
+            () => AppContext.BaseDirectory);
+
+        await coordinator.ReconcileLifecycleAsync("UnlockListenerStart");
+        Assert.Equal(firstId, BridgePipeNaming.ResolveActiveSessionId(enterprise: false));
+
+        await coordinator.ReconcileLifecycleAsync("Watchdog");
+        Assert.Equal(firstId, BridgePipeNaming.ResolveActiveSessionId(enterprise: false));
+    }
+
+    [Fact]
     public void ReadyStateChanged_FiresOnTransition()
     {
         using var coordinator = new BridgeCoordinator(

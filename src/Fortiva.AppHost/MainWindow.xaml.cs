@@ -41,6 +41,7 @@ public sealed partial class MainWindow : Window
         NavigationService.Current.Initialize(ContentFrame);
 
         _vm.SetUiInvoker(action => DispatcherQueue.TryEnqueue(() => action()));
+        _vm.SetUiDispatcher(DispatcherQueue);
         _vm.RefreshVaultExists();
 
         _vm.LockOccurred += OnLocked;
@@ -422,7 +423,18 @@ public sealed partial class MainWindow : Window
         if (args.WindowActivationState == WindowActivationState.Deactivated || _vm.IsAdmin || !_vm.IsUnlocked)
             return;
 
+        if (IsBridgeHealthyForProbe())
+            return;
+
         _ = _vm.ReconcileBridgeLifecycleAsync("WindowActivated");
+    }
+
+    private bool IsBridgeHealthyForProbe()
+    {
+        var snapshot = _vm.GetBridgePresenceSnapshot();
+        return snapshot.IsVaultUnlocked
+            && snapshot.State == BridgeReadyState.Unlocked
+            && snapshot.BridgeReady;
     }
 
     private async Task ReconcileBridgeAfterUnlockAsync()
@@ -454,6 +466,9 @@ public sealed partial class MainWindow : Window
                 _bridgeWatchdogTimer?.Stop();
                 return;
             }
+
+            if (IsBridgeHealthyForProbe())
+                return;
 
             _ = _vm.ReconcileBridgeLifecycleAsync("Watchdog");
         };

@@ -60,14 +60,23 @@ public sealed class BridgeCoordinator : IBridgeCoordinator
 
         try
         {
-            SetState(BridgeReadyState.DeployingSidecars);
-            VerifyAndRepairHashSidecars();
+            var lightweight = IsHealthOnlyTrigger(triggerReason);
+            var rotateSession = ShouldRotateSession(triggerReason);
+
+            if (!lightweight)
+            {
+                SetState(BridgeReadyState.DeployingSidecars);
+                VerifyAndRepairHashSidecars();
+            }
 
             SetState(BridgeReadyState.StartingInfrastructure);
-            BridgePipeNaming.RotateSessionId(_isEnterprise());
-            _eventBroadcaster.RestartForCurrentSession();
-            SessionRotated?.Invoke();
-            BridgeHostProcessCleanup.StopAllHosts();
+            if (rotateSession)
+            {
+                BridgePipeNaming.RotateSessionId(_isEnterprise());
+                _eventBroadcaster.RestartForCurrentSession();
+                SessionRotated?.Invoke();
+                BridgeHostProcessCleanup.StopAllHosts();
+            }
 
             var session = _getSession();
             var isUnlocked = session?.IsUnlocked ?? false;
@@ -83,6 +92,9 @@ public sealed class BridgeCoordinator : IBridgeCoordinator
                         session.RestartBridgeInfrastructure();
                         return session.IsBridgeHealthy();
                     }
+
+                    if (lightweight)
+                        return session.IsBridgeHealthy() || session.EnsureBridgeInfrastructureHealthy();
 
                     return session.EnsureBridgeInfrastructureHealthy();
                 }, cancellationToken).ConfigureAwait(false);
@@ -194,6 +206,22 @@ public sealed class BridgeCoordinator : IBridgeCoordinator
         {
             FortivaDiagnosticLog.Write("BridgeCoordinator.PushState", ex);
         }
+    }
+
+    private static bool IsHealthOnlyTrigger(string triggerReason) =>
+        string.Equals(triggerReason, "Watchdog", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(triggerReason, "WindowActivated", StringComparison.OrdinalIgnoreCase)
+        || triggerReason.Contains("Health", StringComparison.OrdinalIgnoreCase);
+
+    private bool ShouldRotateSession(string triggerReason)
+    {
+        if (!BridgePipeNaming.HasActiveSession(_isEnterprise()))
+            return true;
+
+        if (triggerReason.Contains("Restart", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return false;
     }
 
     private void VerifyAndRepairHashSidecars()

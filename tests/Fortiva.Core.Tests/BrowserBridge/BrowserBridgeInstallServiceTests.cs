@@ -97,6 +97,7 @@ public sealed class BrowserBridgeInstallServiceTests
         }
 
         var userdata = Path.Combine(tempRoot, "userdata");
+        Environment.SetEnvironmentVariable("FORTIVA_USE_LOCALAPPDATA_ENV", "1");
         Environment.SetEnvironmentVariable("LOCALAPPDATA", userdata);
 
         try
@@ -114,6 +115,7 @@ public sealed class BrowserBridgeInstallServiceTests
         }
         finally
         {
+            Environment.SetEnvironmentVariable("FORTIVA_USE_LOCALAPPDATA_ENV", null);
             Environment.SetEnvironmentVariable("LOCALAPPDATA", null);
             try { Directory.Delete(tempRoot, true); } catch { }
         }
@@ -167,6 +169,7 @@ public sealed class BrowserBridgeInstallServiceTests
         }
         finally
         {
+            Environment.SetEnvironmentVariable("FORTIVA_USE_LOCALAPPDATA_ENV", null);
             Environment.SetEnvironmentVariable("LOCALAPPDATA", null);
             try { Directory.Delete(tempRoot, recursive: true); } catch { /* best effort */ }
         }
@@ -213,6 +216,7 @@ public sealed class BrowserBridgeInstallServiceTests
         }
         finally
         {
+            Environment.SetEnvironmentVariable("FORTIVA_USE_LOCALAPPDATA_ENV", null);
             Environment.SetEnvironmentVariable("LOCALAPPDATA", null);
             try { Directory.Delete(tempRoot, recursive: true); } catch { /* best effort */ }
         }
