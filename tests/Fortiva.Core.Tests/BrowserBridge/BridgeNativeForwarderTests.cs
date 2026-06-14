@@ -7,12 +7,41 @@ namespace Fortiva.Core.Tests.BrowserBridge;
 public class BridgeNativeForwarderTests
 {
     [Fact]
-    public async Task HandleAsync_RoutesPing()
+    public async Task GetStatusAndMatches_WithNoFortiva_ReturnsHostUnreachable()
     {
-        var json = """{"command":"ping"}""";
-        using var doc = JsonDocument.Parse(json);
-        var result = await BridgeNativeForwarder.HandleAsync(doc.RootElement);
-        Assert.Contains("status", result, StringComparison.OrdinalIgnoreCase);
+        Environment.SetEnvironmentVariable("FORTIVA_BRIDGE_FAST_TEST", "1");
+        try
+        {
+            var json = """{"command":"get_status_and_matches","payload":{"domain":"login.example.com","url":"https://login.example.com/"}}""";
+            using var doc = JsonDocument.Parse(json);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var result = await BridgeNativeForwarder.GetStatusAndMatchesAsync(doc.RootElement);
+            sw.Stop();
+            Assert.Contains("host_unreachable", result, StringComparison.OrdinalIgnoreCase);
+            Assert.True(sw.Elapsed < TimeSpan.FromSeconds(5), $"get_status_and_matches took {sw.Elapsed.TotalSeconds:F1}s");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("FORTIVA_BRIDGE_FAST_TEST", null);
+        }
+    }
+
+    [Fact]
+    public async Task HandleAsync_RoutesGetStatusAndMatches()
+    {
+        Environment.SetEnvironmentVariable("FORTIVA_BRIDGE_FAST_TEST", "1");
+        try
+        {
+            var json = """{"command":"get_status_and_matches","payload":{"domain":"login.example.com","url":"https://login.example.com/"}}""";
+            using var doc = JsonDocument.Parse(json);
+            var result = await BridgeNativeForwarder.HandleAsync(doc.RootElement);
+            Assert.Contains("status", result, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("matches", result, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("FORTIVA_BRIDGE_FAST_TEST", null);
+        }
     }
 
     [Fact]

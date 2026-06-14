@@ -40,6 +40,27 @@ function Stop-FortivaDistProcesses {
     Start-Sleep -Milliseconds 750
 }
 
+function Assert-SelfContainedPublish {
+    param(
+        [string]$DistDir,
+        [string]$ExeBaseName
+    )
+    $runtimeConfig = Join-Path $DistDir "$ExeBaseName.runtimeconfig.json"
+    if (-not (Test-Path $runtimeConfig)) {
+        throw "Missing $ExeBaseName.runtimeconfig.json in $DistDir"
+    }
+    $json = Get-Content $runtimeConfig -Raw
+    if ($json -match '"framework"\s*:') {
+        throw "$ExeBaseName publish is framework-dependent (runtimeconfig has 'framework' not 'includedFrameworks'). Users will be prompted to install .NET Desktop Runtime. Re-publish with --self-contained."
+    }
+    if ($json -notmatch 'includedFrameworks') {
+        throw "$ExeBaseName publish is not self-contained (no includedFrameworks in runtimeconfig)."
+    }
+    if (-not (Test-Path (Join-Path $DistDir "hostfxr.dll"))) {
+        throw "$ExeBaseName publish is missing hostfxr.dll — not a complete self-contained layout."
+    }
+}
+
 $makepri = Find-MakePri
 if (-not $makepri) {
     Write-Host "makepri.exe not in NuGet cache — restoring WinUI project packages..."
@@ -125,6 +146,8 @@ foreach ($app in $apps) {
     if ($publishExitCode -ne 0) {
         throw "Publish failed for $name (close any running $name window and retry, or re-run build-release.ps1)"
     }
+
+    Assert-SelfContainedPublish -DistDir $distDir -ExeBaseName $name
 
     # ── Step 4: Generate resources.pri (clean, reliable) ────────────────────
     Write-Host "[4/4] Generate resources.pri..."
@@ -214,6 +237,7 @@ $bridgePublishArgs = @(
 ) + $dotnetVersionArgs
 & dotnet @bridgePublishArgs
 if ($LASTEXITCODE -ne 0) { throw "BrowserBridge publish failed" }
+Assert-SelfContainedPublish -DistDir $bridgeOut -ExeBaseName "Fortiva.BrowserBridge.Host"
 if (-not (Test-Path (Join-Path $bridgeOut "Fortiva.BrowserBridge.Host.exe"))) {
     throw "Fortiva.BrowserBridge.Host.exe missing after publish"
 }

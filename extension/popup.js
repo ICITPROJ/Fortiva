@@ -19,16 +19,17 @@ let fortivaStatus = "setup";
 let pendingMatches = [];
 let selectedEntryId = null;
 let activeFillNonce = null;
-let bridgeListenerRegistered = false;
+let refreshInFlight = null;
+
+const STATUS_TIMEOUT_MS = 8000;
+const PERFORM_FILL_TIMEOUT_MS = 35000;
 
 function connectionLabelForStatus(status) {
   switch (status) {
     case "ready":
       return "Ready to fill";
     case "locked":
-      return "Locked — click Fill";
-    case "bridge_warming":
-      return "Starting…";
+      return "Vault locked";
     case "setup_required":
     default:
       return "Click Fill to connect";
@@ -38,50 +39,17 @@ function connectionLabelForStatus(status) {
 function connectionToneForStatus(status) {
   if (status === "ready") return "ready";
   if (status === "locked") return "locked";
-  if (status === "bridge_warming") return "bridge_warming";
   return "setup";
 }
 
-function applyBridgeSnapshot(snapshot) {
-  if (!snapshot) return;
-
-  const status = snapshot.status || "setup_required";
-  const uiStatus = connectionToneForStatus(status);
-  setConnection(uiStatus, connectionLabelForStatus(status));
-
-  if (snapshot.message && status !== "ready") {
-    const tone =
-      status === "locked" ? "warn" : status === "bridge_warming" ? "loading" : "";
-    setStatus(snapshot.message, tone);
-  } else if (status === "ready") {
-    setStatus(MESSAGES.ready, "success");
-  }
-
-  if (status === "ready" && tabContext?.ok && !activeFillNonce) {
-    void preloadMatches(tabContext);
-  }
-}
-
-function ensureBridgeStateListener() {
-  if (bridgeListenerRegistered) return;
-  bridgeListenerRegistered = true;
-
-  chrome.runtime.onMessage.addListener((message) => {
-    if (message?.type !== "bridge_state_updated" || !message.snapshot) return;
-    applyBridgeSnapshot(message.snapshot);
-  });
-}
-
 const MESSAGES = {
-  ready: "Ready. Click Fill when the login fields are visible.",
-  locked: "Click Fill — Fortiva will open and ask for Windows Hello or your master password.",
-  setup: "Click Fill — Fortiva will open on this PC and ask you to unlock. You don't need the app open first.",
+  ready: "Ready. One click on Fill completes single- and multi-step logins.",
+  locked: "Unlock Fortiva on this PC, then click Fill again.",
+  setup: "Open Fortiva from the Start menu and unlock your vault, then click Fill here.",
   launchFailed:
     "Fortiva could not start from the browser. Open Fortiva from the Start menu, unlock, then Settings → Connect browser.",
-  bridge_warming:
-    "Fortiva is unlocked — the bridge is starting. This usually takes a few seconds.",
   unreachable:
-    "Click Fill below — Fortiva will connect and ask you to unlock. If this keeps failing, run Connect browser once in Fortiva Settings.",
+    "Fortiva bridge is not connected. Open and unlock Fortiva, run Connect browser in Settings, then reload the extension.",
   noTab: "Open a website tab first, then click the Fortiva icon.",
   badTab: "Fortiva can only fill on normal website pages (http/https).",
   tabChanged:
@@ -104,17 +72,21 @@ const MESSAGES = {
     "Login fields already have text. Clear them first if you want Fortiva to fill.",
   noPasswordField: "No password field found on this page yet.",
   passwordStepPending:
-    "Username filled. Continue to the password step on this site, then click Fill again.",
+    "Username filled and the next step was submitted. Fortiva is waiting to fill the password…",
+  passwordStepWatching:
+    "Username submitted. Fortiva will fill the password when the next step appears — no second click needed.",
+  multiStepFilled: (title) =>
+    `Filled “${title}” through a multi-step login. Submit when you are ready.`,
+  usernamePartial:
+    "Password filled, but the username field was not detected on this page. Paste your username manually or click the username box and Fill again.",
   fillFailed: "Could not fill the login fields on this page.",
   cancelled: "Unlock was cancelled. Click Fill again when you're ready.",
   rateLimited:
     "Too many unlock attempts from the browser. Wait five minutes, then click Fill again.",
   working: "Working…",
-  unlocking:
-    "Approve Windows Hello or enter your master password in Fortiva. Keep this popup open — Fill will finish automatically after unlock.",
-  unlockFinishing: "Unlock received — finishing fill automatically…",
-  openingFortiva: "Opening Fortiva on this PC… This can take up to 30 seconds the first time.",
   staleNonce: "Fill request expired. Close and reopen the popup, then try again.",
+  matchFound: (count) =>
+    count === 1 ? "1 match found" : `${count} matches found`,
 };
 
 function setStatus(text, tone = "loading") {
@@ -129,12 +101,9 @@ function setConnection(status, label) {
   const canFill =
     tabContext?.isFillable &&
     !tabContext?.suspicious &&
-    (status === "ready" ||
-      status === "locked" ||
-      status === "setup" ||
-      status === "bridge_warming");
+    (status === "ready" || status === "locked" || status === "setup");
   fillBtn.disabled = !canFill;
-  retryBtn.hidden = status !== "setup" && status !== "bridge_warming";
+  retryBtn.hidden = status !== "setup";
   renderSteps(status);
 }
 
@@ -144,7 +113,7 @@ function renderSteps(status) {
   }
 
   const connectDone = status !== "setup";
-  const unlockDone = status === "ready" || status === "bridge_warming";
+  const unlockDone = status === "ready";
   const fillActive = status === "ready";
 
   if (connectDone) stepConnect.classList.add("done");
@@ -167,10 +136,7 @@ function showMatchPreview(matches) {
   previewCard.classList.remove("visible");
 }
 
-const MESSAGE_TIMEOUT_MS = 18000;
-const UNLOCK_TIMEOUT_MS = 130000;
-
-function sendMessage(message, timeoutMs = MESSAGE_TIMEOUT_MS) {
+function sendMessage(message, timeoutMs = STATUS_TIMEOUT_MS) {
   return new Promise((resolve) => {
     let settled = false;
     const timer = setTimeout(() => {
@@ -249,32 +215,30 @@ function hasMixedScriptHomograph(host) {
   return false;
 }
 
-async function fillViaContentScript(tabId, username, password, expectedHost) {
-  const payload = {
-    type: "fortiva-fill",
-    channel: crypto.randomUUID(),
-    username: username || "",
-    password: password || "",
-    expectedHost: expectedHost || "",
-  };
-
-  try {
-    return await chrome.tabs.sendMessage(tabId, payload);
-  } catch {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ["fill-coordinator.js"],
-      world: "ISOLATED",
-    });
-    return await chrome.tabs.sendMessage(tabId, payload);
-  } finally {
-    payload.password = "";
-    payload.username = "";
-  }
+async function performFillOnActiveTab(context) {
+  return sendMessage(
+    {
+      type: "perform_fill",
+      tabId: context.tab.id,
+      domain: context.host,
+      url: context.url,
+      entryId: selectedEntryId || undefined,
+      fillNonce: activeFillNonce || undefined,
+    },
+    PERFORM_FILL_TIMEOUT_MS
+  );
 }
 
 function applyFillResult(result, host, title) {
   if (result?.ok) {
+    if (result.multiStep) {
+      setStatus(MESSAGES.multiStepFilled(title || host), "success");
+      return true;
+    }
+    if (result.partial && result.reason === "username_not_found") {
+      setStatus(MESSAGES.usernamePartial, "warn");
+      return true;
+    }
     setStatus(MESSAGES.filled(title || host), "success");
     return true;
   }
@@ -284,6 +248,10 @@ function applyFillResult(result, host, title) {
   }
   if (result?.reason === "fields_not_empty") {
     setStatus(MESSAGES.fieldsNotEmpty, "warn");
+    return true;
+  }
+  if (result?.reason === "password_step_watching") {
+    setStatus(MESSAGES.passwordStepWatching, "success");
     return true;
   }
   if (result?.reason === "password_step_pending") {
@@ -350,7 +318,7 @@ function renderMatches(matches) {
     matchList.classList.remove("visible");
     actionHint.textContent =
       pendingMatches.length === 1
-        ? "Matched login found. Click Fill when the username and password fields are visible."
+        ? "Matched login found. Click Fill once — Fortiva handles multi-step logins automatically."
         : "Click Fill when the login fields are visible. Fortiva never fills without your click.";
     return;
   }
@@ -396,12 +364,12 @@ function handleListError(list, host) {
     setStatus(list.message || MESSAGES.rateLimited, "warn");
     return true;
   }
-  if (err === "locked") {
+  if (err === "locked" || err === "vault_locked") {
     setConnection("locked", "Vault locked");
     setStatus(list.message || MESSAGES.locked, "warn");
     return true;
   }
-  if (err === "setup_required" || err === "unknown_command") {
+  if (err === "setup_required" || err === "host_unreachable" || err === "token_stale" || err === "unknown_command") {
     setConnection("setup", "Not connected");
     setStatus(list.message || MESSAGES.setup, "error");
     return true;
@@ -420,26 +388,36 @@ function handleListError(list, host) {
   return true;
 }
 
-function escapeHtml(text) {
-  return String(text)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function applyPrepareFillResponse(prep, host) {
-  if (!prep) {
+function applyStatusResponse(response, host) {
+  if (!response) {
     setConnection("setup", "Not connected");
     setStatus(MESSAGES.bridgeError, "error");
     return "setup";
   }
 
-  const status = prep.status || (prep.ok ? "ready" : "setup_required");
+  const status = response.status || (response.ok ? "ready" : "setup_required");
+
+  if (response.error === "locked" || response.error === "vault_locked" || status === "locked") {
+    setConnection("locked", "Vault locked");
+    setStatus(response.message || MESSAGES.locked, "warn");
+    return "locked";
+  }
+
+  if (
+    response.error === "setup_required" ||
+    response.error === "host_unreachable" ||
+    response.error === "token_stale" ||
+    response.error === "internal_error"
+  ) {
+    setConnection("setup", "Click Fill to connect");
+    setStatus(response.message || MESSAGES.setup, "error");
+    return "setup";
+  }
+
   if (status === "ready") {
     setConnection("ready", "Ready to fill");
-    activeFillNonce = prep.fillNonce || null;
-    const matches = prep.matches || [];
+    activeFillNonce = response.fillNonce || null;
+    const matches = response.matches || [];
     const fillable = releasableMatches(matches);
     renderMatches(matches);
     if (fillable.length === 0 && matches.length > 0) {
@@ -447,71 +425,46 @@ function applyPrepareFillResponse(prep, host) {
     } else if (fillable.length === 0) {
       setStatus(MESSAGES.noMatch(host), "warn");
     } else if (fillable.length === 1) {
-      setStatus(`Found “${fillable[0].title || "saved login"}”. Click Fill when ready.`, "success");
+      setStatus(MESSAGES.matchFound(1), "success");
     } else {
-      setStatus(MESSAGES.multiple, "");
+      setStatus(MESSAGES.matchFound(fillable.length), "success");
     }
     return "ready";
   }
-  if (status === "locked") {
-    setConnection("locked", "Locked — click Fill");
-    setStatus(MESSAGES.locked, "warn");
-    return "locked";
-  }
-  if (status === "bridge_warming") {
-    setConnection("bridge_warming", "Starting…");
-    setStatus(prep.message || MESSAGES.bridge_warming, "loading");
-    fillBtn.disabled = false;
-    return "bridge_warming";
-  }
-  if (status === "setup_required") {
-    setConnection("setup", "Click Fill to connect");
-    setStatus(prep.message || MESSAGES.setup, "");
-    return "setup";
-  }
+
   setConnection("setup", "Click Fill to connect");
-  setStatus(prep.message || MESSAGES.setup, "warn");
+  setStatus(response.message || MESSAGES.setup, "warn");
   return "setup";
 }
 
-async function refreshConnection() {
-  if (!tabContext?.ok) return "setup";
+async function refreshStatus(context = tabContext) {
+  if (!context?.ok) return "setup";
+  if (refreshInFlight) return refreshInFlight;
 
-  setConnection("loading", "Connecting…");
-  setStatus("Checking Fortiva on this PC…", "loading");
+  refreshInFlight = (async () => {
+    try {
+      setConnection("loading", "Checking…");
+      setStatus("Checking Fortiva on this PC…", "loading");
 
-  const prep = await sendMessage(
-    {
-      type: "prepare_fill",
-      domain: tabContext.host,
-      url: tabContext.url,
-    },
-    UNLOCK_TIMEOUT_MS
-  );
+      const response = await sendMessage(
+        {
+          type: "get_status_and_matches",
+          domain: context.host,
+          url: context.url,
+        },
+        STATUS_TIMEOUT_MS
+      );
 
-  return applyPrepareFillResponse(prep, tabContext.host);
-}
+      return applyStatusResponse(response, context.host);
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
 
-async function waitForReady(maxAttempts = 8) {
-  for (let i = 0; i < maxAttempts; i++) {
-    const state = await refreshConnection();
-    if (state === "ready") return true;
-    if (state !== "bridge_warming" && state !== "loading") return false;
-    await new Promise((r) => setTimeout(r, 700 * (i + 1)));
-  }
-  return fortivaStatus === "ready";
-}
-
-async function preloadMatches(context = tabContext) {
-  if (!context?.ok) return;
-  renderSiteLine(context);
-  if (fortivaStatus === "ready" && activeFillNonce) return;
-  await refreshConnection();
+  return refreshInFlight;
 }
 
 async function init() {
-  ensureBridgeStateListener();
-
   try {
     const manifest = chrome.runtime.getManifest();
     versionLine.textContent = manifest?.version ? `v${manifest.version}` : "";
@@ -534,32 +487,13 @@ async function init() {
   }
 
   renderSiteLine(tabContext);
-  setConnection("loading", "Connecting…");
-  setStatus("Checking Fortiva on this PC…", "loading");
-
-  const snapshot = await sendMessage({ type: "get_bridge_snapshot" }, 8000);
-  applyBridgeSnapshot(snapshot);
-
-  if (fortivaStatus === "ready" && tabContext?.ok) {
-    await preloadMatches(tabContext);
-  }
-
-  const canFill =
-    tabContext?.isFillable &&
-    !tabContext?.suspicious &&
-    (fortivaStatus === "ready" ||
-      fortivaStatus === "locked" ||
-      fortivaStatus === "setup" ||
-      fortivaStatus === "bridge_warming");
-  fillBtn.disabled = !canFill;
+  await refreshStatus(tabContext);
 }
 
 retryBtn.addEventListener("click", async () => {
   retryBtn.disabled = true;
   try {
-    await refreshConnection();
-    if (fortivaStatus === "bridge_warming") await waitForReady(4);
-    if (fortivaStatus === "ready" && tabContext?.ok) await preloadMatches(tabContext);
+    await refreshStatus(tabContext);
   } finally {
     retryBtn.disabled = false;
   }
@@ -569,154 +503,123 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !fillBtn.disabled) fillBtn.click();
 });
 
-async function requestExecuteFill(context) {
-  return sendMessage(
-    {
-      type: "execute_fill",
-      domain: context.host,
-      url: context.url,
-      entryId: selectedEntryId || undefined,
-      fillNonce: activeFillNonce || undefined,
-    },
-    UNLOCK_TIMEOUT_MS
-  );
-}
-
-async function runFillWithAutoRetry(context) {
-  let creds = await requestExecuteFill(context);
-
-  if (creds?.error === "locked" || creds?.error === "cancelled") {
-    setConnection("loading", "Finishing…");
-    setStatus(MESSAGES.unlockFinishing, "loading");
-    if (await waitForReady(20)) {
-      await refreshConnection();
-      creds = await requestExecuteFill(context);
-    }
-  }
-
-  return creds;
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 fillBtn.addEventListener("click", async () => {
   fillBtn.disabled = true;
-  setStatus(MESSAGES.working, "loading");
+    setStatus(MESSAGES.working, "loading");
 
-  try {
-    const freshContext = await getActiveTabContext();
-    if (!freshContext.ok) {
-      setStatus(freshContext.reason === "no_tab" ? MESSAGES.noTab : MESSAGES.badTab, "warn");
-      return;
-    }
+    try {
+      const freshContext = await getActiveTabContext();
+      if (!freshContext.ok) {
+        setStatus(freshContext.reason === "no_tab" ? MESSAGES.noTab : MESSAGES.badTab, "warn");
+        return;
+      }
 
-    if (tabContext?.ok && freshContext.host !== tabContext.host) {
+      if (tabContext?.ok && freshContext.host !== tabContext.host) {
+        tabContext = freshContext;
+        activeFillNonce = null;
+        renderSiteLine(tabContext);
+        await refreshStatus(tabContext);
+        setStatus(MESSAGES.tabChanged, "warn");
+        return;
+      }
+
       tabContext = freshContext;
-      activeFillNonce = null;
       renderSiteLine(tabContext);
-      await preloadMatches(tabContext);
-      setStatus(MESSAGES.tabChanged, "warn");
-      return;
-    }
 
-    tabContext = freshContext;
-    renderSiteLine(tabContext);
+      if (tabContext.suspicious) {
+        setStatus(MESSAGES.fillBlockedSuspicious, "warn");
+        return;
+      }
 
-    if (tabContext.suspicious) {
-      setStatus(MESSAGES.fillBlockedSuspicious, "warn");
-      return;
-    }
+      if (fortivaStatus !== "ready") {
+        const state = await refreshStatus(tabContext);
+        if (state !== "ready") {
+          if (state === "locked") setStatus(MESSAGES.locked, "warn");
+          return;
+        }
+      }
 
-    if (fortivaStatus === "ready") {
-      setStatus(MESSAGES.working, "loading");
-    } else if (fortivaStatus === "bridge_warming" || fortivaStatus === "loading") {
-      setConnection("loading", "Connecting…");
-      setStatus(MESSAGES.bridge_warming, "loading");
-    } else if (fortivaStatus === "setup") {
-      setConnection("loading", "Opening Fortiva…");
-      setStatus(MESSAGES.openingFortiva, "loading");
-    } else {
-      setConnection("locked", "Unlocking…");
-      setStatus(MESSAGES.unlocking, "loading");
-    }
+      if (pendingMatches.length === 0) {
+        await refreshStatus(tabContext);
+        if (pendingMatches.length === 0) {
+          setStatus(MESSAGES.noMatch(tabContext.host), "warn");
+          return;
+        }
+      }
 
-    if (fortivaStatus === "ready" && pendingMatches.length === 0) {
-      setStatus(MESSAGES.crossSubdomain, "warn");
-      return;
-    }
+      if (pendingMatches.length > 1 && !selectedEntryId) {
+        setStatus("Choose a saved login from the list first.", "warn");
+        return;
+      }
 
-    if (pendingMatches.length > 1 && !selectedEntryId) {
-      setStatus("Choose a saved login from the list first.", "warn");
-      return;
-    }
+      setStatus("Filling login…", "loading");
+      const response = await performFillOnActiveTab(tabContext);
+      const creds = response?.creds;
+      const fill = response?.fill;
 
-    const creds = await runFillWithAutoRetry(tabContext);
+      if (!response || !creds) {
+        setConnection("setup", "Not connected");
+        setStatus(MESSAGES.bridgeError, "error");
+        return;
+      }
+      if (handleListError(creds, tabContext.host)) return;
 
-    if (!creds) {
-      setConnection("setup", "Not connected");
-      setStatus(MESSAGES.bridgeError, "error");
-      return;
-    }
-    if (handleListError(creds, tabContext.host)) return;
+      if (creds.matches?.length > 1 && !creds.found) {
+        applyStatusResponse(
+          { status: "ready", matches: creds.matches, fillNonce: creds.fillNonce },
+          tabContext.host
+        );
+        setStatus(MESSAGES.multiple, "warn");
+        return;
+      }
 
-    if (creds.matches?.length > 1 && !creds.found) {
-      applyPrepareFillResponse(
-        { status: "ready", matches: creds.matches, fillNonce: creds.fillNonce },
-        tabContext.host
-      );
-      setStatus(MESSAGES.multiple, "warn");
-      return;
-    }
+      if (creds.error === "invalid_nonce") {
+        activeFillNonce = null;
+        await refreshStatus(tabContext);
+        setStatus(MESSAGES.staleNonce, "warn");
+        return;
+      }
+      if (creds?.error === "rate_limited") {
+        setStatus(creds.message || MESSAGES.rateLimited, "warn");
+        return;
+      }
+      if (creds?.error === "locked" || creds?.error === "vault_locked") {
+        setConnection("locked", "Vault locked");
+        setStatus(creds.message || MESSAGES.locked, "warn");
+        return;
+      }
+      if (creds?.error === "setup_required" || creds?.error === "host_unreachable") {
+        setConnection("setup", "Not connected");
+        setStatus(creds.message || MESSAGES.launchFailed, "error");
+        return;
+      }
+      if (creds?.error === "multiple_matches" && creds.matches?.length) {
+        renderMatches(creds.matches);
+        setStatus(MESSAGES.multiple, "warn");
+        return;
+      }
+      if (!creds?.found) {
+        setStatus(MESSAGES.noMatch(tabContext.host), "warn");
+        return;
+      }
 
-    if (creds.error === "invalid_nonce") {
-      await preloadMatches(tabContext);
-      setStatus(MESSAGES.staleNonce, "warn");
-      return;
-    }
-    if (creds?.error === "rate_limited") {
-      setStatus(creds.message || MESSAGES.rateLimited, "warn");
-      return;
-    }
-    if (creds?.error === "cancelled") {
-      setStatus(MESSAGES.cancelled, "warn");
-      return;
-    }
-    if (creds?.error === "locked") {
-      setConnection("locked", "Vault locked");
-      setStatus(creds.message || MESSAGES.locked, "warn");
-      return;
-    }
-    if (creds?.error === "setup_required") {
-      setConnection("setup", "Not connected");
-      setStatus(creds.message || MESSAGES.launchFailed, "error");
-      return;
-    }
-    if (creds?.error === "multiple_matches" && creds.matches?.length) {
-      renderMatches(creds.matches);
-      setStatus(MESSAGES.multiple, "warn");
-      return;
-    }
-    if (!creds?.found) {
-      setStatus(MESSAGES.noMatch(tabContext.host), "warn");
-      return;
-    }
-
-    const result = await fillViaContentScript(
-      tabContext.tab.id,
-      creds.username,
-      creds.password,
-      tabContext.host
-    );
-    applyFillResult(result, tabContext.host, creds.title);
-    if (result?.ok) activeFillNonce = null;
+      applyFillResult(fill, tabContext.host, creds.title);
+      if (fill?.ok || fill?.reason === "password_step_watching") activeFillNonce = null;
   } catch {
     setStatus(MESSAGES.fillFailed, "error");
   } finally {
     const canFill =
       tabContext?.isFillable &&
       !tabContext?.suspicious &&
-      (fortivaStatus === "ready" ||
-        fortivaStatus === "locked" ||
-        fortivaStatus === "setup" ||
-        fortivaStatus === "bridge_warming");
+      (fortivaStatus === "ready" || fortivaStatus === "locked" || fortivaStatus === "setup");
     fillBtn.disabled = !canFill;
   }
 });

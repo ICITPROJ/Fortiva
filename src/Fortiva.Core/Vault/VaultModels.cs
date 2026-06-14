@@ -111,6 +111,15 @@ public sealed class VaultEntry
     };
 }
 
+/// <summary>One duplicate row skipped during import (existing vault entry kept).</summary>
+public sealed class ImportDuplicateRecord
+{
+    public string Title { get; set; } = "";
+    public string Username { get; set; } = "";
+    public string Url { get; set; } = "";
+    public Guid? ExistingEntryId { get; set; }
+}
+
 /// <summary>Summary of one import operation for audit and history UI.</summary>
 public sealed class ImportBatch
 {
@@ -136,6 +145,9 @@ public sealed class ImportBatch
     public int ConflictKeptExistingCount { get; set; }
     public int ConflictUpdatedCount { get; set; }
     public int ConflictKeptBothCount { get; set; }
+
+    /// <summary>Skipped duplicates from this import (for security audit review).</summary>
+    public List<ImportDuplicateRecord> SkippedDuplicates { get; set; } = [];
 
     /// <summary>Label stored on imported entries and shown in history UI.</summary>
     public string ProvenanceLabel =>

@@ -18,6 +18,7 @@ public sealed class VaultSession : IDisposable
     private readonly AuditLogger? _audit;
     private readonly bool _requireEnterpriseLicense;
     private readonly bool _enterpriseClient;
+    private BridgeLocalhostServer? _localhostBridge;
     private BrowserBridgeServer? _bridge;
     private BridgeTokenBroker? _tokenBroker;
     private AutoLockTimer? _autoLock;
@@ -740,6 +741,21 @@ public sealed class VaultSession : IDisposable
                 success: false);
         }
 
+        try
+        {
+            _localhostBridge?.Dispose();
+            _localhostBridge = new BridgeLocalhostServer(
+                () => _context is not null,
+                ListMatchesForDomain,
+                ResolveForDomain);
+            _localhostBridge.Start();
+        }
+        catch (Exception ex)
+        {
+            _localhostBridge = null;
+            FortivaDiagnosticLog.Write("VaultSession.StartLocalhostBridge", ex);
+        }
+
         _autoLock?.Dispose();
         var timeout = PolicyEnforcer.EnforceAutoLock(_autoLockTimeoutSeconds, _policy ?? new FortivaPolicy());
         _autoLock = new AutoLockTimer(timeout);
@@ -752,6 +768,9 @@ public sealed class VaultSession : IDisposable
 
     private void StopBridgeInfrastructure(bool waitForListeners)
     {
+        try { _localhostBridge?.Dispose(); } catch { /* best effort */ }
+        _localhostBridge = null;
+
         var bridge = _bridge;
         var broker = _tokenBroker;
         _bridge = null;

@@ -1,291 +1,294 @@
-const NATIVE_HOSTS = [
-  "com.fortiva.browserbridge.personal",
-  "com.fortiva.browserbridge.enterprise",
-];
+const NATIVE_HOST = "com.fortiva.browserbridge.personal";
+const BRIDGE_HTTP = "http://127.0.0.1:7847";
+const HTTP_TIMEOUT_MS = 3000;
+const NATIVE_TIMEOUT_MS = 8000;
+const EXECUTE_FILL_TIMEOUT_MS = 30000;
 
-let bridgePort = null;
-let connecting = false;
-let reconnectTimer = null;
-let currentBridgeSnapshot = {
-  type: "STATE_CHANGED",
-  state: "Uninitialized",
-  isVaultUnlocked: false,
-  ok: false,
-  status: "setup_required",
-};
-let pendingRequest = null;
+let cachedBridgeToken = null;
 
-let cachedSessionToken = null;
-
-function snapshotToClientView(snapshot) {
+function emptyStatus(error = "host_unreachable", message) {
   return {
-    ok: snapshot.ok === true,
-    status: snapshot.status || "setup_required",
-    message: snapshot.message,
-    state: snapshot.state,
-    isVaultUnlocked: snapshot.isVaultUnlocked === true,
-    vaultExists: snapshot.vaultExists,
+    status: { appRunning: false, vaultUnlocked: false, error },
+    matches: [],
+    nativeError: message || null,
   };
 }
 
-function snapshotToPingResponse(snapshot) {
-  return snapshotToClientView(snapshot);
-}
+async function httpBridgeFetch(path, options = {}) {
+  const headers = { Accept: "application/json", ...(options.headers || {}) };
+  if (cachedBridgeToken) headers["X-Fortiva-Bridge-Token"] = cachedBridgeToken;
 
-function handleIncomingStatePush(message) {
-  const schemaVersion = message.schemaVersion ?? message.SchemaVersion ?? 0;
-  if (schemaVersion > 1) {
-    console.warn("Fortiva bridge push schema newer than extension; update the extension.");
-  }
-
-  currentBridgeSnapshot = {
-    type: "STATE_CHANGED",
-    schemaVersion,
-    state: message.state || message.State || "Uninitialized",
-    vaultExists: message.vaultExists ?? message.VaultExists,
-    isVaultUnlocked: message.isVaultUnlocked ?? message.IsVaultUnlocked ?? false,
-    cachedSessionToken: message.cachedSessionToken ?? message.CachedSessionToken,
-    ok: message.ok ?? message.Ok ?? false,
-    status: message.status ?? message.Status ?? "setup_required",
-    message: message.message ?? message.Message,
-    timestamp: message.timestamp ?? message.Timestamp,
-  };
-  cachedSessionToken = currentBridgeSnapshot.cachedSessionToken || null;
-
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? HTTP_TIMEOUT_MS);
   try {
-    chrome.runtime
-      .sendMessage({ type: "bridge_state_updated", snapshot: currentBridgeSnapshot })
-      .catch(() => {});
-  } catch {
-    /* popup may be closed */
-  }
-}
-
-function onBridgePortMessage(message) {
-  if (!message) return;
-  const pushType = message.type || message.Type;
-  if (pushType === "STATE_CHANGED" || message.state || message.State) {
-    handleIncomingStatePush(message);
-    return;
-  }
-
-  if (pendingRequest) {
-    const { resolve, timer } = pendingRequest;
-    pendingRequest = null;
-    clearTimeout(timer);
-    resolve(message);
-  }
-}
-
-function scheduleReconnect(delayMs = 3000) {
-  if (reconnectTimer !== null) return;
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null;
-    establishAuthoritativeBridgeChannel(0);
-  }, delayMs);
-}
-
-function teardownBridgePort() {
-  if (reconnectTimer !== null) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
-  }
-  if (!bridgePort) return;
-  try {
-    bridgePort.onMessage.removeListener(onBridgePortMessage);
-    bridgePort.onDisconnect.removeListener(onBridgePortDisconnected);
-    bridgePort.disconnect();
-  } catch {
-    /* port may already be gone */
-  }
-  bridgePort = null;
-}
-
-function onBridgePortDisconnected() {
-  bridgePort = null;
-  connecting = false;
-  currentBridgeSnapshot = {
-    type: "STATE_CHANGED",
-    state: "Faulted",
-    isVaultUnlocked: false,
-    ok: false,
-    status: "setup_required",
-  };
-  if (pendingRequest) {
-    const { resolve, timer } = pendingRequest;
-    pendingRequest = null;
-    clearTimeout(timer);
-    resolve({
-      ok: false,
-      status: "setup_required",
-      message: "Fortiva bridge disconnected. Reconnecting…",
+    const response = await fetch(`${BRIDGE_HTTP}${path}`, {
+      ...options,
+      headers,
+      signal: controller.signal,
     });
-  }
-  scheduleReconnect(3000);
-}
-
-function establishAuthoritativeBridgeChannel(hostIndex = 0) {
-  if (bridgePort !== null || connecting) return;
-  if (hostIndex >= NATIVE_HOSTS.length) {
-    scheduleReconnect(5000);
-    return;
-  }
-
-  connecting = true;
-  teardownBridgePort();
-
-  try {
-    bridgePort = chrome.runtime.connectNative(NATIVE_HOSTS[hostIndex]);
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data?.bridgeToken) cachedBridgeToken = data.bridgeToken;
+    return data;
   } catch {
-    connecting = false;
-    bridgePort = null;
-    establishAuthoritativeBridgeChannel(hostIndex + 1);
-    return;
-  }
-
-  bridgePort.onMessage.addListener(onBridgePortMessage);
-  bridgePort.onDisconnect.addListener(onBridgePortDisconnected);
-  connecting = false;
-}
-
-function ensureBridgePort() {
-  if (bridgePort === null && !connecting) {
-    establishAuthoritativeBridgeChannel(0);
+    return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
-function nativeRequest(message, timeoutMs = 20000) {
-  return new Promise((resolve) => {
-    if (message?.command === "ping") {
-      if (currentBridgeSnapshot.status && currentBridgeSnapshot.status !== "setup_required") {
-        resolve(snapshotToPingResponse(currentBridgeSnapshot));
-        return;
-      }
-    }
+async function httpGetStatusAndMatches(domain, url) {
+  const params = new URLSearchParams({ domain: domain || "", url: url || "" });
+  return httpBridgeFetch(`/status-and-matches?${params}`, { method: "GET" });
+}
 
-    ensureBridgePort();
-    if (!bridgePort) {
-      resolve({
-        ok: false,
-        status: "setup_required",
-        message: "Fortiva bridge is not connected. Open Fortiva and unlock, then try again.",
-      });
-      return;
-    }
-
-    if (pendingRequest) {
-      resolve({
-        ok: false,
-        status: "bridge_warming",
-        message: "Fortiva is busy with another request. Try again in a moment.",
-      });
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      if (!pendingRequest) return;
-      pendingRequest = null;
-      resolve({
-        ok: false,
-        status: "setup_required",
-        message:
-          "Fortiva did not respond in time. Click Fill again — Fortiva will connect and ask you to unlock.",
-      });
-    }, timeoutMs);
-
-    pendingRequest = { resolve, timer };
-    try {
-      bridgePort.postMessage(message);
-    } catch {
-      clearTimeout(timer);
-      pendingRequest = null;
-      resolve({
-        ok: false,
-        status: "setup_required",
-        message: "Could not reach Fortiva bridge host.",
-      });
-    }
+async function httpExecuteFill(payload) {
+  return httpBridgeFetch("/execute-fill", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    timeoutMs: EXECUTE_FILL_TIMEOUT_MS,
   });
 }
 
-async function nativeRequestWithRetry(message, attempts = 2) {
-  let last = null;
-  for (let i = 0; i < attempts; i++) {
-    last = await nativeRequest(message);
-    if (last?.ok || last?.status === "locked" || last?.status === "setup_required") return last;
-    if (i < attempts - 1) {
-      const delay = last?.status === "bridge_warming" ? 400 : 250;
-      await new Promise((r) => setTimeout(r, delay));
+function sendNativeMessageWithTimeout(host, payload, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("native_timeout")), timeoutMs);
+    chrome.runtime
+      .sendNativeMessage(host, payload)
+      .then((response) => {
+        clearTimeout(timer);
+        resolve(response);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
+async function nativeCommand(payload, timeoutMs = NATIVE_TIMEOUT_MS) {
+  try {
+    const response = await sendNativeMessageWithTimeout(NATIVE_HOST, payload, timeoutMs);
+    if (response && typeof response === "object") return response;
+    return emptyStatus("host_unreachable", "Native host returned an empty response.");
+  } catch (err) {
+    const msg = err?.message || String(err);
+    if (msg.includes("native_timeout")) {
+      return emptyStatus(
+        "host_unreachable",
+        "Native host timed out. Open Fortiva, unlock, then run Connect browser in Settings."
+      );
+    }
+    return emptyStatus(
+      "host_unreachable",
+      `Native messaging failed (${msg}). Run Connect browser in Fortiva Settings and reload the extension.`
+    );
+  }
+}
+
+async function getStatusAndMatches(domain, url) {
+  const http = await httpGetStatusAndMatches(domain, url);
+  if (http?.status) return http;
+  return nativeCommand({
+    command: "get_status_and_matches",
+    payload: { domain: domain || "", url: url || "" },
+  });
+}
+
+async function executeFill(payload) {
+  const http = await httpExecuteFill(payload);
+  if (http) return http;
+  return nativeCommand({ command: "execute_fill", payload }, EXECUTE_FILL_TIMEOUT_MS);
+}
+
+function isVaultUnlocked(statusBlock) {
+  return statusBlock?.vaultUnlocked === true || statusBlock?.vault_unlocked === true;
+}
+
+function mapStatusToLegacy(statusBlock, nativeError) {
+  if (!statusBlock) {
+    return {
+      ok: false,
+      status: "setup_required",
+      message:
+        nativeError ||
+        "Fortiva bridge is not connected. Open Fortiva and unlock your vault.",
+    };
+  }
+
+  const error = statusBlock.error;
+  if (error === "vault_locked") {
+    return {
+      ok: false,
+      status: "locked",
+      message: "Fortiva is open but locked. Unlock in the Fortiva app, then try again.",
+    };
+  }
+  if (error === "token_stale" || error === "host_unreachable") {
+    return {
+      ok: false,
+      status: "setup_required",
+      message:
+        nativeError ||
+        (error === "token_stale"
+          ? "Fortiva session expired. Unlock Fortiva and click Fill again."
+          : "Fortiva is not running. Open Fortiva from the Start menu and unlock your vault."),
+    };
+  }
+  if (error === "internal_error") {
+    return {
+      ok: false,
+      status: "setup_required",
+      message: "Fortiva bridge error. Run Connect browser in Fortiva Settings.",
+    };
+  }
+
+  if (isVaultUnlocked(statusBlock)) {
+    return { ok: true, status: "ready" };
+  }
+
+  return { ok: false, status: "setup_required" };
+}
+
+function mapMatchesResponse(raw, domain) {
+  const legacy = mapStatusToLegacy(raw?.status, raw?.nativeError);
+  const matches = (raw?.matches || []).map((m) => ({
+    id: m.id,
+    title: m.title || m.url || domain || "Saved login",
+    username: m.username || "",
+    url: m.url || "",
+    score: m.score ?? 0,
+    releasable: m.releasable !== false,
+  }));
+
+  return {
+    ...legacy,
+    matches,
+    fillNonce: raw?.fillNonce || null,
+    error:
+      legacy.status === "locked"
+        ? "locked"
+        : legacy.status === "setup_required"
+          ? raw?.status?.error || "setup_required"
+          : matches.length === 0
+            ? "no_match"
+            : undefined,
+  };
+}
+
+function isUsefulFillResult(result) {
+  return (
+    result?.ok ||
+    result?.reason === "password_step_pending" ||
+    result?.reason === "password_step_watching" ||
+    result?.reason === "fields_not_empty" ||
+    result?.reason === "host_mismatch"
+  );
+}
+
+async function tryFillFrame(tabId, payload, frameId) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, payload, { frameId });
+  } catch {
+    return null;
+  }
+}
+
+async function fillViaContentScript(tabId, username, password, expectedHost) {
+  const payload = {
+    type: "fortiva-fill",
+    channel: crypto.randomUUID(),
+    username: username || "",
+    password: password || "",
+    expectedHost: expectedHost || "",
+  };
+
+  let result = await tryFillFrame(tabId, payload, 0);
+  if (isUsefulFillResult(result)) return result;
+
+  const frames = await chrome.webNavigation.getAllFrames({ tabId });
+  for (const frame of frames || []) {
+    if (frame.frameId === 0) continue;
+    result = await tryFillFrame(tabId, payload, frame.frameId);
+    if (isUsefulFillResult(result)) return result;
+  }
+
+  await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
+    files: ["fill-coordinator.js"],
+    world: "ISOLATED",
+  });
+
+  result = await tryFillFrame(tabId, payload, 0);
+  if (isUsefulFillResult(result)) {
+    payload.password = "";
+    payload.username = "";
+    return result;
+  }
+
+  const framesAfter = await chrome.webNavigation.getAllFrames({ tabId });
+  for (const frame of framesAfter || []) {
+    if (frame.frameId === 0) continue;
+    result = await tryFillFrame(tabId, payload, frame.frameId);
+    if (isUsefulFillResult(result)) {
+      payload.password = "";
+      payload.username = "";
+      return result;
     }
   }
-  return last;
+
+  payload.password = "";
+  payload.username = "";
+  return result;
 }
 
-function credentialEnvelope(command, payload) {
-  const envelope = { command, payload };
-  if (cachedSessionToken) {
-    envelope.cachedSessionToken = cachedSessionToken;
+async function performFillOnTab(tabId, domain, url, entryId, fillNonce) {
+  const creds = await executeFill({
+    domain: domain || "",
+    url,
+    entryId: entryId || undefined,
+    fillNonce: fillNonce || undefined,
+  });
+
+  if (!creds?.found) {
+    return { creds, fill: null };
   }
-  return envelope;
-}
 
-async function nativeCredentialRequestWithRetry(envelope, attempts = 3) {
-  let last = null;
-  for (let i = 0; i < attempts; i++) {
-    last = await nativeRequest(envelope, 130000);
-    if (!last?.error || last.error !== "setup_required") return last;
-    if (i < attempts - 1) await new Promise((r) => setTimeout(r, 600 * (i + 1)));
-  }
-  return last;
+  const fill = await fillViaContentScript(tabId, creds.username, creds.password, domain);
+  return { creds, fill };
 }
-
-chrome.runtime.onStartup.addListener(() => establishAuthoritativeBridgeChannel(0));
-chrome.runtime.onInstalled.addListener(() => establishAuthoritativeBridgeChannel(0));
-establishAuthoritativeBridgeChannel(0);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!message?.type) {
+  if (!message?.type || sender.id !== chrome.runtime.id) {
     sendResponse(null);
     return;
   }
 
-  if (sender.id !== chrome.runtime.id) {
-    sendResponse(null);
-    return;
-  }
-
-  if (message.type === "get_bridge_snapshot") {
-    sendResponse(snapshotToClientView(currentBridgeSnapshot));
-    return;
-  }
-
-  if (message.type === "ping") {
-    nativeRequestWithRetry({ command: "ping" }).then((response) =>
-      sendResponse(response || { ok: false, status: "setup_required" })
+  if (message.type === "get_status_and_matches") {
+    getStatusAndMatches(message.domain, message.url).then((raw) =>
+      sendResponse(mapMatchesResponse(raw, message.domain))
     );
     return true;
   }
 
-  if (message.type === "prepare_fill") {
-    nativeCredentialRequestWithRetry(
-      credentialEnvelope("prepare_fill", {
-        domain: message.domain || "",
-        url: message.url,
-      }),
-      4
-    ).then(sendResponse);
+  if (message.type === "execute_fill") {
+    executeFill({
+      domain: message.domain || "",
+      url: message.url,
+      entryId: message.entryId || undefined,
+      fillNonce: message.fillNonce || undefined,
+    }).then(sendResponse);
     return true;
   }
 
-  if (message.type === "execute_fill") {
-    nativeCredentialRequestWithRetry(
-      credentialEnvelope("execute_fill", {
-        domain: message.domain || "",
-        url: message.url,
-        entryId: message.entryId || undefined,
-        fillNonce: message.fillNonce || undefined,
-      }),
-      2
+  if (message.type === "perform_fill") {
+    performFillOnTab(
+      message.tabId,
+      message.domain,
+      message.url,
+      message.entryId,
+      message.fillNonce
     ).then(sendResponse);
     return true;
   }

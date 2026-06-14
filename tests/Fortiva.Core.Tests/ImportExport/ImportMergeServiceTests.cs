@@ -152,6 +152,78 @@ public sealed class ImportMergeServiceTests : IDisposable
     }
 
     [Fact]
+    public void BuildApplyPlan_RecordsSkippedDuplicates()
+    {
+        var existing = new VaultEntry
+        {
+            Id = Guid.NewGuid(),
+            Title = "Bank",
+            Username = "alice",
+            Password = "same",
+            Url = "https://bank.example/login"
+        };
+
+        var incoming = new List<ImportedCredential>
+        {
+            new() { Entry = new VaultEntry { Title = "Bank", Username = "alice", Password = "same", Url = "https://bank.example" } },
+            new() { Entry = new VaultEntry { Title = "Mail", Username = "carol", Password = "x", Url = "https://mail.example" } }
+        };
+
+        var preview = ImportMergeService.Analyze([existing], incoming);
+        var plan = ImportMergeService.BuildApplyPlan(preview, "CSV import", "BrowserCsv", "test.csv");
+
+        Assert.Equal(1, plan.SkippedDuplicateCount);
+        Assert.Single(plan.Batch.SkippedDuplicates);
+        Assert.Equal("Bank", plan.Batch.SkippedDuplicates[0].Title);
+        Assert.Equal(existing.Id, plan.Batch.SkippedDuplicates[0].ExistingEntryId);
+        Assert.Single(plan.ToAdd);
+        Assert.Empty(plan.ToUpdate);
+    }
+
+    [Fact]
+    public void ApplyImport_NeverRemovesExistingEntries()
+    {
+        var engine = new VaultEngine(_dir, DpapiScope.CurrentUser);
+        engine.CreateVault("import-safe-test!", SecurityLevel.Standard);
+        var ctx = engine.Unlock("import-safe-test!");
+        try
+        {
+            var original = new VaultEntry
+            {
+                Id = Guid.NewGuid(),
+                Title = "Bank",
+                Username = "alice",
+                Password = "keep-me",
+                Url = "https://bank.example"
+            };
+            engine.AddEntry(ctx, original);
+            var beforeIds = ctx.Payload.Entries.Select(e => e.Id).ToHashSet();
+
+            var incoming = new List<ImportedCredential>
+            {
+                new() { Entry = new VaultEntry { Title = "Bank", Username = "alice", Password = "keep-me", Url = "https://bank.example" } },
+                new() { Entry = new VaultEntry { Title = "Bank", Username = "alice", Password = "other", Url = "https://bank.example" } },
+                new() { Entry = new VaultEntry { Title = "New", Username = "bob", Password = "secret", Url = "https://new.example" } }
+            };
+
+            var preview = ImportMergeService.Analyze(ctx.Payload.Entries, incoming);
+            var plan = ImportMergeService.BuildApplyPlan(preview, "CSV import", "BrowserCsv", "mix.csv");
+            engine.ApplyImport(ctx, plan);
+
+            Assert.Equal(beforeIds.Count + 1, ctx.Payload.Entries.Count);
+            Assert.True(beforeIds.IsSubsetOf(ctx.Payload.Entries.Select(e => e.Id)));
+            var kept = ctx.Payload.Entries.Single(e => e.Id == original.Id);
+            Assert.Equal("keep-me", kept.Password);
+            Assert.Equal(1, plan.SkippedDuplicateCount);
+            Assert.Equal(1, plan.ConflictKeptExistingCount);
+        }
+        finally
+        {
+            ctx.Keys.Dispose();
+        }
+    }
+
+    [Fact]
     public void NormalizeImportedUrl_InfersFromTitleWhenMissing()
     {
         var entry = new VaultEntry { Title = "login.ionos.co.uk", Username = "u", Password = "p" };

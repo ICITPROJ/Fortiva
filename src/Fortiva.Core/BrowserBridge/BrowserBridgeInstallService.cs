@@ -170,7 +170,7 @@ public static class BrowserBridgeInstallService
         {
             name = hostName,
             description = "Fortiva local credential bridge",
-            path = Path.GetFullPath(bridgeExecutablePath),
+            path = NativeMessagingPathHelper.ForNativeHostManifest(bridgeExecutablePath),
             type = "stdio",
             allowed_origins = new[] { $"chrome-extension://{extensionId}/" }
         };
@@ -304,8 +304,8 @@ public static class BrowserBridgeInstallService
 
             var fullExpected = Path.GetFullPath(expectedBridgePath);
             var fullManifest = Path.GetFullPath(pathInManifest);
-            return string.Equals(fullManifest, fullExpected, StringComparison.OrdinalIgnoreCase)
-                && File.Exists(fullManifest);
+            return NativeMessagingPathHelper.PathsReferToSameFile(fullExpected, fullManifest)
+                && File.Exists(fullExpected);
         }
         catch
         {

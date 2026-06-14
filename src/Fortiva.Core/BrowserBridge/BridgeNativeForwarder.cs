@@ -21,16 +21,256 @@ public static class BridgeNativeForwarder
     public static async Task<string> HandleAsync(JsonElement request, CancellationToken ct = default)
     {
         var command = request.TryGetProperty("command", out var cmd) ? cmd.GetString() : "";
+        if (string.Equals(command, "get_status_and_matches", StringComparison.OrdinalIgnoreCase))
+            return await GetStatusAndMatchesAsync(request, ct).ConfigureAwait(false);
+
+        if (string.Equals(command, "execute_fill", StringComparison.OrdinalIgnoreCase))
+            return await ExecuteFillAsync(request, ct).ConfigureAwait(false);
+
         if (string.Equals(command, "ping", StringComparison.OrdinalIgnoreCase))
             return BridgeJson.Serialize(await BridgePingEvaluator.EvaluateAsync(ct).ConfigureAwait(false));
 
         if (string.Equals(command, "prepare_fill", StringComparison.OrdinalIgnoreCase))
             return await PrepareFillAsync(request, ct).ConfigureAwait(false);
 
-        if (string.Equals(command, "execute_fill", StringComparison.OrdinalIgnoreCase))
-            return await ExecuteFillAsync(request, ct).ConfigureAwait(false);
+        return await ForwardCredentialAsync(request, ct, allowBrowserUnlock: false).ConfigureAwait(false);
+    }
 
-        return await ForwardCredentialAsync(request, ct).ConfigureAwait(false);
+    /// <summary>
+    /// Single native command for extension: app status + credential matches. Never unlocks from browser.
+    /// </summary>
+    public static async Task<string> GetStatusAndMatchesAsync(JsonElement request, CancellationToken ct = default)
+    {
+        var domain = "";
+        var url = "";
+        if (request.TryGetProperty("payload", out var payload))
+        {
+            if (payload.TryGetProperty("domain", out var d)) domain = d.GetString() ?? "";
+            if (payload.TryGetProperty("url", out var u)) url = u.GetString() ?? "";
+        }
+
+        try
+        {
+            using var overall = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            overall.CancelAfter(TimeSpan.FromSeconds(IsFastTest ? 5 : 5));
+
+            if (!BridgePipeNaming.HasActiveSession(IsEnterpriseEdition))
+            {
+                return SerializeStatusAndMatches(new BridgeStatusBlock
+                {
+                    AppRunning = BridgeProcessCheck.IsFortivaRunning(),
+                    VaultUnlocked = false,
+                    Error = "host_unreachable"
+                });
+            }
+
+            var appRunning = BridgeProcessCheck.IsFortivaRunning();
+            if (!appRunning)
+            {
+                return SerializeStatusAndMatches(new BridgeStatusBlock
+                {
+                    AppRunning = false,
+                    VaultUnlocked = false,
+                    Error = "host_unreachable"
+                });
+            }
+
+            var presence = await BridgePresenceClient.RequestStatusAsync(
+                timeoutMs: IsFastTest ? 400 : 800,
+                maxAttempts: 2,
+                cancellationToken: overall.Token).ConfigureAwait(false);
+
+            if (BridgePresenceStatus.IsExplicitlyLocked(presence))
+            {
+                return SerializeStatusAndMatches(new BridgeStatusBlock
+                {
+                    AppRunning = true,
+                    VaultUnlocked = false,
+                    Error = "vault_locked"
+                });
+            }
+
+            if (string.Equals(presence, BridgePresenceStatus.NoVault, StringComparison.OrdinalIgnoreCase))
+            {
+                return SerializeStatusAndMatches(new BridgeStatusBlock
+                {
+                    AppRunning = true,
+                    VaultUnlocked = false,
+                    Error = "host_unreachable"
+                });
+            }
+
+            var token = await RequestSessionTokenAsync(
+                attempts: 2,
+                timeoutMs: IsFastTest ? 400 : 800,
+                overall.Token).ConfigureAwait(false);
+
+            if (string.IsNullOrEmpty(token))
+            {
+                token = await RequestSessionTokenAsync(
+                    attempts: 2,
+                    timeoutMs: IsFastTest ? 400 : 800,
+                    overall.Token).ConfigureAwait(false);
+                if (string.IsNullOrEmpty(token))
+                {
+                    var error = BridgePresenceStatus.IsUnlocked(presence) ? "token_stale" : "vault_locked";
+                    return SerializeStatusAndMatches(new BridgeStatusBlock
+                    {
+                        AppRunning = true,
+                        VaultUnlocked = BridgePresenceStatus.IsUnlocked(presence),
+                        Error = error
+                    });
+                }
+            }
+
+            if (!await WaitForCredentialPipeAsync(overall.Token, maxAttempts: IsFastTest ? 3 : 6, delayMs: 100)
+                    .ConfigureAwait(false))
+            {
+                return SerializeStatusAndMatches(new BridgeStatusBlock
+                {
+                    AppRunning = true,
+                    VaultUnlocked = true,
+                    Error = "internal_error"
+                });
+            }
+
+            var listJson = await InvokeCredentialPipeAsync(
+                BuildEnvelope("list_credentials", domain, url),
+                token!,
+                overall.Token,
+                readSeconds: 4).ConfigureAwait(false);
+
+            if (IsStaleTokenError(listJson))
+            {
+                var fresh = await RequestSessionTokenAsync(
+                    attempts: 2,
+                    timeoutMs: IsFastTest ? 400 : 800,
+                    overall.Token).ConfigureAwait(false);
+                if (string.IsNullOrEmpty(fresh))
+                {
+                    return SerializeStatusAndMatches(new BridgeStatusBlock
+                    {
+                        AppRunning = true,
+                        VaultUnlocked = true,
+                        Error = "token_stale"
+                    });
+                }
+
+                listJson = await InvokeCredentialPipeAsync(
+                    BuildEnvelope("list_credentials", domain, url),
+                    fresh,
+                    overall.Token,
+                    readSeconds: 4).ConfigureAwait(false);
+                if (IsStaleTokenError(listJson))
+                {
+                    return SerializeStatusAndMatches(new BridgeStatusBlock
+                    {
+                        AppRunning = true,
+                        VaultUnlocked = true,
+                        Error = "token_stale"
+                    });
+                }
+            }
+
+            var credError = CredentialJsonError(listJson);
+            if (credError is "locked")
+            {
+                return SerializeStatusAndMatches(new BridgeStatusBlock
+                {
+                    AppRunning = true,
+                    VaultUnlocked = false,
+                    Error = "vault_locked"
+                });
+            }
+
+            if (credError is not null and not "no_match")
+            {
+                return SerializeStatusAndMatches(new BridgeStatusBlock
+                {
+                    AppRunning = true,
+                    VaultUnlocked = true,
+                    Error = "internal_error"
+                });
+            }
+
+            return ParseListCredentialsToStatusAndMatches(listJson, url);
+        }
+        catch (OperationCanceledException)
+        {
+            return SerializeStatusAndMatches(new BridgeStatusBlock
+            {
+                AppRunning = BridgeProcessCheck.IsFortivaRunning(),
+                VaultUnlocked = false,
+                Error = "internal_error"
+            });
+        }
+        catch (Exception ex)
+        {
+            FortivaDiagnosticLog.Write("BridgeNativeForwarder.GetStatusAndMatches", ex);
+            return SerializeStatusAndMatches(new BridgeStatusBlock
+            {
+                AppRunning = BridgeProcessCheck.IsFortivaRunning(),
+                VaultUnlocked = false,
+                Error = "internal_error"
+            });
+        }
+    }
+
+    private static string SerializeStatusAndMatches(BridgeStatusBlock status, IReadOnlyList<BridgeMatchSummary>? matches = null) =>
+        BridgeJson.Serialize(new BridgeStatusAndMatchesResponse
+        {
+            Status = status,
+            Matches = matches ?? Array.Empty<BridgeMatchSummary>()
+        });
+
+    private static bool IsStaleTokenError(string credentialJson)
+    {
+        var err = CredentialJsonError(credentialJson);
+        return err is "locked" or "decrypt_failed";
+    }
+
+    private static string ParseListCredentialsToStatusAndMatches(string listJson, string? pageUrl)
+    {
+        using var doc = JsonDocument.Parse(listJson);
+        var root = doc.RootElement;
+
+        var response = new BridgeStatusAndMatchesResponse
+        {
+            Status = new BridgeStatusBlock
+            {
+                AppRunning = true,
+                VaultUnlocked = true,
+                Error = null
+            }
+        };
+
+        if (root.TryGetProperty("fillNonce", out var nonceEl) && nonceEl.ValueKind == JsonValueKind.String)
+            response.FillNonce = nonceEl.GetString();
+
+        if (root.TryGetProperty("matches", out var matchesEl) && matchesEl.ValueKind == JsonValueKind.Array)
+        {
+            var list = new List<BridgeMatchSummary>();
+            foreach (var item in matchesEl.EnumerateArray())
+            {
+                var id = item.TryGetProperty("id", out var idEl) ? idEl.GetString() ?? "" : "";
+                var username = item.TryGetProperty("username", out var userEl) ? userEl.GetString() ?? "" : "";
+                var title = item.TryGetProperty("title", out var titleEl) ? titleEl.GetString() : null;
+                var releasable = !item.TryGetProperty("releasable", out var relEl) || relEl.GetBoolean();
+                list.Add(new BridgeMatchSummary
+                {
+                    Id = id,
+                    Username = username,
+                    Url = pageUrl ?? "",
+                    Title = title,
+                    Releasable = releasable,
+                    Score = releasable ? 100 : 50
+                });
+            }
+
+            response.Matches = list;
+        }
+
+        return BridgeJson.Serialize(response);
     }
 
     /// <summary>Status + list_credentials in a single native-host invocation (fewer spawns, one unlock flow).</summary>
@@ -44,7 +284,7 @@ public static class BridgeNativeForwarder
             if (payload.TryGetProperty("url", out var u)) url = u.GetString();
         }
 
-        var ping = await BridgePingEvaluator.EvaluateAsync().ConfigureAwait(false);
+        var ping = await BridgePingEvaluator.EvaluateAsync(ct).ConfigureAwait(false);
         // Preview only unless vault is ready — execute_fill handles unlock + credentials on Fill click.
         if (!string.Equals(ping.Status, "ready", StringComparison.OrdinalIgnoreCase))
             return BridgeJson.Serialize(ping);
@@ -52,7 +292,8 @@ public static class BridgeNativeForwarder
         var listed = await ForwardCredentialAsync(
             BuildEnvelope("list_credentials", domain, url),
             ct,
-            tokenSource: request).ConfigureAwait(false);
+            tokenSource: request,
+            allowBrowserUnlock: false).ConfigureAwait(false);
         return MergeStatusAndCredential(ping, listed);
     }
 
@@ -79,7 +320,8 @@ public static class BridgeNativeForwarder
             using var overall = CancellationTokenSource.CreateLinkedTokenSource(ct);
             overall.CancelAfter(TimeSpan.FromSeconds(OverallTimeoutSeconds));
 
-            var token = await EnsureSessionTokenAsync(request, overall.Token).ConfigureAwait(false);
+            var token = await EnsureSessionTokenAsync(request, overall.Token, allowBrowserUnlock: false)
+                .ConfigureAwait(false);
             if (string.IsNullOrEmpty(token))
                 return await BuildTokenFailureResponseAsync().ConfigureAwait(false);
 
@@ -176,14 +418,18 @@ public static class BridgeNativeForwarder
     public static async Task<string> ForwardCredentialAsync(
         JsonElement request,
         CancellationToken ct = default,
-        JsonElement? tokenSource = null)
+        JsonElement? tokenSource = null,
+        bool allowBrowserUnlock = true)
     {
         try
         {
             using var overall = CancellationTokenSource.CreateLinkedTokenSource(ct);
             overall.CancelAfter(TimeSpan.FromSeconds(OverallTimeoutSeconds));
 
-            var token = await EnsureSessionTokenAsync(tokenSource ?? request, overall.Token).ConfigureAwait(false);
+            var token = await EnsureSessionTokenAsync(
+                tokenSource ?? request,
+                overall.Token,
+                allowBrowserUnlock).ConfigureAwait(false);
             if (string.IsNullOrEmpty(token))
                 return await BuildTokenFailureResponseAsync().ConfigureAwait(false);
 
@@ -192,7 +438,18 @@ public static class BridgeNativeForwarder
                 return BridgeJson.Serialize(new CredentialResponse { Error = "setup_required" });
             }
 
-            return await InvokeCredentialPipeAsync(request, token, overall.Token).ConfigureAwait(false);
+            var result = await InvokeCredentialPipeAsync(request, token, overall.Token).ConfigureAwait(false);
+            if (ShouldRetryCredentialPipeWithFreshToken(result, tokenSource ?? request))
+            {
+                var fresh = await RequestSessionTokenAsync(
+                    attempts: IsFastTest ? 1 : 3,
+                    timeoutMs: IsFastTest ? 400 : 1200,
+                    overall.Token).ConfigureAwait(false);
+                if (!string.IsNullOrEmpty(fresh) && !string.Equals(fresh, token, StringComparison.Ordinal))
+                    result = await InvokeCredentialPipeAsync(request, fresh, overall.Token).ConfigureAwait(false);
+            }
+
+            return result;
         }
         catch (OperationCanceledException)
         {
@@ -213,7 +470,10 @@ public static class BridgeNativeForwarder
         }
     }
 
-    private static async Task<string?> EnsureSessionTokenAsync(JsonElement request, CancellationToken ct)
+    private static async Task<string?> EnsureSessionTokenAsync(
+        JsonElement request,
+        CancellationToken ct,
+        bool allowBrowserUnlock = true)
     {
         var pushed = TryGetPushCachedToken(request);
         if (!string.IsNullOrWhiteSpace(pushed))
@@ -221,24 +481,45 @@ public static class BridgeNativeForwarder
 
         var fast = IsFastTest;
         var token = await RequestSessionTokenAsync(
-            attempts: fast ? 1 : 3,
-            timeoutMs: fast ? 400 : 2500,
+            attempts: fast ? 1 : 2,
+            timeoutMs: fast ? 400 : 800,
             ct).ConfigureAwait(false);
         if (!string.IsNullOrEmpty(token))
             return token;
 
-        var presence = await BridgePresenceClient.RequestStatusAsync(timeoutMs: fast ? 400 : 2500)
-            .ConfigureAwait(false);
+        var presence = await BridgePresenceClient.RequestStatusAsync(
+            timeoutMs: fast ? 400 : 1200,
+            maxAttempts: fast ? 1 : 2,
+            cancellationToken: ct).ConfigureAwait(false);
+        if (BridgePresenceStatus.IsExplicitlyLocked(presence))
+            return null;
+
+        if (string.Equals(presence, BridgePresenceStatus.NoVault, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        token = await RequestSessionTokenAsync(
+            attempts: fast ? 1 : 3,
+            timeoutMs: fast ? 400 : 1500,
+            ct).ConfigureAwait(false);
+        if (!string.IsNullOrEmpty(token))
+            return token;
+
         if (BridgePresenceStatus.IsUnlocked(presence))
         {
             token = await RequestSessionTokenAsync(
-                attempts: fast ? 2 : 8,
-                timeoutMs: fast ? 400 : 2000,
+                attempts: fast ? 2 : 4,
+                timeoutMs: fast ? 400 : 1500,
                 ct).ConfigureAwait(false);
             if (!string.IsNullOrEmpty(token))
                 return token;
         }
-        else if (!await BridgeUnlockClient.RequestUnlockAsync().ConfigureAwait(false))
+        else if (!allowBrowserUnlock)
+        {
+            return null;
+        }
+        else if (!await BridgeUnlockClient.RequestUnlockAsync(
+            totalTimeoutMs: fast ? 2000 : 45_000,
+            cancellationToken: ct).ConfigureAwait(false))
         {
             return null;
         }
@@ -246,11 +527,11 @@ public static class BridgeNativeForwarder
         {
             await WaitForCredentialPipeAsync(
                 ct,
-                maxAttempts: fast ? 3 : 40,
-                delayMs: fast ? 100 : 400).ConfigureAwait(false);
+                maxAttempts: fast ? 3 : 12,
+                delayMs: fast ? 100 : 300).ConfigureAwait(false);
             token = await RequestSessionTokenAsync(
-                attempts: fast ? 2 : 10,
-                timeoutMs: fast ? 400 : 3000,
+                attempts: fast ? 2 : 4,
+                timeoutMs: fast ? 400 : 2000,
                 ct).ConfigureAwait(false);
         }
 
@@ -363,8 +644,11 @@ public static class BridgeNativeForwarder
     private static async Task<string> InvokeCredentialPipeAsync(
         JsonElement request,
         string token,
-        CancellationToken ct)
+        CancellationToken ct,
+        int readSeconds = 0)
     {
+        if (readSeconds <= 0)
+            readSeconds = CredentialReadSeconds;
         var pipeName = BridgePipeNaming.TryCredentialPipeNameInProcess()
             ?? BridgePipeNaming.TryCredentialPipeName(IsEnterpriseEdition);
         if (pipeName is null)
@@ -395,7 +679,7 @@ public static class BridgeNativeForwarder
         await writer.WriteLineAsync(requestLine.AsMemory(), ct).ConfigureAwait(false);
 
         using var readCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        readCts.CancelAfter(TimeSpan.FromSeconds(CredentialReadSeconds));
+        readCts.CancelAfter(TimeSpan.FromSeconds(readSeconds));
         var line = await BridgeJson.ReadBoundedLineAsync(reader, readCts.Token).ConfigureAwait(false);
         if (line is null)
         {
@@ -413,13 +697,38 @@ public static class BridgeNativeForwarder
     {
         for (var attempt = 0; attempt < attempts && !ct.IsCancellationRequested; attempt++)
         {
-            var token = await BridgeSessionAuth.RequestTokenFromBrokerAsync(timeoutMs: timeoutMs, enterprise: IsEnterpriseEdition)
-                .ConfigureAwait(false);
+            var token = await BridgeSessionAuth.RequestTokenFromBrokerAsync(
+                timeoutMs: timeoutMs,
+                cancellationToken: ct,
+                enterprise: IsEnterpriseEdition).ConfigureAwait(false);
             if (!string.IsNullOrEmpty(token))
                 return token;
 
             if (attempt < attempts - 1)
                 await Task.Delay(120 * (attempt + 1), ct).ConfigureAwait(false);
+        }
+
+        return null;
+    }
+
+    private static bool ShouldRetryCredentialPipeWithFreshToken(string credentialJson, JsonElement request)
+    {
+        if (!string.IsNullOrEmpty(TryGetPushCachedToken(request)))
+            return CredentialJsonError(credentialJson) is "locked" or "decrypt_failed";
+        return false;
+    }
+
+    private static string? CredentialJsonError(string credentialJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(credentialJson);
+            if (doc.RootElement.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.String)
+                return err.GetString();
+        }
+        catch
+        {
+            /* best effort */
         }
 
         return null;
@@ -494,8 +803,28 @@ public static class BridgeNativeForwarder
                 ["message"] = ping.Message
             };
 
-            if (root.TryGetProperty("error", out var err) && err.ValueKind != JsonValueKind.Null)
-                merged["error"] = err.GetString();
+            string? credError = null;
+            if (root.TryGetProperty("error", out var err) && err.ValueKind == JsonValueKind.String)
+                credError = err.GetString();
+
+            if (!string.IsNullOrEmpty(credError))
+            {
+                merged["error"] = credError;
+                if (credError is not "no_match")
+                {
+                    merged["ok"] = false;
+                    merged["status"] = credError switch
+                    {
+                        "locked" => "locked",
+                        "cancelled" => "cancelled",
+                        "bridge_warming" => "bridge_warming",
+                        _ => "setup_required"
+                    };
+                    if (root.TryGetProperty("message", out var credMsg) && credMsg.ValueKind == JsonValueKind.String)
+                        merged["message"] = credMsg.GetString();
+                }
+            }
+
             if (root.TryGetProperty("matches", out var matches))
                 merged["matches"] = JsonSerializer.Deserialize<object>(matches.GetRawText(), BridgeJson.Options);
             if (root.TryGetProperty("fillNonce", out var nonce))

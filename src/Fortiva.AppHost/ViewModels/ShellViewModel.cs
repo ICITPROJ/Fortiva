@@ -867,7 +867,8 @@ public sealed class ShellViewModel : ViewModelBase
             ParanoiaMode = PreferParanoiaMode,
             SnapshotCount = ListSnapshots().Count,
             AuditEvents = auditEvents,
-            IncludeActivityAudit = IsEnterprise
+            IncludeActivityAudit = IsEnterprise,
+            ImportBatches = ImportHistory()
         });
     }
 

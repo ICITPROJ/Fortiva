@@ -190,22 +190,7 @@ public sealed class BridgeCoordinator : IBridgeCoordinator
         }
 
         if (previous != state)
-        {
             ReadyStateChanged?.Invoke(state);
-            _ = PushStateToConnectedHostsAsync();
-        }
-    }
-
-    private async Task PushStateToConnectedHostsAsync()
-    {
-        try
-        {
-            await _eventBroadcaster.BroadcastSnapshotAsync(GetAuthoritativeSnapshot()).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            FortivaDiagnosticLog.Write("BridgeCoordinator.PushState", ex);
-        }
     }
 
     private static bool IsHealthOnlyTrigger(string triggerReason) =>

@@ -12,6 +12,8 @@
     <ApplicationTitle>Fortiva</ApplicationTitle>
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- Release publish must bundle .NET — framework-dependent builds prompt users to install Desktop Runtime. -->
+    <SelfContained Condition="'$(RuntimeIdentifier)' != ''">true</SelfContained>
     <EnableMsixTooling>false</EnableMsixTooling>
     <GenerateAppxPackageOnBuild>false</GenerateAppxPackageOnBuild>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>

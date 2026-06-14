@@ -4,16 +4,17 @@ using System.Text.Json;
 namespace Fortiva.Core.BrowserBridge;
 
 /// <summary>
-/// Long-lived native messaging host: stdin requests + WinUI event-pipe push stream on stdout.
+/// One-shot native messaging host: read one stdin request, write one stdout response, exit.
 /// </summary>
 public sealed class NativeMessagingHostPump : IAsyncDisposable
 {
+    private const int RequestTimeoutSeconds = 5;
+    private const int ExecuteFillTimeoutSeconds = 30;
+
     private readonly bool _enterprise;
     private readonly bool _integrityOk;
     private readonly Stream _stdin;
     private readonly Stream _stdout;
-    private readonly SemaphoreSlim _stdoutLock = new(1, 1);
-    private readonly CancellationTokenSource _cts = new();
 
     public NativeMessagingHostPump(bool enterprise, bool integrityOk, Stream? stdin = null, Stream? stdout = null)
     {
@@ -23,159 +24,122 @@ public sealed class NativeMessagingHostPump : IAsyncDisposable
         _stdout = stdout ?? Console.OpenStandardOutput();
     }
 
-    public Task RunAsync() =>
-        Task.WhenAll(
-            ProcessBrowserStdinLoopAsync(_cts.Token),
-            ListenToWinUiPushAsync(_cts.Token));
-
-    private async Task ListenToWinUiPushAsync(CancellationToken ct)
-    {
-        while (!ct.IsCancellationRequested)
-        {
-            var pipeName = BridgePipeNaming.TryEventPipeName(_enterprise);
-            if (pipeName is null)
-            {
-                await Task.Delay(2000, ct).ConfigureAwait(false);
-                continue;
-            }
-
-            try
-            {
-                using var pipeClient = new System.IO.Pipes.NamedPipeClientStream(
-                    ".", pipeName, System.IO.Pipes.PipeDirection.InOut,
-                    System.IO.Pipes.PipeOptions.Asynchronous);
-                await pipeClient.ConnectAsync(5000, ct).ConfigureAwait(false);
-
-                using var reader = new StreamReader(pipeClient, Encoding.UTF8, leaveOpen: true);
-                while (!ct.IsCancellationRequested && pipeClient.IsConnected)
-                {
-                    var line = await BridgeJson.ReadBoundedLineAsync(reader, ct).ConfigureAwait(false);
-                    if (line is null)
-                        break;
-                    if (!string.IsNullOrWhiteSpace(line))
-                        await WriteMessageToStdoutAsync(line).ConfigureAwait(false);
-                }
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                break;
-            }
-            catch
-            {
-                try { await Task.Delay(2000, ct).ConfigureAwait(false); }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
-            }
-        }
-    }
-
-    private async Task ProcessBrowserStdinLoopAsync(CancellationToken ct)
+    public async Task RunAsync()
     {
         var lengthBuf = new byte[4];
-        while (!ct.IsCancellationRequested)
+        var read = await _stdin.ReadAsync(lengthBuf.AsMemory(0, 4)).ConfigureAwait(false);
+        if (read < 4)
+            return;
+
+        var len = BitConverter.ToInt32(lengthBuf, 0);
+        if (len <= 0 || len > 1024 * 1024)
+            return;
+
+        var msgBuf = new byte[len];
+        var offset = 0;
+        while (offset < len)
         {
-            var read = await _stdin.ReadAsync(lengthBuf.AsMemory(0, 4), ct).ConfigureAwait(false);
-            if (read < 4)
-                break;
+            var chunk = await _stdin.ReadAsync(msgBuf.AsMemory(offset, len - offset)).ConfigureAwait(false);
+            if (chunk == 0)
+                return;
+            offset += chunk;
+        }
 
-            var len = BitConverter.ToInt32(lengthBuf, 0);
-            if (len <= 0 || len > 1024 * 1024)
-                break;
-
-            var msgBuf = new byte[len];
-            var offset = 0;
-            while (offset < len)
+        string response;
+        if (!_integrityOk)
+        {
+            response = BridgeJson.Serialize(new BridgeStatusAndMatchesResponse
             {
-                var chunk = await _stdin.ReadAsync(msgBuf.AsMemory(offset, len - offset), ct).ConfigureAwait(false);
-                if (chunk == 0)
-                    break;
-                offset += chunk;
-            }
-
-            if (offset < len)
-                break;
-
-            var json = Encoding.UTF8.GetString(msgBuf);
-            string response;
-            if (!_integrityOk)
-            {
-                response = BridgeJson.Serialize(new BridgeStatusResponse
+                Status = new BridgeStatusBlock
                 {
-                    Ok = false,
-                    Status = "setup_required",
-                    Message = "Bridge host failed integrity check. Reinstall Fortiva or run Connect browser in Settings."
-                });
-            }
-            else
+                    AppRunning = false,
+                    VaultUnlocked = false,
+                    Error = "host_unreachable"
+                }
+            });
+        }
+        else
+        {
+            try
             {
-                try
+                if (!BridgePipeNaming.HasActiveSession(_enterprise))
                 {
-                    using var doc = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 16 });
+                    using var doc = JsonDocument.Parse(Encoding.UTF8.GetString(msgBuf), new JsonDocumentOptions { MaxDepth = 16 });
+                    var command = doc.RootElement.TryGetProperty("command", out var cmd) ? cmd.GetString() : null;
+                    response = string.Equals(command, "execute_fill", StringComparison.OrdinalIgnoreCase)
+                        ? BridgeJson.Serialize(new CredentialResponse
+                        {
+                            Error = "setup_required",
+                            Message = "Fortiva is not running. Open Fortiva and unlock your vault."
+                        })
+                        : BridgeJson.Serialize(new BridgeStatusAndMatchesResponse
+                        {
+                            Status = new BridgeStatusBlock
+                            {
+                                AppRunning = BridgeProcessCheck.IsFortivaRunning(),
+                                VaultUnlocked = false,
+                                Error = "host_unreachable"
+                            }
+                        });
+                }
+                else
+                {
+                    using var doc = JsonDocument.Parse(Encoding.UTF8.GetString(msgBuf), new JsonDocumentOptions { MaxDepth = 16 });
                     var command = doc.RootElement.TryGetProperty("command", out var cmd)
                         ? cmd.GetString()
                         : null;
 
-                    if (string.Equals(command, "ping", StringComparison.OrdinalIgnoreCase))
-                    {
-                        response = await HandlePingCommandAsync(ct).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        using var reqCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                        reqCts.CancelAfter(TimeSpan.FromSeconds(8));
-                        response = await BridgeNativeForwarder.HandleAsync(doc.RootElement, reqCts.Token)
-                            .ConfigureAwait(false);
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    response = BridgeJson.Serialize(new BridgeStatusResponse
-                    {
-                        Ok = false,
-                        Status = "bridge_warming",
-                        Message = "Fortiva is starting the bridge. Wait a moment, then click Fill again."
-                    });
-                }
-                catch
-                {
-                    response = BridgeJson.Serialize(new BridgeStatusResponse
-                    {
-                        Ok = false,
-                        Status = "setup_required",
-                        Message = "Invalid request from extension."
-                    });
+                    using var reqCts = new CancellationTokenSource();
+                    var timeoutSeconds = string.Equals(command, "execute_fill", StringComparison.OrdinalIgnoreCase)
+                        ? ExecuteFillTimeoutSeconds
+                        : RequestTimeoutSeconds;
+                    reqCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+
+                    var handleTask = BridgeNativeForwarder.HandleAsync(doc.RootElement, reqCts.Token);
+                    var completed = await Task.WhenAny(handleTask, Task.Delay(TimeSpan.FromSeconds(timeoutSeconds), reqCts.Token))
+                        .ConfigureAwait(false);
+                    response = completed == handleTask
+                        ? await handleTask.ConfigureAwait(false)
+                        : BridgeJson.Serialize(new BridgeStatusAndMatchesResponse
+                        {
+                            Status = new BridgeStatusBlock
+                            {
+                                AppRunning = BridgeProcessCheck.IsFortivaRunning(),
+                                VaultUnlocked = false,
+                                Error = "internal_error"
+                            }
+                        });
                 }
             }
-
-            await WriteMessageToStdoutAsync(response).ConfigureAwait(false);
+            catch (OperationCanceledException)
+            {
+                response = BridgeJson.Serialize(new BridgeStatusAndMatchesResponse
+                {
+                    Status = new BridgeStatusBlock
+                    {
+                        AppRunning = BridgeProcessCheck.IsFortivaRunning(),
+                        VaultUnlocked = false,
+                        Error = "internal_error"
+                    }
+                });
+            }
+            catch
+            {
+                response = BridgeJson.Serialize(new BridgeStatusAndMatchesResponse
+                {
+                    Status = new BridgeStatusBlock
+                    {
+                        AppRunning = false,
+                        VaultUnlocked = false,
+                        Error = "internal_error"
+                    }
+                });
+            }
         }
 
-        try { _cts.Cancel(); } catch { /* loop ended */ }
+        var bytes = Encoding.UTF8.GetBytes(response);
+        NativeMessagingFraming.WriteLengthPrefixedMessage(_stdout, bytes);
     }
 
-    private static async Task<string> HandlePingCommandAsync(CancellationToken ct)
-    {
-        var ping = await BridgePingEvaluator.EvaluateAsync(ct).ConfigureAwait(false);
-        return BridgeJson.Serialize(ping);
-    }
-
-    private async Task WriteMessageToStdoutAsync(string jsonMessage)
-    {
-        var bytes = Encoding.UTF8.GetBytes(jsonMessage);
-        await _stdoutLock.WaitAsync(_cts.Token).ConfigureAwait(false);
-        try
-        {
-            NativeMessagingFraming.WriteLengthPrefixedMessage(_stdout, bytes);
-        }
-        finally
-        {
-            _stdoutLock.Release();
-        }
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        try { await _cts.CancelAsync().ConfigureAwait(false); } catch { /* best effort */ }
-        _stdoutLock.Dispose();
-        _cts.Dispose();
-    }
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }

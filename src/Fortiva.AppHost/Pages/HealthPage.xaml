@@ -35,6 +35,26 @@
                           Foreground="{ThemeResource FortivaMutedBrush}" VerticalAlignment="Center"/>
             </Grid>
         </DataTemplate>
+        <DataTemplate x:Key="ImportDuplicateTemplate" x:DataType="local:ImportDuplicateDisplay"
+                      xmlns:local="using:Fortiva.AppHost.Pages">
+            <Grid Padding="4,8" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Spacing="2" VerticalAlignment="Center">
+                    <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                               Foreground="{ThemeResource FortivaHeadingBrush}"/>
+                    <TextBlock Text="{x:Bind Subtitle}" Style="{StaticResource FortivaMutedText}" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{x:Bind BatchLabel}" FontSize="11" Style="{StaticResource FortivaMutedText}"/>
+                </StackPanel>
+                <Border Grid.Column="1" CornerRadius="6" Padding="8,4" VerticalAlignment="Center"
+                        Background="{ThemeResource AccentFillColorTertiaryBrush}">
+                    <TextBlock Text="Kept existing" FontSize="11" FontWeight="SemiBold"
+                               Foreground="{ThemeResource FortivaAccentIconBrush}"/>
+                </Border>
+            </Grid>
+        </DataTemplate>
     </Page.Resources>
 
     <ScrollViewer>
@@ -81,7 +101,8 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <Border x:Name="CatPasswords" Style="{StaticResource FortivaGlassPanel}" Padding="16">
+                <Border x:Name="CatPasswords" Style="{StaticResource FortivaGlassPanel}" Padding="16"
+                        PointerPressed="CatPasswords_Pressed">
                     <StackPanel Spacing="4">
                         <FontIcon Glyph="&#xE72E;" FontSize="20" Foreground="{ThemeResource FortivaAccentIconBrush}"/>
                         <TextBlock x:Name="CatPasswordsCount" FontSize="22" FontWeight="Bold"
@@ -89,7 +110,8 @@
                         <TextBlock Text="Password issues" Style="{StaticResource FortivaMutedText}"/>
                     </StackPanel>
                 </Border>
-                <Border Grid.Column="1" x:Name="CatSettings" Style="{StaticResource FortivaGlassPanel}" Padding="16">
+                <Border Grid.Column="1" x:Name="CatSettings" Style="{StaticResource FortivaGlassPanel}" Padding="16"
+                        PointerPressed="CatSettings_Pressed">
                     <StackPanel Spacing="4">
                         <FontIcon Glyph="&#xE713;" FontSize="20" Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
                         <TextBlock x:Name="CatSettingsCount" FontSize="22" FontWeight="Bold"
@@ -97,7 +119,8 @@
                         <TextBlock Text="Settings" Style="{StaticResource FortivaMutedText}"/>
                     </StackPanel>
                 </Border>
-                <Border Grid.Column="2" x:Name="CatVault" Style="{StaticResource FortivaGlassPanel}" Padding="16">
+                <Border Grid.Column="2" x:Name="CatVault" Style="{StaticResource FortivaGlassPanel}" Padding="16"
+                        PointerPressed="CatVault_Pressed">
                     <StackPanel Spacing="4">
                         <FontIcon Glyph="&#xE8D7;" FontSize="20" Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
                         <TextBlock x:Name="CatVaultCount" FontSize="22" FontWeight="Bold"
@@ -105,7 +128,8 @@
                         <TextBlock Text="Vault hygiene" Style="{StaticResource FortivaMutedText}"/>
                     </StackPanel>
                 </Border>
-                <Border Grid.Column="3" x:Name="CatActivity" Style="{StaticResource FortivaGlassPanel}" Padding="16">
+                <Border Grid.Column="3" x:Name="CatActivity" Style="{StaticResource FortivaGlassPanel}" Padding="16"
+                        PointerPressed="CatActivity_Pressed">
                     <StackPanel Spacing="4">
                         <FontIcon Glyph="&#xE81C;" FontSize="20" Foreground="{ThemeResource SystemFillColorNeutralBrush}"/>
                         <TextBlock x:Name="CatActivityCount" FontSize="22" FontWeight="Bold"
@@ -149,19 +173,19 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <Border Style="{StaticResource FortivaGlassPanel}" Padding="14">
+                        <Border Style="{StaticResource FortivaGlassPanel}" Padding="14" PointerPressed="PassStat_Pressed">
                             <StackPanel Spacing="2">
                                 <TextBlock x:Name="PassStat" FontSize="22" FontWeight="Bold" Foreground="{ThemeResource SystemFillColorSuccessBrush}"/>
                                 <TextBlock Text="Passed checks" Style="{StaticResource FortivaMutedText}"/>
                             </StackPanel>
                         </Border>
-                        <Border Grid.Column="1" Style="{StaticResource FortivaGlassPanel}" Padding="14">
+                        <Border Grid.Column="1" Style="{StaticResource FortivaGlassPanel}" Padding="14" PointerPressed="WarnStat_Pressed">
                             <StackPanel Spacing="2">
                                 <TextBlock x:Name="WarnStat" FontSize="22" FontWeight="Bold" Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
                                 <TextBlock Text="Warnings" Style="{StaticResource FortivaMutedText}"/>
                             </StackPanel>
                         </Border>
-                        <Border Grid.Column="2" Style="{StaticResource FortivaGlassPanel}" Padding="14">
+                        <Border Grid.Column="2" Style="{StaticResource FortivaGlassPanel}" Padding="14" PointerPressed="CritStat_Pressed">
                             <StackPanel Spacing="2">
                                 <TextBlock x:Name="CritStat" FontSize="22" FontWeight="Bold" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
                                 <TextBlock Text="Critical" Style="{StaticResource FortivaMutedText}"/>
@@ -184,8 +208,25 @@
                     <FontIcon Glyph="&#xE7BA;" FontSize="16" Foreground="{ThemeResource FortivaAccentIconBrush}"/>
                     <TextBlock Text="Audit findings" Style="{StaticResource FortivaSectionTitle}"/>
                 </StackPanel>
+                <Border x:Name="FilterBanner" Visibility="Collapsed" Style="{StaticResource FortivaGlassPanel}" Padding="12,10">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="FilterBannerText" VerticalAlignment="Center" Style="{StaticResource FortivaBodyText}"/>
+                        <Button Grid.Column="1" Content="Clear filter" Style="{StaticResource FortivaSecondaryButton}" Click="ClearFilter_Click"/>
+                    </Grid>
+                </Border>
                 <StackPanel x:Name="FindingsPanel" Spacing="10"/>
             </StackPanel>
+
+            <Expander x:Name="ImportDuplicatesExpander" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                      Visibility="Collapsed">
+                <ListView x:Name="ImportDuplicatesList" SelectionMode="Single" MaxHeight="320"
+                          ItemTemplate="{StaticResource ImportDuplicateTemplate}"
+                          SelectionChanged="ImportDuplicatesList_SelectionChanged"/>
+            </Expander>
 
             <!-- Strength breakdown -->
             <Border Style="{StaticResource FortivaGlassPanel}" Padding="20">

@@ -29,6 +29,13 @@ dotnet publish (Join-Path $root "src\Fortiva.Personal\Fortiva.Personal.csproj") 
     -o $distPersonal -v q
 if ($LASTEXITCODE -ne 0) { throw "Fortiva.Personal publish failed." }
 
+$runtimeConfig = Join-Path $distPersonal "Fortiva.Personal.runtimeconfig.json"
+if (-not (Test-Path $runtimeConfig)) { throw "Missing Fortiva.Personal.runtimeconfig.json in publish output." }
+$runtimeJson = Get-Content $runtimeConfig -Raw
+if ($runtimeJson -notmatch 'includedFrameworks') {
+    throw "Publish is framework-dependent (no includedFrameworks). Users would be prompted to install .NET Desktop Runtime. Use --self-contained."
+}
+
 Write-Host "Publishing bridge host..." -ForegroundColor Cyan
 dotnet publish (Join-Path $root "src\Fortiva.BrowserBridge.Host\Fortiva.BrowserBridge.Host.csproj") `
     -c Release -r win-x64 --self-contained -p:PublishSingleFile=false `

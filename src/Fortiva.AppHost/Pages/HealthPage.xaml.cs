@@ -22,6 +22,9 @@ public sealed partial class HealthPage : Page
     private int _buildGeneration;
     private Dictionary<Guid, VaultEntry> _entryLookup = [];
     private SecurityAuditReport? _lastAuditReport;
+    private IReadOnlyList<SecurityAuditFinding> _allFindings = [];
+    private string? _categoryFilter;
+    private AuditSeverity? _severityFilter;
 
     public HealthPage()
     {
@@ -32,6 +35,22 @@ public sealed partial class HealthPage : Page
         CatActivity.Visibility = _vm.IsEnterprise ? Visibility.Visible : Visibility.Collapsed;
         if (!_vm.IsEnterprise)
             CategoryGrid.ColumnDefinitions[3].Width = new GridLength(0);
+        SetCategoryCardCursors();
+    }
+
+    private void SetCategoryCardCursors()
+    {
+        var hand = Microsoft.UI.Input.InputSystemCursor.Create(Microsoft.UI.Input.InputSystemCursorShape.Hand);
+        var arrow = Microsoft.UI.Input.InputSystemCursor.Create(Microsoft.UI.Input.InputSystemCursorShape.Arrow);
+        foreach (var card in new[] { CatPasswords, CatSettings, CatVault, CatActivity })
+        {
+            card.PointerEntered += (_, e) =>
+            {
+                if (e.Pointer.PointerDeviceType != Microsoft.UI.Input.PointerDeviceType.Touch)
+                    ProtectedCursor = hand;
+            };
+            card.PointerExited += (_, _) => ProtectedCursor = arrow;
+        }
     }
 
     protected override async void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
@@ -81,6 +100,111 @@ public sealed partial class HealthPage : Page
         ReusedExpander.IsExpanded = false;
         OldExpander.IsExpanded = false;
         MissingExpander.IsExpanded = false;
+    }
+
+    private void CatPasswords_Pressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        => SetCategoryFilter("Passwords");
+
+    private void CatSettings_Pressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        => SetCategoryFilter("Settings");
+
+    private void CatVault_Pressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        SetCategoryFilter("Vault");
+        if (ImportDuplicatesExpander.Visibility == Visibility.Visible)
+            ImportDuplicatesExpander.IsExpanded = true;
+    }
+
+    private void CatActivity_Pressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        => SetCategoryFilter("Activity");
+
+    private void PassStat_Pressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        => SetSeverityFilter(AuditSeverity.Pass);
+
+    private void WarnStat_Pressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        => SetSeverityFilter(AuditSeverity.Warning);
+
+    private void CritStat_Pressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        => SetSeverityFilter(AuditSeverity.Critical);
+
+    private void ClearFilter_Click(object sender, RoutedEventArgs e)
+        => ClearFilters();
+
+    private void SetCategoryFilter(string category)
+    {
+        _categoryFilter = category;
+        _severityFilter = null;
+        ApplyFindingFilter();
+        UpdateFilterHighlights();
+    }
+
+    private void SetSeverityFilter(AuditSeverity severity)
+    {
+        _severityFilter = severity;
+        _categoryFilter = null;
+        ApplyFindingFilter();
+        UpdateFilterHighlights();
+    }
+
+    private void ClearFilters()
+    {
+        _categoryFilter = null;
+        _severityFilter = null;
+        ApplyFindingFilter();
+        UpdateFilterHighlights();
+    }
+
+    private void ApplyFindingFilter()
+    {
+        IEnumerable<SecurityAuditFinding> filtered = _allFindings;
+        if (_categoryFilter is not null)
+            filtered = filtered.Where(f => f.Category == _categoryFilter);
+        if (_severityFilter is AuditSeverity.Warning)
+            filtered = filtered.Where(f => f.Severity is AuditSeverity.Warning or AuditSeverity.Info);
+        else if (_severityFilter is not null)
+            filtered = filtered.Where(f => f.Severity == _severityFilter);
+
+        RenderFindings(filtered.ToList());
+        UpdateFilterBanner();
+    }
+
+    private void UpdateFilterBanner()
+    {
+        if (_categoryFilter is null && _severityFilter is null)
+        {
+            FilterBanner.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        FilterBanner.Visibility = Visibility.Visible;
+        FilterBannerText.Text = _categoryFilter is not null
+            ? $"Showing {_categoryFilter.ToLowerInvariant()} findings"
+            : _severityFilter switch
+            {
+                AuditSeverity.Pass => "Showing passed checks",
+                AuditSeverity.Warning => "Showing warnings and recommendations",
+                AuditSeverity.Critical => "Showing critical findings",
+                _ => "Showing filtered findings"
+            };
+    }
+
+    private void UpdateFilterHighlights()
+    {
+        var audit = _lastAuditReport;
+        HighlightSelectedCard(CatPasswords, _categoryFilter == "Passwords", audit?.PasswordFindings > 0);
+        HighlightSelectedCard(CatSettings, _categoryFilter == "Settings", audit?.SettingsFindings > 0);
+        HighlightSelectedCard(CatVault, _categoryFilter == "Vault", audit?.VaultFindings > 0);
+        if (_vm.IsEnterprise)
+            HighlightSelectedCard(CatActivity, _categoryFilter == "Activity", audit?.ActivityFindings > 0);
+    }
+
+    private void ImportDuplicatesList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is not ListView { SelectedItem: ImportDuplicateDisplay item }) return;
+        if (!item.ExistingEntryId.HasValue || !_entryLookup.TryGetValue(item.ExistingEntryId.Value, out var entry)) return;
+        NavigationService.Current.ResetCurrent();
+        NavigationService.Current.Navigate<EntryPage>(entry, animate: true);
+        if (sender is ListView lv) lv.SelectedItem = null;
     }
 
     private async Task BuildReportAsync()
@@ -244,6 +368,7 @@ public sealed partial class HealthPage : Page
         ApplyScoreVisuals(score, audit);
 
         PopulateFindings(audit.Findings);
+        PopulateImportDuplicates(_vm.ImportHistory());
         PopulateStrengthBars(report, loginTotal);
         PopulatePasswordLists(report, entries);
 
@@ -261,6 +386,7 @@ public sealed partial class HealthPage : Page
         HighlightCard(CatVault, audit.VaultFindings > 0);
         if (_vm.IsEnterprise)
             HighlightCard(CatActivity, audit.ActivityFindings > 0);
+        UpdateFilterHighlights();
     }
 
     private void ApplyScoreVisuals(int score, SecurityAuditReport audit)
@@ -310,6 +436,12 @@ public sealed partial class HealthPage : Page
     }
 
     private void PopulateFindings(IReadOnlyList<SecurityAuditFinding> findings)
+    {
+        _allFindings = findings;
+        ApplyFindingFilter();
+    }
+
+    private void RenderFindings(IReadOnlyList<SecurityAuditFinding> findings)
     {
         FindingsPanel.Children.Clear();
         var ordered = findings
@@ -397,6 +529,7 @@ public sealed partial class HealthPage : Page
         "settings" => "Open settings",
         "export" => "Export backup",
         "import" => "Import",
+        "import-duplicates" => "View duplicates",
         "audit" => "View audit log",
         _ => "Review"
     };
@@ -409,6 +542,10 @@ public sealed partial class HealthPage : Page
             case "settings": NavigationService.Current.Navigate<SettingsPage>(); break;
             case "export":
             case "import": NavigationService.Current.Navigate<ImportExportPage>(); break;
+            case "import-duplicates":
+                SetCategoryFilter("Vault");
+                ImportDuplicatesExpander.IsExpanded = true;
+                break;
             case "audit": NavigationService.Current.Navigate<AuditPage>(); break;
             default: _vm.RequestNavigationTab("Vault"); NavigationService.Current.Navigate<VaultPage>(); break;
         }
@@ -539,6 +676,66 @@ public sealed partial class HealthPage : Page
         return panel;
     }
 
+    private void PopulateImportDuplicates(IReadOnlyList<ImportBatch> batches)
+    {
+        var rows = new List<ImportDuplicateDisplay>();
+        foreach (var batch in batches.Where(b => b.SkippedDuplicateCount > 0).OrderByDescending(b => b.ImportedAt))
+        {
+            if (batch.SkippedDuplicates.Count > 0)
+            {
+                rows.AddRange(batch.SkippedDuplicates.Select(dup => new ImportDuplicateDisplay(
+                    dup.ExistingEntryId,
+                    dup.Title,
+                    string.IsNullOrWhiteSpace(dup.Username) ? dup.Url : dup.Username,
+                    FormatImportBatchLabel(batch))));
+            }
+            else
+            {
+                rows.Add(new ImportDuplicateDisplay(
+                    null,
+                    $"{batch.SkippedDuplicateCount} duplicate{(batch.SkippedDuplicateCount == 1 ? "" : "s")} skipped",
+                    "Existing vault entries were kept",
+                    FormatImportBatchLabel(batch)));
+            }
+        }
+
+        if (rows.Count == 0)
+        {
+            ImportDuplicatesExpander.Visibility = Visibility.Collapsed;
+            ImportDuplicatesList.ItemsSource = null;
+            return;
+        }
+
+        ImportDuplicatesExpander.Visibility = Visibility.Visible;
+        ImportDuplicatesExpander.Header = BuildExpanderHeader(
+            "Import duplicates (existing entries kept)",
+            rows.Count,
+            "\uE8C8",
+            FortivaThemeResources.StatusWarning);
+        ImportDuplicatesList.ItemsSource = rows;
+    }
+
+    private static string FormatImportBatchLabel(ImportBatch batch)
+    {
+        var name = !string.IsNullOrWhiteSpace(batch.DisplayName)
+            ? batch.DisplayName
+            : batch.SourceLabel;
+        return $"{name} · {batch.ImportedAt.LocalDateTime:yyyy-MM-dd}";
+    }
+
+    private void HighlightSelectedCard(Border card, bool selected, bool hasIssues)
+    {
+        if (selected)
+        {
+            card.BorderThickness = new Thickness(2);
+            card.BorderBrush = FortivaThemeResources.GetBrush("AccentFillColorDefaultBrush");
+            card.Opacity = 1.0;
+            return;
+        }
+
+        HighlightCard(card, hasIssues);
+    }
+
     private void HighlightCard(Border card, bool active)
     {
         card.Opacity = active ? 1.0 : 0.72;
@@ -572,4 +769,20 @@ public sealed class HealthEntryDisplay
     public string IssueLabel { get; }
     public Brush IssueBadgeBrush { get; }
     public Brush IssueTextBrush { get; }
+}
+
+public sealed class ImportDuplicateDisplay
+{
+    public ImportDuplicateDisplay(Guid? existingEntryId, string title, string subtitle, string batchLabel)
+    {
+        ExistingEntryId = existingEntryId;
+        Title = title;
+        Subtitle = subtitle;
+        BatchLabel = batchLabel;
+    }
+
+    public Guid? ExistingEntryId { get; }
+    public string Title { get; }
+    public string Subtitle { get; }
+    public string BatchLabel { get; }
 }

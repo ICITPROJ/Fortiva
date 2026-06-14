@@ -16,7 +16,9 @@ public static class BridgeUnlockClient
     /// <summary>Set when the last <see cref="RequestUnlockAsync"/> failed due to broker rate limiting.</summary>
     public static bool LastFailureWasRateLimited { get; private set; }
 
-    public static async Task<bool> RequestUnlockAsync(int totalTimeoutMs = 120_000)
+    public static async Task<bool> RequestUnlockAsync(
+        int totalTimeoutMs = 120_000,
+        CancellationToken cancellationToken = default)
     {
         LastFailureWasRateLimited = false;
 
@@ -24,9 +26,10 @@ public static class BridgeUnlockClient
         if (fastTest)
             totalTimeoutMs = 2000;
 
-        using var cts = new CancellationTokenSource(totalTimeoutMs);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(totalTimeoutMs);
 
-        var presence = await BridgePresenceClient.RequestStatusAsync(timeoutMs: 2000);
+        var presence = await BridgePresenceClient.RequestStatusAsync(timeoutMs: 2000, cancellationToken: cts.Token);
         if (BridgePresenceStatus.IsUnlocked(presence))
             return true;
 
@@ -46,7 +49,7 @@ public static class BridgeUnlockClient
         var unlockSent = false;
         for (var attempt = 0; attempt < ConnectRetryCount && !cts.IsCancellationRequested; attempt++)
         {
-            presence = await BridgePresenceClient.RequestStatusAsync(timeoutMs: 1500);
+            presence = await BridgePresenceClient.RequestStatusAsync(timeoutMs: 1500, cancellationToken: cts.Token);
             if (BridgePresenceStatus.IsUnlocked(presence))
                 return true;
 

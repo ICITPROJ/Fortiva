@@ -84,6 +84,33 @@ public class SecurityAuditRunnerTests
     }
 
     [Fact]
+    public void Run_ImportDuplicates_AddsVaultFinding()
+    {
+        var batches = new List<ImportBatch>
+        {
+            new()
+            {
+                SourceLabel = "CSV import",
+                SkippedDuplicateCount = 2,
+                SkippedDuplicates =
+                [
+                    new ImportDuplicateRecord { Title = "Bank", Username = "alice", Url = "https://bank.example" },
+                    new ImportDuplicateRecord { Title = "Shop", Username = "bob", Url = "https://shop.example" }
+                ]
+            }
+        };
+
+        var report = SecurityAuditRunner.Run(new SecurityAuditContext
+        {
+            Entries = [Entry("Bank", "C0rrect-H0rse!2026-XYZ", "https://bank.example")],
+            ImportBatches = batches
+        });
+
+        var finding = report.Findings.First(f => f.Id == "import-duplicates");
+        Assert.Contains("never deletes", finding.Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Run_CriticalFindings_LowersOverallScore()
     {
         var clean = SecurityAuditRunner.Run(new SecurityAuditContext

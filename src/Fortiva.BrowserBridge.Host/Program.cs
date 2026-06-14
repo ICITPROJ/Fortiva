@@ -18,13 +18,10 @@ if (installRoot is not null)
 
 var backoffMs = BridgeHostCircuitBreaker.GetBackoffMilliseconds(isEnterprise);
 if (backoffMs > 0)
-    Thread.Sleep(backoffMs);
+    Thread.Sleep(Math.Min(backoffMs, 500));
 
 try
 {
-    if (!BridgePipeNaming.HasActiveSession(isEnterprise))
-        return;
-
     var integrityOk = NativeHostIntegrity.VerifyCurrentProcess(installRoot);
 
     await using var pump = new NativeMessagingHostPump(isEnterprise, integrityOk);

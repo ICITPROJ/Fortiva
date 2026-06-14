@@ -31,6 +31,19 @@ if ($extDoc.PSObject.Properties.Name -contains "key") {
     # packaged id from manifest key is stable for this extension
 }
 
+function Get-NativeHostManifestPath {
+    param([Parameter(Mandatory)][string]$ExecutablePath)
+    $full = (Resolve-Path $ExecutablePath).Path
+    if ($full -notmatch ' ') { return $full }
+    $fso = New-Object -ComObject Scripting.FileSystemObject
+    return $fso.GetFile($full).ShortPath
+}
+
+$manifestBridgePath = Get-NativeHostManifestPath -ExecutablePath $bridgeExe
+
+$breakerFile = Join-Path $env:LOCALAPPDATA "FortivaPersonal\bridge-host-exit-window.json"
+if (Test-Path $breakerFile) { Remove-Item $breakerFile -Force }
+
 Write-Host "Staging extension..." -ForegroundColor Cyan
 New-Item -ItemType Directory -Force $staging | Out-Null
 robocopy $extSrc $staging /MIR /XF content.js com.fortiva.browserbridge*.json /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
@@ -38,12 +51,13 @@ robocopy $extSrc $staging /MIR /XF content.js com.fortiva.browserbridge*.json /N
 $payload = @{
     name = $hostName
     description = "Fortiva local credential bridge"
-    path = (Resolve-Path $bridgeExe).Path
+    path = $manifestBridgePath
     type = "stdio"
     allowed_origins = @("chrome-extension://$extId/")
 }
 New-Item -ItemType Directory -Force $manifestDir | Out-Null
-$payload | ConvertTo-Json -Depth 4 | Set-Content $manifestFile -Encoding UTF8
+$json = $payload | ConvertTo-Json -Depth 4
+[System.IO.File]::WriteAllText($manifestFile, $json, (New-Object System.Text.UTF8Encoding $false))
 
 foreach ($subKey in @(
     "HKCU:\Software\Google\Chrome\NativeMessagingHosts\$hostName",
@@ -59,7 +73,8 @@ Set-Content -Path $sidecar -Value $hash -Encoding ascii -NoNewline
 
 Write-Host "Repaired native host manifest:" -ForegroundColor Green
 Write-Host "  $manifestFile"
-Write-Host "  bridge: $bridgeExe"
+Write-Host "  bridge (manifest): $manifestBridgePath"
+Write-Host "  bridge (install):  $bridgeExe"
 Write-Host "  hash:   $sidecar"
 Write-Host ""
 Write-Host "Next: edge://extensions -> Reload Fortiva Autofill, then try Fill on a login page." -ForegroundColor Yellow

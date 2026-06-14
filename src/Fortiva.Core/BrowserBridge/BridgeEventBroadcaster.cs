@@ -18,6 +18,7 @@ public sealed class BridgeEventBroadcaster : IDisposable
     private Task[] _listenTasks = [];
     private int _nextClientId;
     private Func<BridgePresenceSnapshot>? _getSnapshot;
+    private string? _activeSessionId;
     private bool _disposed;
 
     public BridgeEventBroadcaster(Func<bool> isEnterprise)
@@ -27,6 +28,23 @@ public sealed class BridgeEventBroadcaster : IDisposable
 
     public void ConfigureSnapshotSource(Func<BridgePresenceSnapshot> getSnapshot)
         => _getSnapshot = getSnapshot;
+
+    /// <summary>Starts push listeners for the registry session id when not already running.</summary>
+    public void EnsureForCurrentSession()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var sessionId = BridgePipeNaming.ResolveActiveSessionId(_isEnterprise());
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            Stop();
+            return;
+        }
+
+        if (_cts is not null && string.Equals(_activeSessionId, sessionId, StringComparison.Ordinal))
+            return;
+
+        RestartForCurrentSession();
+    }
 
     public void RestartForCurrentSession()
     {
@@ -40,6 +58,7 @@ public sealed class BridgeEventBroadcaster : IDisposable
 
         Stop();
         Start(sessionId);
+        _activeSessionId = sessionId;
     }
 
     private void Start(string sessionId)
@@ -170,6 +189,7 @@ public sealed class BridgeEventBroadcaster : IDisposable
         var tasks = _listenTasks;
         _cts = null;
         _listenTasks = [];
+        _activeSessionId = null;
 
         if (cts is not null)
         {

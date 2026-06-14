@@ -176,10 +176,10 @@ public sealed partial class ImportExportPage : Page
             var summary =
                 $"Import complete: {plan.Batch.AddedCount} added";
             if (plan.SkippedDuplicateCount > 0)
-                summary += $", {plan.SkippedDuplicateCount} duplicates skipped";
+                summary += $", {plan.SkippedDuplicateCount} duplicates skipped (existing entries kept)";
             if (plan.ConflictKeptExistingCount + plan.ConflictUpdatedCount + plan.ConflictKeptBothCount > 0)
                 summary += $", {plan.ConflictKeptExistingCount + plan.ConflictUpdatedCount + plan.ConflictKeptBothCount} conflicts resolved";
-            summary += ".";
+            summary += ". No existing entries were removed.";
 
             Show(summary, InfoBarSeverity.Success);
             RefreshImportHistory();

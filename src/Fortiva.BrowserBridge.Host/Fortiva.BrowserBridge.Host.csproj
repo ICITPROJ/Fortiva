@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Fortiva.BrowserBridge.Host</AssemblyName>
+    <SelfContained Condition="'$(RuntimeIdentifier)' != ''">true</SelfContained>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Fortiva.Core\Fortiva.Core.csproj" />

@@ -134,6 +134,7 @@ public static class ImportMergeService
         var toAdd = new List<VaultEntry>();
         var toUpdate = new List<VaultEntry>();
         var skippedDuplicates = 0;
+        var skippedDuplicateRecords = new List<ImportDuplicateRecord>();
         var keptExisting = 0;
         var updated = 0;
         var keptBoth = 0;
@@ -148,6 +149,7 @@ public static class ImportMergeService
 
                 case ImportItemKind.Duplicate:
                     skippedDuplicates++;
+                    skippedDuplicateRecords.Add(ToDuplicateRecord(item));
                     break;
 
                 case ImportItemKind.Conflict:
@@ -171,6 +173,7 @@ public static class ImportMergeService
 
         batch.AddedCount = toAdd.Count;
         batch.SkippedDuplicateCount = skippedDuplicates;
+        batch.SkippedDuplicates = skippedDuplicateRecords;
         batch.ConflictKeptExistingCount = keptExisting;
         batch.ConflictUpdatedCount = updated;
         batch.ConflictKeptBothCount = keptBoth;
@@ -184,6 +187,18 @@ public static class ImportMergeService
             ConflictKeptExistingCount = keptExisting,
             ConflictUpdatedCount = updated,
             ConflictKeptBothCount = keptBoth
+        };
+    }
+
+    private static ImportDuplicateRecord ToDuplicateRecord(ImportPreviewItem item)
+    {
+        var incoming = item.Incoming.Entry;
+        return new ImportDuplicateRecord
+        {
+            Title = incoming.Title,
+            Username = incoming.Username,
+            Url = incoming.Url ?? "",
+            ExistingEntryId = item.Existing?.Id
         };
     }
 

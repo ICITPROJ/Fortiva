@@ -33,6 +33,7 @@ public sealed class SecurityAuditContext
     public int SnapshotCount { get; init; }
     public IReadOnlyList<AuditEvent>? AuditEvents { get; init; }
     public bool IncludeActivityAudit { get; init; }
+    public IReadOnlyList<ImportBatch>? ImportBatches { get; init; }
 }
 
 public sealed class SecurityAuditReport
@@ -64,6 +65,7 @@ public static class SecurityAuditRunner
         AddPasswordFindings(findings, passwordHealth);
         AddSettingsFindings(findings, context, passwordHealth);
         AddVaultFindings(findings, entries, context);
+        AddImportFindings(findings, context);
         if (context.IncludeActivityAudit && context.AuditEvents is { Count: > 0 })
             AddActivityFindings(findings, context.AuditEvents);
         else if (context.IncludeActivityAudit)
@@ -305,6 +307,30 @@ public static class SecurityAuditRunner
                 ActionHint = "vault"
             });
         }
+    }
+
+    private static void AddImportFindings(List<SecurityAuditFinding> findings, SecurityAuditContext context)
+    {
+        var batches = context.ImportBatches;
+        if (batches is null or { Count: 0 })
+            return;
+
+        var duplicateCount = batches.Sum(b => b.SkippedDuplicateCount);
+        if (duplicateCount <= 0)
+            return;
+
+        var batchCount = batches.Count(b => b.SkippedDuplicateCount > 0);
+        findings.Add(new SecurityAuditFinding
+        {
+            Category = "Vault",
+            Id = "import-duplicates",
+            Title = $"{duplicateCount} duplicate{(duplicateCount == 1 ? "" : "s")} skipped during import",
+            Detail = $"From {batchCount} import{(batchCount == 1 ? "" : "s")}. Existing vault entries were kept — import never deletes or overwrites without your explicit choice.",
+            Severity = AuditSeverity.Info,
+            Priority = 23,
+            AffectedCount = duplicateCount,
+            ActionHint = "import-duplicates"
+        });
     }
 
     private static void AddActivityFindings(List<SecurityAuditFinding> findings, IReadOnlyList<AuditEvent> events)
