@@ -3,6 +3,7 @@ using Fortiva.Core.BrowserBridge;
 
 namespace Fortiva.Core.Tests.BrowserBridge;
 
+[Collection("BrowserBridgeSerial")]
 public sealed class BrowserBridgeInstallServiceTests
 {
     [Fact]
@@ -163,6 +164,52 @@ public sealed class BrowserBridgeInstallServiceTests
             Assert.True(File.Exists(Path.Combine(result.ExtensionStagingPath!, "manifest.json")));
             Assert.True(File.Exists(Path.Combine(result.ExtensionStagingPath!, "fill-coordinator.js")));
             Assert.False(File.Exists(Path.Combine(result.ExtensionStagingPath!, "page-fill-main.js")));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("LOCALAPPDATA", null);
+            try { Directory.Delete(tempRoot, recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void EnsureInstalled_RemovesStaleLegacyFilesFromStaging()
+    {
+        var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        var extensionSource = Path.Combine(repoRoot, "extension");
+        if (!Directory.Exists(extensionSource))
+            return;
+
+        var tempRoot = Path.Combine(Path.GetTempPath(), "fortiva-stale-test-" + Guid.NewGuid().ToString("N"));
+        var appBase = Path.Combine(tempRoot, "app");
+        var bridgeDir = Path.Combine(appBase, "BrowserBridge");
+        Directory.CreateDirectory(bridgeDir);
+        File.WriteAllText(Path.Combine(bridgeDir, "Fortiva.BrowserBridge.Host.exe"), "stub");
+
+        var extDir = Path.Combine(appBase, "extension");
+        Directory.CreateDirectory(extDir);
+        foreach (var file in Directory.GetFiles(extensionSource))
+        {
+            var name = Path.GetFileName(file);
+            if (name is "content.js") continue;
+            File.Copy(file, Path.Combine(extDir, name));
+        }
+
+        var stagingRoot = Path.Combine(tempRoot, "userdata");
+        Environment.SetEnvironmentVariable("LOCALAPPDATA", stagingRoot);
+
+        try
+        {
+            var stagingPath = BrowserBridgeInstallService.GetExtensionStagingPath(enterprise: false);
+            Directory.CreateDirectory(stagingPath);
+            File.WriteAllText(Path.Combine(stagingPath, "page-fill-main.js"), "legacy");
+            File.WriteAllText(Path.Combine(stagingPath, "content.js"), "legacy");
+
+            var result = BrowserBridgeInstallService.EnsureInstalled(appBase, enterprise: false);
+            Assert.True(result.Success, result.Error);
+            Assert.False(File.Exists(Path.Combine(result.ExtensionStagingPath!, "page-fill-main.js")));
+            Assert.False(File.Exists(Path.Combine(result.ExtensionStagingPath!, "content.js")));
+            Assert.True(File.Exists(Path.Combine(result.ExtensionStagingPath!, "fill-coordinator.js")));
         }
         finally
         {

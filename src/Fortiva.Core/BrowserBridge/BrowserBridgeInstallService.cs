@@ -17,9 +17,16 @@ public static class BrowserBridgeInstallService
         => enterprise ? EnterpriseHostName : PersonalHostName;
 
     public static string GetAppDataRoot(bool enterprise)
-        => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            enterprise ? "FortivaEnterprise" : "FortivaPersonal");
+        => Path.Combine(ResolveLocalApplicationData(), enterprise ? "FortivaEnterprise" : "FortivaPersonal");
+
+    private static string ResolveLocalApplicationData()
+    {
+        var fromEnv = Environment.GetEnvironmentVariable("LOCALAPPDATA");
+        if (!string.IsNullOrWhiteSpace(fromEnv))
+            return fromEnv.Trim();
+
+        return Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    }
 
     public static string GetExtensionStagingPath(bool enterprise)
         => Path.Combine(GetAppDataRoot(enterprise), "extension");
@@ -224,16 +231,41 @@ public static class BrowserBridgeInstallService
         return null;
     }
 
+    private static readonly HashSet<string> ExcludedStagingFiles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "content.js",
+        "page-fill-main.js"
+    };
+
+    private static bool IsExcludedStagingFile(string name) =>
+        ExcludedStagingFiles.Contains(name)
+        || (name.StartsWith("com.fortiva.browserbridge", StringComparison.OrdinalIgnoreCase)
+            && name.EndsWith(".json", StringComparison.OrdinalIgnoreCase));
+
     private static void CopyExtensionFiles(string sourceDirectory, string destinationDirectory)
     {
         Directory.CreateDirectory(destinationDirectory);
+
+        var shipped = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in Directory.GetFiles(sourceDirectory))
         {
             var name = Path.GetFileName(file);
-            if (name.StartsWith("com.fortiva.browserbridge", StringComparison.OrdinalIgnoreCase)
-                && name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            if (IsExcludedStagingFile(name))
                 continue;
-            if (string.Equals(name, "content.js", StringComparison.OrdinalIgnoreCase))
+            shipped.Add(name);
+        }
+
+        foreach (var existing in Directory.GetFiles(destinationDirectory))
+        {
+            var name = Path.GetFileName(existing);
+            if (!shipped.Contains(name))
+                File.Delete(existing);
+        }
+
+        foreach (var file in Directory.GetFiles(sourceDirectory))
+        {
+            var name = Path.GetFileName(file);
+            if (IsExcludedStagingFile(name))
                 continue;
 
             File.Copy(file, Path.Combine(destinationDirectory, name), overwrite: true);

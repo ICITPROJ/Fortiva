@@ -289,6 +289,7 @@ Operational detail: [`packaging/intune/README.md`](../packaging/intune/README.md
 | Pipes / registry | `src/Fortiva.Core/BrowserBridge/BridgePipeNaming.cs`, `BridgeSessionRegistry.cs` |
 | Push | `src/Fortiva.Core/BrowserBridge/BridgeEventBroadcaster.cs`, `BridgePushMessage.cs` |
 | Fill / token bypass | `src/Fortiva.Core/BrowserBridge/BridgeNativeForwarder.cs` |
+| Credential pipe (parallel listeners) | `src/Fortiva.Core/BrowserBridge/BrowserBridgeServer.cs` |
 | Host circuit breaker | `src/Fortiva.Core/BrowserBridge/BridgeHostCircuitBreaker.cs` |
 | Native pump | `src/Fortiva.Core/BrowserBridge/NativeMessagingHostPump.cs` |
 | Framing | `src/Fortiva.Core/BrowserBridge/NativeMessagingFraming.cs` |
@@ -323,7 +324,7 @@ Items below are **not blockers** for the current release. They harden resilience
 | Done | Native host **circuit breaker** | Cap exit/restart storms (5 exits / 30s → 10s backoff) | `BridgeHostCircuitBreaker.cs` |
 | **Rejected** | Coordinator watchdog duplicating lifecycle | Coordinator remains single writer; observability via existing reconcile triggers | — |
 | **Rejected** | Move session GUID out of HKCU registry | Browsers require registry for native messaging; session pipes already rotate on GUID change | — |
-| Planned | Credential pipe **concurrency cap** | Parallel fills / bulk flows without serialising everything | — |
+| Done | Credential pipe **concurrency cap** | `BrowserBridgeServer` runs 4 listeners (`maxInstances: 8`) per session pipe | `BrowserBridgeServer.cs` |
 | Done | Auto `-Version` on local `build-installers.ps1` | Reads `Directory.Build.props`; CI release workflow already passes explicit version | — |
 
 End-to-end validation record: [`BRIDGE-VALIDATION.md`](BRIDGE-VALIDATION.md).
