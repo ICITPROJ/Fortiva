@@ -3,6 +3,9 @@ namespace Fortiva.Core.BrowserBridge;
 /// <summary>Push payload streamed to extension via native host stdout (Phase 4).</summary>
 public sealed class BridgePushMessage
 {
+    public const int CurrentSchemaVersion = 1;
+
+    public int SchemaVersion { get; init; } = CurrentSchemaVersion;
     public string Type { get; init; } = "STATE_CHANGED";
     public string State { get; init; } = nameof(BridgeReadyState.Uninitialized);
     public bool VaultExists { get; init; }
@@ -23,6 +26,7 @@ public static class BridgeSnapshotPush
         var status = MapPingStatus(snapshot);
         return new BridgePushMessage
         {
+            SchemaVersion = BridgePushMessage.CurrentSchemaVersion,
             Type = "STATE_CHANGED",
             State = snapshot.State.ToString(),
             VaultExists = snapshot.VaultExists,

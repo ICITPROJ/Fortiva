@@ -10,6 +10,15 @@ $ErrorActionPreference = 'Stop'
 
 $root = $PSScriptRoot
 
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $props = Join-Path $root "Directory.Build.props"
+    $m = Select-String -Path $props -Pattern '<Version>([^<]+)</Version>' | Select-Object -First 1
+    if ($m) {
+        $Version = $m.Matches[0].Groups[1].Value
+        Write-Host "Version from Directory.Build.props: $Version" -ForegroundColor Cyan
+    }
+}
+
 
 
 function Resolve-IsccPath {

@@ -3,7 +3,8 @@
 .SYNOPSIS
     Intune Win32 custom detection script for Fortiva Enterprise.
 .DESCRIPTION
-    Verifies the Enterprise client binary and machine-wide HKLM native messaging bindings.
+    Verifies the Enterprise client binary and machine-wide HKLM native messaging bindings
+    for browsers that are actually installed on the endpoint.
     Exit 0 = installed and compliant; exit 1 = missing or drifted.
 #>
 param(
@@ -12,7 +13,18 @@ param(
 )
 
 Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
+
+function Write-DetectionLog {
+    param([string]$Message)
+    Write-Output $Message
+}
+
+function Fail-Detection {
+    param([string]$Message)
+    Write-DetectionLog $Message
+    exit 1
+}
 
 function Test-EnterpriseExecutable {
     param([string]$FileName)
@@ -21,6 +33,32 @@ function Test-EnterpriseExecutable {
         if ([string]::IsNullOrWhiteSpace($base)) { continue }
         $candidate = Join-Path $base "icmclab studio\Fortiva Enterprise\$FileName"
         if (Test-Path -LiteralPath $candidate) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Test-ChromeInstalled {
+    foreach ($path in @(
+            (Join-Path ${env:ProgramFiles} "Google\Chrome\Application\chrome.exe"),
+            (Join-Path ${env:ProgramFiles(x86)} "Google\Chrome\Application\chrome.exe")
+        )) {
+        if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-Path -LiteralPath $path)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Test-EdgeInstalled {
+    foreach ($path in @(
+            (Join-Path ${env:ProgramFiles} "Microsoft\Edge\Application\msedge.exe"),
+            (Join-Path ${env:ProgramFiles(x86)} "Microsoft\Edge\Application\msedge.exe")
+        )) {
+        if (-not [string]::IsNullOrWhiteSpace($path) -and (Test-Path -LiteralPath $path)) {
             return $true
         }
     }
@@ -48,12 +86,20 @@ function Test-NativeMessagingHive {
     return $true
 }
 
-$exeOk = Test-EnterpriseExecutable -FileName $MainExecutable
-$chromeOk = Test-NativeMessagingHive -HiveSubKey "SOFTWARE\Google\Chrome\NativeMessagingHosts"
-$edgeOk = Test-NativeMessagingHive -HiveSubKey "SOFTWARE\Microsoft\Edge\NativeMessagingHosts"
-
-if ($exeOk -and $chromeOk -and $edgeOk) {
-    exit 0
+if (-not (Test-EnterpriseExecutable -FileName $MainExecutable)) {
+    Fail-Detection "Fortiva Enterprise core binary missing under Program Files."
 }
 
-exit 1
+$chromeInstalled = Test-ChromeInstalled
+$edgeInstalled = Test-EdgeInstalled
+
+if ($chromeInstalled -and -not (Test-NativeMessagingHive -HiveSubKey "SOFTWARE\Google\Chrome\NativeMessagingHosts")) {
+    Fail-Detection "Chrome is installed, but Fortiva native messaging HKLM configuration is missing."
+}
+
+if ($edgeInstalled -and -not (Test-NativeMessagingHive -HiveSubKey "SOFTWARE\Microsoft\Edge\NativeMessagingHosts")) {
+    Fail-Detection "Edge is installed, but Fortiva native messaging HKLM configuration is missing."
+}
+
+Write-DetectionLog "Fortiva Enterprise detection gate passed cleanly."
+exit 0

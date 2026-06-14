@@ -16,10 +16,21 @@ var installRoot = inferredRoot;
 if (installRoot is not null)
     BridgeClientValidator.ConfigureAllowedInstallRoots(installRoot);
 
-if (!BridgePipeNaming.HasActiveSession(isEnterprise))
-    Environment.Exit(0);
+var backoffMs = BridgeHostCircuitBreaker.GetBackoffMilliseconds(isEnterprise);
+if (backoffMs > 0)
+    Thread.Sleep(backoffMs);
 
-var integrityOk = NativeHostIntegrity.VerifyCurrentProcess(installRoot);
+try
+{
+    if (!BridgePipeNaming.HasActiveSession(isEnterprise))
+        return;
 
-await using var pump = new NativeMessagingHostPump(isEnterprise, integrityOk);
-await pump.RunAsync();
+    var integrityOk = NativeHostIntegrity.VerifyCurrentProcess(installRoot);
+
+    await using var pump = new NativeMessagingHostPump(isEnterprise, integrityOk);
+    await pump.RunAsync();
+}
+finally
+{
+    BridgeHostCircuitBreaker.RecordExit(isEnterprise);
+}

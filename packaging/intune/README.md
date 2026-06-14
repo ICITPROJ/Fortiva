@@ -14,7 +14,7 @@ For Intune **Proactive Remediations**, **Win32 app install commands**, or post-i
 | `Build-IntunePackage.ps1` | Stage installer + scripts and emit `FortivaEnterprise.intunewin` via `IntuneWinAppUtil.exe` |
 | `Install-FortivaEnterprise.ps1` | Silent `/VERYSILENT` install + HKLM native messaging repair (requires elevation) |
 | `Deploy-Intune.ps1` | Write `{app}\NativeMessaging\*.json` and register **HKLM** `NativeMessagingHosts` for Chrome and Edge |
-| `Detect-FortivaEnterprise.ps1` | Custom detection: `Fortiva.Enterprise.exe` + HKLM native messaging keys |
+| `Detect-FortivaEnterprise.ps1` | Custom detection: `Fortiva.Enterprise.exe` + HKLM native messaging for installed Chrome/Edge |
 
 ```powershell
 # After Win32 app delivers the EXE, or on existing installs:
@@ -62,7 +62,7 @@ Metadata for the Intune portal is in `intune-package.json` (install/uninstall co
    - Package file: `FortivaEnterprise.intunewin`
    - Install command: `powershell.exe -ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File Install-FortivaEnterprise.ps1`
    - Uninstall command: `"%ProgramFiles%\icmclab studio\Fortiva Enterprise\unins000.exe" /VERYSILENT`
-   - Detection rule: **Use custom detection script** → upload `Detect-FortivaEnterprise.ps1` (checks exe + HKLM `com.fortiva.browserbridge.enterprise`)
+   - Detection rule: **Use custom detection script** → upload `Detect-FortivaEnterprise.ps1` (EXE + HKLM keys for **installed** Chrome/Edge only)
 
 3. **Proactive Remediation (daily drift repair)**:
 

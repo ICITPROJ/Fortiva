@@ -33,8 +33,14 @@ function snapshotToPingResponse(snapshot) {
 }
 
 function handleIncomingStatePush(message) {
+  const schemaVersion = message.schemaVersion ?? message.SchemaVersion ?? 0;
+  if (schemaVersion > 1) {
+    console.warn("Fortiva bridge push schema newer than extension; update the extension.");
+  }
+
   currentBridgeSnapshot = {
     type: "STATE_CHANGED",
+    schemaVersion,
     state: message.state || message.State || "Uninitialized",
     vaultExists: message.vaultExists ?? message.VaultExists,
     isVaultUnlocked: message.isVaultUnlocked ?? message.IsVaultUnlocked ?? false,

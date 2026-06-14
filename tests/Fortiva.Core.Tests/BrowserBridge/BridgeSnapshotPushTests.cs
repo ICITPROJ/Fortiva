@@ -23,6 +23,7 @@ public class BridgeSnapshotPushTests
 
         var push = BridgeSnapshotPush.FromSnapshot(snapshot);
 
+        Assert.Equal(BridgePushMessage.CurrentSchemaVersion, push.SchemaVersion);
         Assert.Equal("STATE_CHANGED", push.Type);
         Assert.Equal(state.ToString(), push.State);
         Assert.Equal(expectedStatus, push.Status);

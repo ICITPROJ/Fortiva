@@ -131,7 +131,10 @@ GitHub Release (latest)
 
 One-click setup from the app. **Personal:** auto-load via `--load-extension` when the browser
 is closed, or prompt to close-and-relaunch; manual **Load unpacked** remains the fallback.
-**Enterprise:** installer sets `ExtensionInstallForcelist` + HKLM native messaging (IT-managed).
+**Enterprise:** installer sets `ExtensionInstallForcelist` + HKLM native messaging (IT-managed);
+Intune Win32 packaging and daily HKLM drift repair are documented in [`packaging/intune/README.md`](../packaging/intune/README.md).
+
+The extension uses a **persistent native messaging port** and **push snapshots** from WinUI (no popup polling loop). When the vault is unlocked, `cachedSessionToken` travels on the Events push stream and is injected into `prepare_fill` / `execute_fill` requests so the native host can skip the token-broker pipe on warm fills. Full design: [`BRIDGE-ARCHITECTURE.md`](BRIDGE-ARCHITECTURE.md).
 
 ```text
 App launch / Connect browser
@@ -141,14 +144,16 @@ BrowserBridgeInstallService
   • copy extension/ → %LOCALAPPDATA%\Fortiva{Personal|Enterprise}\extension
   • write native-messaging JSON
   • register HKCU Chrome + Edge keys
-  • Enterprise: HKLM native messaging under Program Files (installer + repair on launch)
+  • Enterprise: HKLM native messaging under Program Files (installer + Deploy-Intune.ps1 repair)
         │
         ▼
 Personal: --load-extension / close-browser prompt / Load unpacked
 Enterprise: policy force-install from GitHub CRX + updates.xml
         │
         ▼
-popup.js → background.js → native host → pipe → VaultSession
+background.js: connectNative port + STATE_CHANGED push cache
+popup.js → prepare_fill / execute_fill (cachedSessionToken in envelope)
+        → native host → BridgeNativeForwarder → credential pipe → VaultSession
 ```
 
 | Component | Location |
@@ -175,6 +180,8 @@ Tests run **before** release artifacts are published.
 
 | Document | Topic |
 |----------|--------|
+| [`BRIDGE-ARCHITECTURE.md`](BRIDGE-ARCHITECTURE.md) | Browser bridge coordinator, session pipes, push cache, token bypass, Intune HKLM |
+| [`BRIDGE-VALIDATION.md`](BRIDGE-VALIDATION.md) | End-to-end validation report, risks, next actions |
 | [`RELEASE-PIPELINE.md`](RELEASE-PIPELINE.md) | CI release workflow, assets, troubleshooting |
 | [`UPDATE-STRATEGY.md`](UPDATE-STRATEGY.md) | Personal auto-update behaviour, enterprise Intune |
 | [`GIT-PUSH-WALKTHROUGH.pdf`](GIT-PUSH-WALKTHROUGH.pdf) | Short git push guide for contributors |
