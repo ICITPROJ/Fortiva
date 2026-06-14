@@ -29,10 +29,10 @@ public static class FortivaPaths
     public static string PersonalVaultPath =>
         Path.Combine(PersonalVaultDirectory, Vault.VaultConstants.VaultFileName);
 
-    public static string GetHelloDataDirectory(bool enterprise) =>
+    public static string GetHelloDataDirectory(bool enterprise, string? vaultDirectory = null) =>
         enterprise
             ? Path.Combine(EnterpriseCrashLogDirectory, "Hello")
-            : PersonalVaultDirectory;
+            : vaultDirectory ?? PersonalVaultDirectory;
 
     public static string GetBridgeSessionDirectory(bool enterprise) =>
         enterprise ? EnterpriseCrashLogDirectory : PersonalCrashLogDirectory;

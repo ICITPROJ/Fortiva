@@ -59,6 +59,26 @@ public sealed class ImportMergeServiceTests : IDisposable
     }
 
     [Fact]
+    public void Analyze_WhenMultipleExistingMatch_PrefersPasswordMatch()
+    {
+        var existing = new List<VaultEntry>
+        {
+            new() { Id = Guid.NewGuid(), Title = "Site", Username = "user", Password = "keep", Url = "https://site.example/login", ModifiedAt = DateTimeOffset.UtcNow.AddDays(-2) },
+            new() { Id = Guid.NewGuid(), Title = "Site alt", Username = "user", Password = "incoming", Url = "https://site.example", ModifiedAt = DateTimeOffset.UtcNow }
+        };
+
+        var incoming = new List<ImportedCredential>
+        {
+            new() { Entry = new VaultEntry { Title = "Site import", Username = "user", Password = "incoming", Url = "https://site.example" } }
+        };
+
+        var preview = ImportMergeService.Analyze(existing, incoming);
+
+        Assert.Equal(1, preview.DuplicateCount);
+        Assert.Equal(ImportItemKind.Duplicate, preview.Items[0].Kind);
+    }
+
+    [Fact]
     public void BuildApplyPlan_NeverUpdatesWithoutUseImportedChoice()
     {
         var existing = new VaultEntry

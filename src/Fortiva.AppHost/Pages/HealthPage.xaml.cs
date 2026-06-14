@@ -18,7 +18,7 @@ namespace Fortiva.AppHost.Pages;
 public sealed partial class HealthPage : Page
 {
     private readonly ShellViewModel _vm = ShellViewModel.Current;
-    private readonly HelloUnlockManager _hello;
+    private HelloUnlockManager Hello => new(_vm.HelloDataDirectory, _vm.IsEnterprise);
     private int _buildGeneration;
     private Dictionary<Guid, VaultEntry> _entryLookup = [];
     private SecurityAuditReport? _lastAuditReport;
@@ -26,12 +26,11 @@ public sealed partial class HealthPage : Page
     private string? _categoryFilter;
     private AuditSeverity? _severityFilter;
 
+    private Action? _stateChangedHandler;
+
     public HealthPage()
     {
         InitializeComponent();
-        _hello = new HelloUnlockManager(
-            FortivaPaths.GetHelloDataDirectory(_vm.IsEnterprise),
-            _vm.IsEnterprise);
         CatActivity.Visibility = _vm.IsEnterprise ? Visibility.Visible : Visibility.Collapsed;
         if (!_vm.IsEnterprise)
             CategoryGrid.ColumnDefinitions[3].Width = new GridLength(0);
@@ -58,6 +57,12 @@ public sealed partial class HealthPage : Page
         base.OnNavigatedTo(e);
         ThemeService.ApplyToElement(this);
         _vm.ThemeChanged += OnThemeChanged;
+        _stateChangedHandler = () => DispatcherQueue.TryEnqueue(async () =>
+        {
+            if (_vm.IsUnlocked)
+                await BuildReportAsync();
+        });
+        _vm.StateChanged += _stateChangedHandler;
         await BuildReportAsync();
     }
 
@@ -65,6 +70,11 @@ public sealed partial class HealthPage : Page
     {
         base.OnNavigatedFrom(e);
         _vm.ThemeChanged -= OnThemeChanged;
+        if (_stateChangedHandler is not null)
+        {
+            _vm.StateChanged -= _stateChangedHandler;
+            _stateChangedHandler = null;
+        }
     }
 
     private void OnThemeChanged()
@@ -231,7 +241,7 @@ public sealed partial class HealthPage : Page
 
             var entries = _vm.Entries.ToList();
             _entryLookup = entries.ToDictionary(e => e.Id, e => e.Entry);
-            var helloConfigured = _hello.IsConfigured;
+            var helloConfigured = Hello.IsConfigured;
             var report = await Task.Run(() => _vm.GetSecurityAuditReport(helloConfigured));
 
             var applied = new TaskCompletionSource<bool>();
@@ -543,7 +553,7 @@ public sealed partial class HealthPage : Page
             case "export":
             case "import": NavigationService.Current.Navigate<ImportExportPage>(); break;
             case "import-duplicates":
-                NavigationService.Current.Navigate<ImportExportPage>();
+                NavigationService.Current.Navigate<ImportExportPage>(ImportExportNavigationContext.ShowDuplicates);
                 break;
             case "audit": NavigationService.Current.Navigate<AuditPage>(); break;
             default: _vm.RequestNavigationTab("Vault"); NavigationService.Current.Navigate<VaultPage>(); break;

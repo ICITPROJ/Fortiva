@@ -384,6 +384,17 @@ public sealed partial class MainWindow : Window
     {
         DispatcherQueue.TryEnqueue(() =>
         {
+            if (_vm.DeferUnlockNavigation)
+            {
+                StatusText.Text = _vm.StatusMessage;
+                RefreshStatusChrome();
+                if (!_vm.IsAdmin)
+                    _vm.StartBridgeUnlockListener(AppContext.BaseDirectory);
+                _ = ReconcileBridgeAfterUnlockAsync();
+                _vm.SkipNextBrowserExtensionPrompt = true;
+                return;
+            }
+
             if (!_vm.ShouldNavigateToVaultOnUnlock)
             {
                 _vm.RestoreVaultNavigationOnUnlock();

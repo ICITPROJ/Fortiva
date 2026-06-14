@@ -9,7 +9,7 @@ namespace Fortiva.AppHost.Pages;
 public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
 {
     private readonly ShellViewModel _vm = ShellViewModel.Current;
-    private readonly HelloUnlockManager _hello;
+    private HelloUnlockManager Hello => new(_vm.HelloDataDirectory, _vm.IsEnterprise);
     private bool _rollbackConfirmRequired;
     private bool _helloCheckComplete;
     private bool _bridgeUnlockMode;
@@ -18,9 +18,6 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
     public UnlockPage()
     {
         InitializeComponent();
-        _hello = new HelloUnlockManager(
-            FortivaPaths.GetHelloDataDirectory(_vm.IsEnterprise),
-            _vm.IsEnterprise);
         LoadLogo();
         _vm.BrandAppearanceChanged += OnBrandAppearanceChanged;
     }
@@ -85,17 +82,22 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
         var available = await HelloService.IsAvailableAsync();
         DispatcherQueue.TryEnqueue(() =>
         {
-            var configured = _hello.IsConfigured;
+            var configured = Hello.IsConfigured;
             var showHello = available && configured;
             HelloBtn.Visibility = showHello
                 ? Microsoft.UI.Xaml.Visibility.Visible
                 : Microsoft.UI.Xaml.Visibility.Collapsed;
 
-            if (HelloMandatory && configured)
+            if (HelloMandatory && configured && !_rollbackConfirmRequired)
             {
                 PasswordField.IsEnabled = false;
                 UnlockBtn.IsEnabled = false;
                 SubtitleText.Text = "Your organization requires Windows Hello to unlock this vault.";
+            }
+            else if (HelloMandatory && configured && _rollbackConfirmRequired)
+            {
+                SubtitleText.Text =
+                    "Rollback confirmation requires your master password. Enter it below and tap Unlock.";
             }
             else if (HelloMandatory && !configured)
             {
@@ -164,7 +166,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
     {
         if (!_helloCheckComplete) return;
 
-        var helloBlocksPassword = HelloMandatory && _hello.IsConfigured;
+        var helloBlocksPassword = HelloMandatory && Hello.IsConfigured && !_rollbackConfirmRequired;
         PasswordField.IsEnabled = !helloBlocksPassword;
         UnlockBtn.IsEnabled = !helloBlocksPassword;
         HelloBtn.IsEnabled = true;
@@ -172,7 +174,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
 
     private void EnablePasswordWhileHelloProbes()
     {
-        if (HelloMandatory && _hello.IsConfigured)
+        if (HelloMandatory && Hello.IsConfigured && !_rollbackConfirmRequired)
             return;
         PasswordField.IsEnabled = true;
         UnlockBtn.IsEnabled = true;
@@ -192,7 +194,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
         SetBusy(true);
         ErrorBar.IsOpen = false;
 
-        if (!_hello.IsHardwareBacked)
+        if (!Hello.IsHardwareBacked)
         {
             var helloResult = await HelloService.VerifyAsync("Unlock Fortiva vault");
             if (!helloResult.Verified)
@@ -203,7 +205,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
             }
         }
 
-        var masterKey = await _hello.TryLoadMasterKeyAsync();
+        var masterKey = await Hello.TryLoadMasterKeyAsync();
         if (masterKey is null)
         {
             SetBusy(false);
@@ -212,7 +214,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
                 SubtitleText.Text = "Windows Hello could not load your credential. Unlock with your master password, then re-configure Hello in Settings.";
                 ApplyUnlockControls();
             }
-            ShowError(_hello.IsConfigured
+            ShowError(Hello.IsConfigured
                 ? "Windows Hello did not unlock the vault this time. Try the Hello button again, "
                   + "or use your master password. Only re-enroll in Settings if Hello keeps failing after a successful password unlock."
                 : "Windows Hello could not unlock the vault key. Try again, use your master password, or set up Hello in Settings.");
@@ -276,7 +278,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
             return;
         }
 
-        if (HelloMandatory && _hello.IsConfigured)
+        if (HelloMandatory && Hello.IsConfigured && !_rollbackConfirmRequired)
         {
             ShowError("Your organization requires Windows Hello to unlock this vault.");
             return;
@@ -332,7 +334,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
     {
         BusyRing.Visibility = busy ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
         BusyRing.IsActive = busy;
-        var helloBlocksPassword = HelloMandatory && _hello.IsConfigured;
+        var helloBlocksPassword = HelloMandatory && Hello.IsConfigured && !_rollbackConfirmRequired;
         UnlockBtn.IsEnabled = !busy && _helloCheckComplete && !helloBlocksPassword;
         HelloBtn.IsEnabled = !busy && _helloCheckComplete;
         PasswordField.IsEnabled = !busy && _helloCheckComplete && !helloBlocksPassword;

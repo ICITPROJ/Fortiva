@@ -33,6 +33,16 @@ public sealed partial class ImportExportPage : Page
         RefreshExportState();
         RefreshImportHistory();
         RefreshVaultDuplicateScan();
+
+        if (e.Parameter is ImportExportNavigationContext { FocusDuplicates: true })
+        {
+            RefreshVaultDuplicateScan();
+            if (_vaultDuplicateGroups.Count == 0 && _vm.IsUnlocked)
+                _vaultDuplicateGroups = _vm.GetVaultDuplicateGroups();
+            RefreshVaultDuplicateScan();
+            PageScroll.UpdateLayout();
+            PageScroll.ChangeView(null, PageScroll.ScrollableHeight, null);
+        }
     }
 
     protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
@@ -510,15 +520,70 @@ public sealed partial class ImportExportPage : Page
             return;
         }
 
+        _selectedVaultDuplicateGroup = row.Group;
         _selectedVaultDuplicateEntryId = row.FirstEntryId;
         OpenVaultDuplicateEntryBtn.Visibility = Visibility.Visible;
     }
 
-    private void OpenVaultDuplicateEntry_Click(object sender, RoutedEventArgs e)
+    private sealed record DuplicateEntryOption(Guid Id, string Title, string Username)
     {
-        if (!_selectedVaultDuplicateEntryId.HasValue)
+        public string Subtitle => string.IsNullOrWhiteSpace(Username) ? Id.ToString()[..8] : Username;
+        public override string ToString() => $"{Title} · {Subtitle}";
+    }
+
+    private VaultDuplicateGroup? _selectedVaultDuplicateGroup;
+
+    private async void OpenVaultDuplicateEntry_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedVaultDuplicateGroup is null)
             return;
-        if (!TryOpenEntry(_selectedVaultDuplicateEntryId.Value))
+
+        var group = _selectedVaultDuplicateGroup;
+        if (group.EntryIds.Count == 1)
+        {
+            if (!TryOpenEntry(group.EntryIds[0]))
+                Show("Entry could not be found.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        var options = group.EntryIds
+            .Select(id =>
+            {
+                var vm = _vm.Entries.FirstOrDefault(e => e.Id == id);
+                return vm is null ? null : new DuplicateEntryOption(id, vm.Title, vm.Username);
+            })
+            .Where(o => o is not null)
+            .Cast<DuplicateEntryOption>()
+            .ToList();
+
+        if (options.Count == 0)
+        {
+            Show("Entries could not be found.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        var list = new ListView
+        {
+            ItemsSource = options,
+            SelectionMode = ListViewSelectionMode.Single,
+            MaxHeight = 280
+        };
+
+        var dlg = new ContentDialog
+        {
+            Title = "Open duplicate entry",
+            Content = list,
+            PrimaryButtonText = "Open",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot
+        };
+        FortivaDialogs.Configure(dlg, XamlRoot);
+        var result = await dlg.ShowAsync();
+        if (result != ContentDialogResult.Primary || list.SelectedItem is not DuplicateEntryOption picked)
+            return;
+
+        if (!TryOpenEntry(picked.Id))
             Show("Entry could not be found.", InfoBarSeverity.Warning);
     }
 

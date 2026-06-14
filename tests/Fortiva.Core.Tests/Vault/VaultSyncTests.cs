@@ -95,6 +95,24 @@ public class VaultSyncTests : IDisposable
     }
 
     [Fact]
+    public void Merge_SameId_EqualModifiedAt_RemoteWins()
+    {
+        var id = Guid.NewGuid();
+        var stamp = DateTimeOffset.UtcNow;
+        var local = Entry(id, "Local", "local-pass", stamp);
+        var remote = Entry(id, "Remote", "remote-pass", stamp);
+
+        var merged = VaultMergeEngine.Merge(
+            new VaultPayload { Entries = { local } },
+            new VaultPayload { Entries = { remote } },
+            1);
+
+        Assert.Single(merged.Entries);
+        Assert.Equal("remote-pass", merged.Entries[0].Password);
+        IntegrityValidator.ValidateConsistency(merged);
+    }
+
+    [Fact]
     public void Merge_DeleteTombstone_RemovesEntryFromOtherSide()
     {
         var id = Guid.NewGuid();
@@ -173,11 +191,29 @@ public class VaultSyncTests : IDisposable
         return (engine, engine.Unlock(Pwd));
     }
 
+    private static void CopyVaultDirectory(string sourceDir, string destDir)
+    {
+        Directory.CreateDirectory(destDir);
+        foreach (var file in Directory.GetFiles(sourceDir))
+        {
+            var name = Path.GetFileName(file);
+            File.Copy(file, Path.Combine(destDir, name), overwrite: true);
+        }
+    }
+
+    private static (VaultEngine localEngine, VaultUnlockContext local, VaultEngine remoteEngine, VaultUnlockContext remote)
+        OpenLocalWithRemoteCopy(string localDir, string remoteDir)
+    {
+        var (localEngine, local) = OpenOrCreate(localDir);
+        CopyVaultDirectory(localDir, remoteDir);
+        var remoteEngine = new VaultEngine(remoteDir, DpapiScope.CurrentUser);
+        return (localEngine, local, remoteEngine, remoteEngine.Unlock(Pwd));
+    }
+
     [Fact]
     public void SyncTwoWay_ConvergesBothVaults()
     {
-        var (localEngine, local) = OpenOrCreate(_localDir);
-        var (remoteEngine, remote) = OpenOrCreate(_remoteDir);
+        var (localEngine, local, remoteEngine, remote) = OpenLocalWithRemoteCopy(_localDir, _remoteDir);
         try
         {
             localEngine.AddEntry(local, new VaultEntry { Title = "Desktop only", Password = "d1" });
@@ -219,8 +255,7 @@ public class VaultSyncTests : IDisposable
     [Fact]
     public void SyncTwoWay_PropagatesDeleteToOtherVault()
     {
-        var (localEngine, local) = OpenOrCreate(_localDir);
-        var (remoteEngine, remote) = OpenOrCreate(_remoteDir);
+        var (localEngine, local, remoteEngine, remote) = OpenLocalWithRemoteCopy(_localDir, _remoteDir);
         try
         {
             var shared = new VaultEntry { Title = "Shared", Password = "s1" };
@@ -249,8 +284,7 @@ public class VaultSyncTests : IDisposable
     [Fact]
     public void SyncTwoWay_ConflictingEdit_NewestWins()
     {
-        var (localEngine, local) = OpenOrCreate(_localDir);
-        var (remoteEngine, remote) = OpenOrCreate(_remoteDir);
+        var (localEngine, local, remoteEngine, remote) = OpenLocalWithRemoteCopy(_localDir, _remoteDir);
         try
         {
             var entry = new VaultEntry { Title = "Login", Password = "original" };
@@ -285,8 +319,7 @@ public class VaultSyncTests : IDisposable
     [Fact]
     public void SyncTwoWay_MergesImportBatchHistory()
     {
-        var (localEngine, local) = OpenOrCreate(_localDir);
-        var (remoteEngine, remote) = OpenOrCreate(_remoteDir);
+        var (localEngine, local, remoteEngine, remote) = OpenLocalWithRemoteCopy(_localDir, _remoteDir);
         try
         {
             var localBatch = new ImportBatch
@@ -324,8 +357,7 @@ public class VaultSyncTests : IDisposable
     [Fact]
     public void SyncTwoWay_Idempotent_SecondSyncNoChanges()
     {
-        var (localEngine, local) = OpenOrCreate(_localDir);
-        var (remoteEngine, remote) = OpenOrCreate(_remoteDir);
+        var (localEngine, local, remoteEngine, remote) = OpenLocalWithRemoteCopy(_localDir, _remoteDir);
         try
         {
             localEngine.AddEntry(local, new VaultEntry { Title = "X", Password = "x" });
@@ -408,14 +440,34 @@ public class VaultSyncTests : IDisposable
         VaultSyncMarker.WriteDivergence(_localDir, "stale", _localDir, _remoteDir);
         VaultSyncMarker.Clear(_localDir);
 
-        var (localEngine, local) = OpenOrCreate(_localDir);
-        var (remoteEngine, remote) = OpenOrCreate(_remoteDir);
+        var (localEngine, local, remoteEngine, remote) = OpenLocalWithRemoteCopy(_localDir, _remoteDir);
         try
         {
             localEngine.AddEntry(local, new VaultEntry { Title = "A", Password = "a" });
             VaultSynchronizer.SyncTwoWay(localEngine, local, remoteEngine, remote);
             Assert.False(VaultSyncMarker.Exists(_localDir));
             Assert.False(VaultSyncMarker.Exists(_remoteDir));
+        }
+        finally
+        {
+            local.Keys.Dispose();
+            remote.Keys.Dispose();
+        }
+    }
+
+    [Fact]
+    public void SyncTwoWay_RejectsUnrelatedVaults()
+    {
+        var (localEngine, local) = OpenOrCreate(_localDir);
+        var (remoteEngine, remote) = OpenOrCreate(_remoteDir);
+        try
+        {
+            localEngine.AddEntry(local, new VaultEntry { Title = "Local only", Password = "l1" });
+            remoteEngine.AddEntry(remote, new VaultEntry { Title = "Remote only", Password = "r1" });
+
+            var ex = Assert.Throws<VaultSyncDivergedException>(() =>
+                VaultSynchronizer.SyncTwoWay(localEngine, local, remoteEngine, remote));
+            Assert.Contains("different Fortiva databases", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

@@ -59,13 +59,17 @@ public static class ImportMergeService
 {
     public static ImportPreview Analyze(IReadOnlyList<VaultEntry> existing, IReadOnlyList<ImportedCredential> incoming)
     {
-        var byKey = new Dictionary<string, VaultEntry>(StringComparer.OrdinalIgnoreCase);
+        var byKey = new Dictionary<string, List<VaultEntry>>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in existing)
         {
             var key = BuildMatchKey(entry);
             if (string.IsNullOrEmpty(key)) continue;
-            if (!byKey.ContainsKey(key))
-                byKey[key] = entry;
+            if (!byKey.TryGetValue(key, out var list))
+            {
+                list = [];
+                byKey[key] = list;
+            }
+            list.Add(entry);
         }
 
         var items = new List<ImportPreviewItem>();
@@ -73,7 +77,7 @@ public static class ImportMergeService
         foreach (var row in incoming)
         {
             var key = BuildMatchKey(row.Entry);
-            if (string.IsNullOrEmpty(key) || !byKey.TryGetValue(key, out var match))
+            if (string.IsNullOrEmpty(key) || !byKey.TryGetValue(key, out var matches) || matches.Count == 0)
             {
                 if (!string.IsNullOrEmpty(key) && !seenIncoming.Add(key))
                 {
@@ -89,6 +93,7 @@ public static class ImportMergeService
                 continue;
             }
 
+            var match = PickExistingMatch(matches, row.Entry);
             if (PasswordsEqual(match.Password, row.Entry.Password))
             {
                 items.Add(new ImportPreviewItem
@@ -188,6 +193,17 @@ public static class ImportMergeService
             ConflictUpdatedCount = updated,
             ConflictKeptBothCount = keptBoth
         };
+    }
+
+    private static VaultEntry PickExistingMatch(IReadOnlyList<VaultEntry> matches, VaultEntry incoming)
+    {
+        var passwordMatch = matches.FirstOrDefault(m => PasswordsEqual(m.Password, incoming.Password));
+        if (passwordMatch is not null)
+            return passwordMatch;
+
+        return matches
+            .OrderByDescending(m => m.ModifiedAt)
+            .First();
     }
 
     private static ImportDuplicateRecord ToDuplicateRecord(ImportPreviewItem item)

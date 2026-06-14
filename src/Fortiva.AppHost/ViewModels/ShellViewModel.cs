@@ -333,6 +333,12 @@ public sealed class ShellViewModel : ViewModelBase
     /// <summary>Onboarding step 4 handles browser setup — suppress duplicate prompt on unlock.</summary>
     public bool SkipNextBrowserExtensionPrompt { get; set; }
 
+    /// <summary>Stay on onboarding (browser extension step) instead of navigating to vault on unlock.</summary>
+    public bool DeferUnlockNavigation { get; set; }
+
+    public string HelloDataDirectory =>
+        FortivaPaths.GetHelloDataDirectory(IsEnterprise, VaultDirectory);
+
     public void SetParanoiaMode(bool enabled)
     {
         _personalSettings.ParanoiaMode = enabled;
@@ -1169,9 +1175,7 @@ public sealed class ShellViewModel : ViewModelBase
         RuntimeIntegrity.EnsureSafeForSensitiveOperation();
         var session = RequireSession();
         var mk = session.CopyMasterKeyForHelloSetup();
-        var manager = new HelloUnlockManager(
-            FortivaPaths.GetHelloDataDirectory(IsEnterprise),
-            IsEnterprise);
+        var manager = new HelloUnlockManager(HelloDataDirectory, IsEnterprise);
         try
         {
             // KeyCredential / RequestSignAsync must run on the UI thread (WinRT).
@@ -1185,9 +1189,7 @@ public sealed class ShellViewModel : ViewModelBase
 
     public async Task ClearHelloCredentialAsync()
     {
-        await new HelloUnlockManager(
-            FortivaPaths.GetHelloDataDirectory(IsEnterprise),
-            IsEnterprise).ClearAsync().ConfigureAwait(false);
+        await new HelloUnlockManager(HelloDataDirectory, IsEnterprise).ClearAsync().ConfigureAwait(false);
     }
 
     [Obsolete("Use SyncHelloCredentialAsync")]

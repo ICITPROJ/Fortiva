@@ -14,7 +14,7 @@ namespace Fortiva.AppHost.Pages;
 public sealed partial class OnboardingPage : Page
 {
     private readonly ShellViewModel _vm = ShellViewModel.Current;
-    private readonly HelloUnlockManager _hello;
+    private HelloUnlockManager Hello => new(_vm.HelloDataDirectory, _vm.IsEnterprise);
     private int _step;
     private readonly StackPanel[] _steps;
     private readonly Border[] _dots;
@@ -24,9 +24,6 @@ public sealed partial class OnboardingPage : Page
     public OnboardingPage()
     {
         InitializeComponent();
-        _hello = new HelloUnlockManager(
-            FortivaPaths.GetHelloDataDirectory(_vm.IsEnterprise),
-            _vm.IsEnterprise);
         _steps = [Step0, Step1, Step2, Step3, Step4];
         _dots = [Dot0, Dot1, Dot2, Dot3, Dot4];
         RefreshBrandLogo();
@@ -292,7 +289,7 @@ public sealed partial class OnboardingPage : Page
         }
 
         if (_vm.IsEnterprise && _vm.Policy?.MandatoryWindowsHello == true &&
-            !_helloEnrollmentPending && !_hello.IsConfigured)
+            !_helloEnrollmentPending && !Hello.IsConfigured)
         {
             var helloAvailable = await HelloService.IsAvailableAsync().ConfigureAwait(true);
             ShowFinishError(helloAvailable
@@ -324,6 +321,7 @@ public sealed partial class OnboardingPage : Page
             await _vm.CreateVaultAsync(password, level).ConfigureAwait(true);
 
             DispatcherQueue.TryEnqueue(() => BusyDetail.Text = "Unlocking vault…");
+            _vm.DeferUnlockNavigation = true;
             _vm.SkipNextBrowserExtensionPrompt = true;
             var (ok, error) = await _vm.UnlockAsync(password, paranoiaMode: paranoia).ConfigureAwait(true);
             if (!ok)
@@ -341,12 +339,19 @@ public sealed partial class OnboardingPage : Page
             {
                 try
                 {
-                    // Step 2 already ran UserConsentVerifier; store consumes that verification.
                     await _vm.SyncHelloCredentialFromSessionAsync();
                 }
                 catch (Exception helloEx)
                 {
                     App.LogException("OnboardingPage.SyncHello", helloEx);
+                }
+
+                if (_vm.IsEnterprise && _vm.Policy?.MandatoryWindowsHello == true && !Hello.IsConfigured)
+                {
+                    SetBusyOverlay(false);
+                    ShowFinishError(
+                        "Windows Hello setup did not complete. Go back to step 2, enable Hello, and try again.");
+                    return;
                 }
             }
 
@@ -421,6 +426,7 @@ public sealed partial class OnboardingPage : Page
 
     private void BrowserExtContinue_Click(object sender, RoutedEventArgs e)
     {
+        _vm.DeferUnlockNavigation = false;
         _vm.SkipNextBrowserExtensionPrompt = false;
         if (!_vm.IsEnterprise)
             _vm.SetBrowserExtensionSetupDismissed();

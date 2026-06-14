@@ -37,9 +37,43 @@ async function httpBridgeFetch(path, options = {}) {
   }
 }
 
+async function ensureBridgeToken() {
+  if (cachedBridgeToken) return true;
+  const boot = await httpBridgeFetch("/auth/session", { method: "POST" });
+  return !!cachedBridgeToken;
+}
+
 async function httpGetStatusAndMatches(domain, url) {
+  if (!(await ensureBridgeToken())) {
+    const params = new URLSearchParams({ domain: domain || "", url: url || "" });
+    return httpBridgeFetch(`/status-and-matches?${params}`, { method: "GET" });
+  }
   const params = new URLSearchParams({ domain: domain || "", url: url || "" });
   return httpBridgeFetch(`/status-and-matches?${params}`, { method: "GET" });
+}
+
+async function getStatusAndMatches(domain, url) {
+  const http = await httpGetStatusAndMatches(domain, url);
+  if (http?.status && !http.authRequired) return http;
+  if (http?.status?.vaultUnlocked && http?.authRequired && (await ensureBridgeToken())) {
+    const authed = await httpBridgeFetch(
+      `/status-and-matches?${new URLSearchParams({ domain: domain || "", url: url || "" })}`,
+      { method: "GET" }
+    );
+    if (authed?.status) return authed;
+  }
+  return nativeCommand({
+    command: "get_status_and_matches",
+    payload: { domain: domain || "", url: url || "" },
+  });
+}
+
+async function executeFill(payload) {
+  if (await ensureBridgeToken()) {
+    const http = await httpExecuteFill(payload);
+    if (http) return http;
+  }
+  return nativeCommand({ command: "execute_fill", payload }, EXECUTE_FILL_TIMEOUT_MS);
 }
 
 async function httpExecuteFill(payload) {
@@ -85,21 +119,6 @@ async function nativeCommand(payload, timeoutMs = NATIVE_TIMEOUT_MS) {
       `Native messaging failed (${msg}). Run Connect browser in Fortiva Settings and reload the extension.`
     );
   }
-}
-
-async function getStatusAndMatches(domain, url) {
-  const http = await httpGetStatusAndMatches(domain, url);
-  if (http?.status) return http;
-  return nativeCommand({
-    command: "get_status_and_matches",
-    payload: { domain: domain || "", url: url || "" },
-  });
-}
-
-async function executeFill(payload) {
-  const http = await httpExecuteFill(payload);
-  if (http) return http;
-  return nativeCommand({ command: "execute_fill", payload }, EXECUTE_FILL_TIMEOUT_MS);
 }
 
 function isVaultUnlocked(statusBlock) {

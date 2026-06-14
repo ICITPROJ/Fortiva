@@ -97,13 +97,27 @@ public sealed class BridgeLocalhostServer : IDisposable
                 return;
             }
 
-            if (!IsAuthorized(ctx.Request))
+            var path = ctx.Request.Url?.AbsolutePath?.TrimEnd('/') ?? "";
+
+            if (string.Equals(path, "/auth/session", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(ctx.Request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
             {
-                await WriteJsonAsync(ctx.Response, 401, new { error = "unauthorized" }).ConfigureAwait(false);
+                await HandleAuthSessionAsync(ctx).ConfigureAwait(false);
                 return;
             }
 
-            var path = ctx.Request.Url?.AbsolutePath?.TrimEnd('/') ?? "";
+            if (!IsAuthorized(ctx.Request))
+            {
+                if (string.Equals(path, "/status-and-matches", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(ctx.Request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase))
+                {
+                    await HandlePublicStatusAsync(ctx).ConfigureAwait(false);
+                    return;
+                }
+
+                await WriteJsonAsync(ctx.Response, 401, new { error = "unauthorized" }).ConfigureAwait(false);
+                return;
+            }
 
             if (string.Equals(path, "/status-and-matches", StringComparison.OrdinalIgnoreCase)
                 && string.Equals(ctx.Request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase))
@@ -136,11 +150,80 @@ public sealed class BridgeLocalhostServer : IDisposable
     private bool IsAuthorized(HttpListenerRequest request)
     {
         var header = request.Headers["X-Fortiva-Bridge-Token"];
-        if (string.IsNullOrEmpty(header))
-            return string.Equals(request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(request.Url?.AbsolutePath?.TrimEnd('/'), "/status-and-matches", StringComparison.OrdinalIgnoreCase);
+        return !string.IsNullOrEmpty(header)
+            && string.Equals(header, _bridgeToken, StringComparison.Ordinal);
+    }
 
-        return string.Equals(header, _bridgeToken, StringComparison.Ordinal);
+    private static bool IsExtensionOrigin(HttpListenerRequest request)
+    {
+        var origin = request.Headers["Origin"];
+        return !string.IsNullOrEmpty(origin)
+            && string.Equals(origin, BridgeLocalhostConstants.ExtensionOrigin, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task HandlePublicStatusAsync(HttpListenerContext ctx)
+    {
+        if (!_isUnlocked())
+        {
+            await WriteJsonAsync(ctx.Response, 200, new
+            {
+                status = new BridgeStatusBlock
+                {
+                    AppRunning = true,
+                    VaultUnlocked = false,
+                    Error = "vault_locked"
+                },
+                authRequired = true,
+                matches = Array.Empty<BridgeMatchSummary>()
+            }).ConfigureAwait(false);
+            return;
+        }
+
+        await WriteJsonAsync(ctx.Response, 200, new
+        {
+            status = new BridgeStatusBlock
+            {
+                AppRunning = true,
+                VaultUnlocked = true,
+                Error = null
+            },
+            authRequired = true,
+            matches = Array.Empty<BridgeMatchSummary>()
+        }).ConfigureAwait(false);
+    }
+
+    private async Task HandleAuthSessionAsync(HttpListenerContext ctx)
+    {
+        if (!IsExtensionOrigin(ctx.Request))
+        {
+            await WriteJsonAsync(ctx.Response, 403, new { error = "forbidden" }).ConfigureAwait(false);
+            return;
+        }
+
+        if (!_isUnlocked())
+        {
+            await WriteJsonAsync(ctx.Response, 200, new
+            {
+                status = new BridgeStatusBlock
+                {
+                    AppRunning = true,
+                    VaultUnlocked = false,
+                    Error = "vault_locked"
+                }
+            }).ConfigureAwait(false);
+            return;
+        }
+
+        await WriteJsonAsync(ctx.Response, 200, new
+        {
+            bridgeToken = _bridgeToken,
+            status = new BridgeStatusBlock
+            {
+                AppRunning = true,
+                VaultUnlocked = true,
+                Error = null
+            }
+        }).ConfigureAwait(false);
     }
 
     private async Task HandleStatusAndMatchesAsync(HttpListenerContext ctx)
@@ -229,7 +312,6 @@ public sealed class BridgeLocalhostServer : IDisposable
     {
         await WriteJsonAsync(response, 200, new
         {
-            bridgeToken = _bridgeToken,
             status,
             matches = Array.Empty<BridgeMatchSummary>()
         }).ConfigureAwait(false);
@@ -257,7 +339,7 @@ public sealed class BridgeLocalhostServer : IDisposable
     {
         response.Headers["Access-Control-Allow-Origin"] = BridgeLocalhostConstants.ExtensionOrigin;
         response.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
-        response.Headers["Access-Control-Allow-Headers"] = "Content-Type, X-Fortiva-Bridge-Token";
+        response.Headers["Access-Control-Allow-Headers"] = "Content-Type, X-Fortiva-Bridge-Token, Origin";
     }
 
     private static async Task WriteJsonAsync(HttpListenerResponse response, int statusCode, object payload)

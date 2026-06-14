@@ -15,7 +15,7 @@ namespace Fortiva.AppHost.Pages;
 public sealed partial class SettingsPage : Page
 {
     private readonly ShellViewModel _vm = ShellViewModel.Current;
-    private readonly HelloUnlockManager _hello;
+    private HelloUnlockManager Hello => new(_vm.HelloDataDirectory, _vm.IsEnterprise);
 
     private int _autoLockSeconds = 300;
     private int _clipboardSeconds = 30;
@@ -26,9 +26,6 @@ public sealed partial class SettingsPage : Page
     public SettingsPage()
     {
         InitializeComponent();
-        _hello = new HelloUnlockManager(
-            FortivaPaths.GetHelloDataDirectory(_vm.IsEnterprise),
-            _vm.IsEnterprise);
         LoadLogo();
 
         // Slider ranges set here, never in XAML (XBF constraint ordering bug).
@@ -105,8 +102,8 @@ public sealed partial class SettingsPage : Page
             ClipboardSlider.IsEnabled = !policy.ClipboardDisabled;
         }
 
-        HelloStatus.Text = _hello.IsConfigured
-            ? _hello.IsHardwareBacked
+        HelloStatus.Text = Hello.IsConfigured
+            ? Hello.IsHardwareBacked
                 ? "Windows Hello is configured (hardware-backed TPM)."
                 : "Windows Hello is configured (software protection — upgrade to TPM when available)."
             : "Windows Hello is not configured.";
@@ -118,7 +115,7 @@ public sealed partial class SettingsPage : Page
         NewPwdConfirm.IsEnabled = canChangeSecrets;
         ChangePasswordBtn.IsEnabled = canChangeSecrets;
         SetupHelloBtn.IsEnabled = canChangeSecrets;
-        RemoveHelloBtn.IsEnabled = _hello.IsConfigured;
+        RemoveHelloBtn.IsEnabled = Hello.IsConfigured;
 
         AboutAppName.Text   = $"Fortiva {App.Edition}";
         AboutVersion.Text   = $"Version {AppVersion.Current}";
@@ -563,7 +560,7 @@ public sealed partial class SettingsPage : Page
 
             await _vm.ChangeMasterPasswordAsync(NewPwd.Password);
 
-            if (_hello.IsConfigured)
+            if (Hello.IsConfigured)
             {
                 try
                 {
@@ -647,7 +644,7 @@ public sealed partial class SettingsPage : Page
         try
         {
             await _vm.SyncHelloCredentialAsync(pwdBox.Password);
-            HelloStatus.Text = _hello.IsHardwareBacked
+            HelloStatus.Text = Hello.IsHardwareBacked
                 ? "Windows Hello is configured (hardware-backed)."
                 : "Windows Hello is configured.";
             HelloUpgradeInfo.IsOpen = false;
@@ -938,7 +935,7 @@ public sealed partial class SettingsPage : Page
     private Task RefreshHelloUpgradeBannerAsync()
     {
         HelloUpgradeInfo.IsOpen = !_vm.PersonalSettings.HelloHardwareUpgradeDismissed
-            && _hello.UsesSoftwareOnlyHello;
+            && Hello.UsesSoftwareOnlyHello;
         return Task.CompletedTask;
     }
 

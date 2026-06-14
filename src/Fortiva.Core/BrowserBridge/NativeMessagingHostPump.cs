@@ -45,6 +45,7 @@ public sealed class NativeMessagingHostPump : IAsyncDisposable
             offset += chunk;
         }
 
+        string? command = null;
         string response;
         if (!_integrityOk)
         {
@@ -62,83 +63,80 @@ public sealed class NativeMessagingHostPump : IAsyncDisposable
         {
             try
             {
+                using var doc = JsonDocument.Parse(Encoding.UTF8.GetString(msgBuf), new JsonDocumentOptions { MaxDepth = 16 });
+                command = doc.RootElement.TryGetProperty("command", out var cmd) ? cmd.GetString() : null;
+
                 if (!BridgePipeNaming.HasActiveSession(_enterprise))
                 {
-                    using var doc = JsonDocument.Parse(Encoding.UTF8.GetString(msgBuf), new JsonDocumentOptions { MaxDepth = 16 });
-                    var command = doc.RootElement.TryGetProperty("command", out var cmd) ? cmd.GetString() : null;
-                    response = string.Equals(command, "execute_fill", StringComparison.OrdinalIgnoreCase)
-                        ? BridgeJson.Serialize(new CredentialResponse
-                        {
-                            Error = "setup_required",
-                            Message = "Fortiva is not running. Open Fortiva and unlock your vault."
-                        })
-                        : BridgeJson.Serialize(new BridgeStatusAndMatchesResponse
-                        {
-                            Status = new BridgeStatusBlock
-                            {
-                                AppRunning = BridgeProcessCheck.IsFortivaRunning(),
-                                VaultUnlocked = false,
-                                Error = "host_unreachable"
-                            }
-                        });
+                    response = SerializeNoSessionResponse(command);
                 }
                 else
                 {
-                    using var doc = JsonDocument.Parse(Encoding.UTF8.GetString(msgBuf), new JsonDocumentOptions { MaxDepth = 16 });
-                    var command = doc.RootElement.TryGetProperty("command", out var cmd)
-                        ? cmd.GetString()
-                        : null;
-
-                    using var reqCts = new CancellationTokenSource();
                     var timeoutSeconds = string.Equals(command, "execute_fill", StringComparison.OrdinalIgnoreCase)
                         ? ExecuteFillTimeoutSeconds
                         : RequestTimeoutSeconds;
-                    reqCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 
-                    var handleTask = BridgeNativeForwarder.HandleAsync(doc.RootElement, reqCts.Token);
-                    var completed = await Task.WhenAny(handleTask, Task.Delay(TimeSpan.FromSeconds(timeoutSeconds), reqCts.Token))
+                    var handleTask = BridgeNativeForwarder.HandleAsync(doc.RootElement, CancellationToken.None);
+                    var completed = await Task.WhenAny(handleTask, Task.Delay(TimeSpan.FromSeconds(timeoutSeconds)))
                         .ConfigureAwait(false);
+
                     response = completed == handleTask
                         ? await handleTask.ConfigureAwait(false)
-                        : BridgeJson.Serialize(new BridgeStatusAndMatchesResponse
-                        {
-                            Status = new BridgeStatusBlock
-                            {
-                                AppRunning = BridgeProcessCheck.IsFortivaRunning(),
-                                VaultUnlocked = false,
-                                Error = "internal_error"
-                            }
-                        });
+                        : SerializeTimeoutResponse(command);
                 }
-            }
-            catch (OperationCanceledException)
-            {
-                response = BridgeJson.Serialize(new BridgeStatusAndMatchesResponse
-                {
-                    Status = new BridgeStatusBlock
-                    {
-                        AppRunning = BridgeProcessCheck.IsFortivaRunning(),
-                        VaultUnlocked = false,
-                        Error = "internal_error"
-                    }
-                });
             }
             catch
             {
-                response = BridgeJson.Serialize(new BridgeStatusAndMatchesResponse
-                {
-                    Status = new BridgeStatusBlock
-                    {
-                        AppRunning = false,
-                        VaultUnlocked = false,
-                        Error = "internal_error"
-                    }
-                });
+                response = SerializeTimeoutResponse(command);
             }
         }
 
         var bytes = Encoding.UTF8.GetBytes(response);
         NativeMessagingFraming.WriteLengthPrefixedMessage(_stdout, bytes);
+    }
+
+    private static string SerializeNoSessionResponse(string? command)
+    {
+        if (string.Equals(command, "execute_fill", StringComparison.OrdinalIgnoreCase))
+        {
+            return BridgeJson.Serialize(new CredentialResponse
+            {
+                Error = "setup_required",
+                Message = "Fortiva is not running. Open Fortiva and unlock your vault."
+            });
+        }
+
+        return BridgeJson.Serialize(new BridgeStatusAndMatchesResponse
+        {
+            Status = new BridgeStatusBlock
+            {
+                AppRunning = BridgeProcessCheck.IsFortivaRunning(),
+                VaultUnlocked = false,
+                Error = "host_unreachable"
+            }
+        });
+    }
+
+    private static string SerializeTimeoutResponse(string? command)
+    {
+        if (string.Equals(command, "execute_fill", StringComparison.OrdinalIgnoreCase))
+        {
+            return BridgeJson.Serialize(new CredentialResponse
+            {
+                Error = "internal_error",
+                Message = "Fortiva bridge timed out. Unlock Fortiva and try Fill again."
+            });
+        }
+
+        return BridgeJson.Serialize(new BridgeStatusAndMatchesResponse
+        {
+            Status = new BridgeStatusBlock
+            {
+                AppRunning = BridgeProcessCheck.IsFortivaRunning(),
+                VaultUnlocked = false,
+                Error = "internal_error"
+            }
+        });
     }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;

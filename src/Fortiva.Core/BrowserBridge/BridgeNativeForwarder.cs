@@ -226,7 +226,7 @@ public static class BridgeNativeForwarder
     private static bool IsStaleTokenError(string credentialJson)
     {
         var err = CredentialJsonError(credentialJson);
-        return err is "locked" or "decrypt_failed";
+        return err is "decrypt_failed";
     }
 
     private static string ParseListCredentialsToStatusAndMatches(string listJson, string? pageUrl)
@@ -714,7 +714,7 @@ public static class BridgeNativeForwarder
     private static bool ShouldRetryCredentialPipeWithFreshToken(string credentialJson, JsonElement request)
     {
         if (!string.IsNullOrEmpty(TryGetPushCachedToken(request)))
-            return CredentialJsonError(credentialJson) is "locked" or "decrypt_failed";
+            return CredentialJsonError(credentialJson) is "decrypt_failed";
         return false;
     }
 

@@ -33,11 +33,13 @@ public static class VaultMergeEngine
             }
         }
 
-        // 2. Best (newest) live version per id.
+        // 2. Best (newest) live version per id — remote wins ties so USB sync is not silently overridden.
         var live = new Dictionary<Guid, VaultEntry>();
-        foreach (var entry in local.Entries.Concat(remote.Entries))
+        foreach (var entry in local.Entries)
+            live[entry.Id] = entry;
+        foreach (var entry in remote.Entries)
         {
-            if (!live.TryGetValue(entry.Id, out var existing) || entry.ModifiedAt > existing.ModifiedAt)
+            if (!live.TryGetValue(entry.Id, out var existing) || entry.ModifiedAt >= existing.ModifiedAt)
                 live[entry.Id] = entry;
         }
 
@@ -121,6 +123,8 @@ public static class VaultSynchronizer
 
         if (local.ReadOnly || remote.ReadOnly)
             throw new InvalidOperationException("Both vaults must be writable to sync.");
+
+        EnsureCompatibleVaults(local, remote);
 
         var localDir = Path.GetDirectoryName(localEngine.VaultPath)!;
         var remoteDir = Path.GetDirectoryName(remoteEngine.VaultPath)!;
@@ -288,5 +292,24 @@ public static class VaultSynchronizer
 
         var removed = before.Keys.Count(id => !mergedIds.Contains(id));
         return new VaultSyncSideResult(added, updated, removed, merged.Entries.Count);
+    }
+
+    private static void EnsureCompatibleVaults(VaultUnlockContext local, VaultUnlockContext remote)
+    {
+        if (local.Header.VaultId == remote.Header.VaultId)
+            return;
+
+        var remoteHasData = remote.Payload.Entries.Count > 0
+            || remote.Payload.ImportBatches.Count > 0
+            || remote.Header.RevisionCounter > 1;
+
+        if (remoteHasData)
+        {
+            throw new VaultSyncDivergedException(
+                "These vaults belong to different Fortiva databases and cannot be merged. "
+                + "Point portable sync at the correct USB copy, or create a fresh empty folder for this vault.");
+        }
+
+        remote.Header.VaultId = local.Header.VaultId;
     }
 }
