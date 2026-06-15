@@ -19,11 +19,8 @@
         </Border>
 
     <ScrollViewer x:Name="PageScroll" Grid.Row="1"
-                  HorizontalScrollBarVisibility="Disabled"
-                  HorizontalContentAlignment="Stretch">
-        <Border Style="{StaticResource FortivaGlassPanel}" Margin="24"
-                HorizontalAlignment="Stretch" MinWidth="320"
-                Width="{Binding ViewportWidth, ElementName=PageScroll}">
+                  Style="{StaticResource FortivaPageScrollViewer}">
+        <Border Style="{StaticResource FortivaPagePanel}">
         <StackPanel Spacing="24">
 
             <!-- Appearance -->
@@ -50,13 +47,13 @@
 
                 <StackPanel Spacing="4">
                     <TextBlock Text="Auto-lock after inactivity" Style="{StaticResource FortivaFieldLabel}"/>
-                    <Slider x:Name="AutoLockSlider" ValueChanged="AutoLock_Changed"/>
+                    <Slider x:Name="AutoLockSlider" Style="{StaticResource FortivaSlider}" ValueChanged="AutoLock_Changed"/>
                     <TextBlock x:Name="AutoLockLabel" Style="{StaticResource FortivaHelperText}"/>
                 </StackPanel>
 
                 <StackPanel Spacing="4">
                     <TextBlock Text="Clipboard auto-clear" Style="{StaticResource FortivaFieldLabel}"/>
-                    <Slider x:Name="ClipboardSlider" ValueChanged="Clipboard_Changed"/>
+                    <Slider x:Name="ClipboardSlider" Style="{StaticResource FortivaSlider}" ValueChanged="Clipboard_Changed"/>
                     <TextBlock x:Name="ClipboardLabel" Style="{StaticResource FortivaHelperText}"/>
                 </StackPanel>
             </StackPanel>
@@ -78,7 +75,7 @@
                          Title="Upgrade Windows Hello security"
                          Message="Your Hello credential uses software-only protection. Same-user malware on this PC could bypass biometrics. Re-set Hello below when TPM is available to upgrade to hardware-backed storage."
                          Closed="HelloUpgradeInfo_Closed"/>
-                <StackPanel Orientation="Horizontal" Spacing="8">
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
                     <Button x:Name="SetupHelloBtn" Content="Set up Windows Hello" Click="SetupHello_Click"
                             Style="{StaticResource FortivaAccentButton}"/>
                     <Button x:Name="RemoveHelloBtn" Content="Remove Hello credential" Click="RemoveHello_Click"
@@ -113,11 +110,14 @@
                                    FontFamily="Consolas"/>
                     </StackPanel>
                 </Border>
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button x:Name="ConnectBrowserBtn" Content="Connect browser"
-                            Style="{StaticResource FortivaAccentButton}" Click="ConnectBrowser_Click"/>
-                    <Button x:Name="RestartBridgeBtn" Content="Restart bridge" Click="RestartBridge_Click"/>
-                    <Button x:Name="OpenExtensionsBtn" Content="Open browser extensions" Click="OpenExtensions_Click"/>
+                <StackPanel Spacing="8" Margin="0,0,0,4">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="ConnectBrowserBtn" Content="Connect browser"
+                                Style="{StaticResource FortivaAccentButton}" Click="ConnectBrowser_Click"/>
+                        <Button x:Name="RestartBridgeBtn" Content="Restart bridge" Click="RestartBridge_Click"/>
+                    </StackPanel>
+                    <Button x:Name="OpenExtensionsBtn" Content="Open browser extensions" Click="OpenExtensions_Click"
+                            HorizontalAlignment="Left"/>
                 </StackPanel>
                 <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaHelperText}">
                     Fortiva never fills a form unless you click Fill. Match logins by setting the Website field on each vault entry (e.g. https://login.example.com).

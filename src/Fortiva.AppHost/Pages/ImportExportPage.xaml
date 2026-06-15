@@ -20,11 +20,8 @@
         </Border>
 
     <ScrollViewer x:Name="PageScroll" Grid.Row="1"
-                  HorizontalScrollBarVisibility="Disabled"
-                  HorizontalContentAlignment="Stretch">
-        <Border Style="{StaticResource FortivaGlassPanel}" Margin="24"
-                HorizontalAlignment="Stretch" MinWidth="320"
-                Width="{Binding ViewportWidth, ElementName=PageScroll}">
+                  Style="{StaticResource FortivaPageScrollViewer}">
+        <Border Style="{StaticResource FortivaPagePanel}">
         <StackPanel Spacing="24">
 
             <!-- Import section -->

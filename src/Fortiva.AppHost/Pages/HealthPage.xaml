@@ -57,8 +57,8 @@
         </DataTemplate>
     </Page.Resources>
 
-    <ScrollViewer x:Name="PageScroll">
-        <StackPanel Margin="24" Spacing="24" MaxWidth="960">
+    <ScrollViewer x:Name="PageScroll" Style="{StaticResource FortivaPageScrollViewer}">
+        <StackPanel Spacing="24" MaxWidth="960" HorizontalAlignment="Stretch">
             <Grid ColumnSpacing="16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>

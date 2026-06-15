@@ -45,10 +45,9 @@
                       VerticalScrollBarVisibility="Auto"
                       HorizontalContentAlignment="Stretch"
                       VerticalContentAlignment="Top">
-            <Border Style="{StaticResource FortivaGlassPanel}"
+            <Border Style="{StaticResource FortivaPagePanel}"
                     HorizontalAlignment="Stretch"
-                    MinWidth="320"
-                    Width="{Binding ViewportWidth, ElementName=FormScroll}">
+                    MinWidth="320">
                 <Grid x:Name="FormGrid" ColumnSpacing="24" RowSpacing="16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition x:Name="FormCol0" Width="*" MinWidth="240"/>

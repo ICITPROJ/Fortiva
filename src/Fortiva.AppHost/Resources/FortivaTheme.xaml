@@ -429,10 +429,36 @@
 
     <Style x:Key="FortivaToggleSwitch" TargetType="ToggleSwitch">
         <Setter Property="Foreground" Value="{ThemeResource FortivaBodyBrush}"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="Margin" Value="0,0,4,0"/>
     </Style>
 
     <Style x:Key="FortivaSlider" TargetType="Slider">
         <Setter Property="Foreground" Value="{ThemeResource FortivaAccentBrush}"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <!-- Thumb extends past track at min/max; inset so edges are not clipped -->
+        <Setter Property="Margin" Value="8,0,12,0"/>
+    </Style>
+
+    <!-- Standard scrollable page chrome: padding lives on the viewer, not the panel -->
+    <Style x:Key="FortivaPageScrollViewer" TargetType="ScrollViewer">
+        <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+        <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="ZoomMode" Value="Disabled"/>
+        <Setter Property="Padding" Value="24"/>
+    </Style>
+
+    <Style x:Key="FortivaPagePanel" TargetType="Border" BasedOn="{StaticResource FortivaGlassPanel}">
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="VerticalAlignment" Value="Top"/>
+        <Setter Property="MinWidth" Value="0"/>
+    </Style>
+
+    <Style x:Key="FortivaPagePanelGlow" TargetType="Border" BasedOn="{StaticResource FortivaGlassPanelGlow}">
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="VerticalAlignment" Value="Top"/>
+        <Setter Property="MinWidth" Value="0"/>
     </Style>
 
     <Style x:Key="FortivaMonoPreview" TargetType="Border">
