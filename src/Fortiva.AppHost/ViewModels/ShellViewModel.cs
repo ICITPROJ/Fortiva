@@ -38,6 +38,7 @@ public sealed class ShellViewModel : ViewModelBase
     private PersonalUserSettings _personalSettings = PersonalUserSettings.Load();
     private EnterpriseUserSettings _enterpriseSettings = EnterpriseUserSettings.Load();
     private AppearanceSettings _appearance = AppearanceSettings.Load();
+    private readonly VaultFilePrefetch _vaultPrefetch = new();
 
     public bool PreferParanoiaMode =>
         Policy?.MandatoryParanoiaMode == true || _personalSettings.ParanoiaMode;
@@ -297,6 +298,15 @@ public sealed class ShellViewModel : ViewModelBase
         SavePersonalSettings();
     }
 
+    public void SetHelloHardwareUnavailable(bool unavailable)
+    {
+        if (IsEnterprise) return;
+        _personalSettings.HelloHardwareUnavailable = unavailable;
+        if (unavailable)
+            _personalSettings.HelloHardwareUpgradeDismissed = true;
+        SavePersonalSettings();
+    }
+
     public void SavePersonalSettings()
     {
         if (IsEnterprise) return;
@@ -428,25 +438,38 @@ public sealed class ShellViewModel : ViewModelBase
         }
     }
 
+    public void BeginVaultPrefetch()
+    {
+        if (!_vaultExists)
+            return;
+        _vaultPrefetch.Begin(Path.Combine(VaultDirectory, VaultConstants.VaultFileName));
+    }
+
     public async Task<(bool ok, string? error)> UnlockAsync(
-        string masterPassword, bool paranoiaMode = false, bool confirmRollback = false)
+        string masterPassword,
+        bool paranoiaMode = false,
+        bool confirmRollback = false)
     {
         EnterpriseGate.RequireValidLicense(IsEnterprise, IsAdmin, IsLicenseValid);
         await RunOnUiAsync(() => IsBusy = true).ConfigureAwait(true);
         try
         {
             EnsureSession();
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            await Task.Run(() => _session!.Unlock(masterPassword, paranoiaMode, confirmRollback))
+            var prefetch = _vaultPrefetch.TryTake(Path.Combine(VaultDirectory, VaultConstants.VaultFileName));
+            await Task.Run(() => _session!.Unlock(
+                    masterPassword,
+                    paranoiaMode,
+                    confirmRollback,
+                    prefetch))
                 .ConfigureAwait(false);
-            sw.Stop();
+
+            await RefreshEntriesAsync().ConfigureAwait(true);
 
             string? rollbackWarning = null;
             await RunOnUiAsync(() =>
             {
                 ApplyPersonalAutoLockTimeout();
-                RefreshEntries();
-                StatusMessage = $"Unlocked in {sw.ElapsedMilliseconds} ms";
+                StatusMessage = "Unlocked";
                 if (IsReadOnly) StatusMessage += " [READ-ONLY - rollback detected]";
                 OnPropertyChanged(nameof(IsUnlocked));
                 OnPropertyChanged(nameof(IsReadOnly));
@@ -457,6 +480,7 @@ public sealed class ShellViewModel : ViewModelBase
                     UnlockOccurred?.Invoke();
                 CompleteBridgeUnlockIfPending(!stayOnUnlock);
             }).ConfigureAwait(true);
+
             return (true, rollbackWarning);
         }
         catch (System.Security.Cryptography.CryptographicException)
@@ -481,21 +505,29 @@ public sealed class ShellViewModel : ViewModelBase
     }
 
     public async Task<(bool ok, string? error)> UnlockWithMasterKeyAsync(
-        byte[] masterKey, bool paranoiaMode = false, bool confirmRollback = false)
+        byte[] masterKey,
+        bool paranoiaMode = false,
+        bool confirmRollback = false)
     {
         EnterpriseGate.RequireValidLicense(IsEnterprise, IsAdmin, IsLicenseValid);
         await RunOnUiAsync(() => IsBusy = true).ConfigureAwait(true);
         try
         {
             EnsureSession();
-            await Task.Run(() => _session!.UnlockWithMasterKey(masterKey, paranoiaMode, confirmRollback))
+            var prefetch = _vaultPrefetch.TryTake(Path.Combine(VaultDirectory, VaultConstants.VaultFileName));
+            await Task.Run(() => _session!.UnlockWithMasterKey(
+                    masterKey,
+                    paranoiaMode,
+                    confirmRollback,
+                    prefetch))
                 .ConfigureAwait(false);
+
+            await RefreshEntriesAsync().ConfigureAwait(true);
 
             string? rollbackWarning = null;
             await RunOnUiAsync(() =>
             {
                 ApplyPersonalAutoLockTimeout();
-                RefreshEntries();
                 StatusMessage = "Unlocked with Windows Hello";
                 if (IsReadOnly) StatusMessage += " [READ-ONLY - rollback detected]";
                 OnPropertyChanged(nameof(IsUnlocked));
@@ -507,6 +539,7 @@ public sealed class ShellViewModel : ViewModelBase
                     UnlockOccurred?.Invoke();
                 CompleteBridgeUnlockIfPending(!stayOnUnlock);
             }).ConfigureAwait(true);
+
             return (true, rollbackWarning);
         }
         catch (System.Security.Cryptography.CryptographicException)
@@ -550,6 +583,7 @@ public sealed class ShellViewModel : ViewModelBase
             StateChanged?.Invoke();
             LockOccurred?.Invoke();
             CompleteBridgeUnlockIfPending(false);
+            BeginVaultPrefetch();
         }
         catch (Exception ex)
         {
@@ -568,6 +602,7 @@ public sealed class ShellViewModel : ViewModelBase
             OnPropertyChanged(nameof(IsUnlocked));
             try { LockOccurred?.Invoke(); } catch (Exception navEx) { App.LogException("ShellViewModel.LockCore.Navigate", navEx); }
             CompleteBridgeUnlockIfPending(false);
+            BeginVaultPrefetch();
         }
         finally { _isLocking = false; }
     }
@@ -588,6 +623,7 @@ public sealed class ShellViewModel : ViewModelBase
             StateChanged?.Invoke();
             LockOccurred?.Invoke();
             CompleteBridgeUnlockIfPending(false);
+            BeginVaultPrefetch();
         }
         catch (Exception ex)
         {
@@ -601,6 +637,7 @@ public sealed class ShellViewModel : ViewModelBase
             OnPropertyChanged(nameof(IsUnlocked));
             try { LockOccurred?.Invoke(); } catch (Exception navEx) { App.LogException("ShellViewModel.PanicLockCore.Navigate", navEx); }
             CompleteBridgeUnlockIfPending(false);
+            BeginVaultPrefetch();
         }
         finally { _isLocking = false; }
     }
@@ -1167,7 +1204,105 @@ public sealed class ShellViewModel : ViewModelBase
     {
         if (!VerifyMasterPassword(masterPassword))
             throw new InvalidOperationException("Master password verification failed.");
-        await SyncHelloCredentialFromSessionAsync().ConfigureAwait(false);
+        await SyncHelloCredentialFromSessionAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>Clears broken Hello state and binds Windows Hello to the current vault.</summary>
+    /// <param name="upgradeToHardware">
+    /// When true, attempts TPM-backed storage only (upgrade banner). Otherwise uses software Hello (one prompt).
+    /// </param>
+    public async Task RepairHelloSetupAsync(string masterPassword, bool upgradeToHardware = false)
+    {
+        if (!VerifyMasterPassword(masterPassword))
+            throw new InvalidOperationException("Master password verification failed.");
+
+        var session = RequireSession();
+        session.SuppressAutoLock();
+        try
+        {
+            App.BringMainWindowToFront();
+            HelloSetupLog.Step($"Repair start upgradeToHardware={upgradeToHardware}. Binding folder: {HelloDataDirectory}");
+
+            var bindingDir = HelloDataDirectory;
+            var backup = HelloBindingBackup.TryCapture(bindingDir);
+
+            new HelloUnlockManager(bindingDir, IsEnterprise).ClearBindingFiles();
+
+            var tryHardware = upgradeToHardware
+                              && await HelloCredentialStore.IsAvailableAsync().ConfigureAwait(true)
+                              && !_personalSettings.HelloHardwareUnavailable;
+
+            if (tryHardware)
+            {
+                HelloSetupLog.Step("Trying hardware-backed Windows Hello (no software fallback).");
+                try
+                {
+                    await App.RunOnUiThreadAsync(() =>
+                        SyncHelloCredentialFromSessionAsync(true)).ConfigureAwait(true);
+
+                    if (new HelloUnlockManager(bindingDir, IsEnterprise).IsConfigured)
+                    {
+                        HelloSetupLog.Step("Hardware Hello binding saved.");
+                        return;
+                    }
+
+                    throw new InvalidOperationException(
+                        "Windows Hello approved but the hardware binding file was not saved.");
+                }
+                catch (Exception ex)
+                {
+                    HelloSetupLog.Error("Hardware", ex);
+                    if (HelloHardwareErrors.IsHardwareUnavailable(ex))
+                        SetHelloHardwareUnavailable(true);
+
+                    if (backup is not null)
+                    {
+                        backup.Restore(bindingDir);
+                        HelloSetupLog.Step("Restored previous Hello binding after hardware failure.");
+                    }
+
+                    if (HelloHardwareErrors.IsHardwareUnavailable(ex))
+                    {
+                        throw new HelloHardwareUnavailableException(HelloHardwareErrors.Describe(ex), ex);
+                    }
+
+                    throw;
+                }
+            }
+
+            HelloSetupLog.Step("Binding with software Hello (single prompt).");
+            try
+            {
+                await App.RunOnUiThreadAsync(() =>
+                    SyncHelloCredentialFromSessionAsync(false)).ConfigureAwait(true);
+            }
+            catch
+            {
+                if (backup is not null)
+                {
+                    backup.Restore(bindingDir);
+                    HelloSetupLog.Step("Restored previous Hello binding after setup failure.");
+                }
+
+                throw;
+            }
+
+            if (!new HelloUnlockManager(bindingDir, IsEnterprise).IsConfigured)
+            {
+                if (backup is not null)
+                    backup.Restore(bindingDir);
+
+                throw new InvalidOperationException(
+                    $"Hello prompt completed but no binding file was saved in {bindingDir}.");
+            }
+
+            HelloSetupLog.Step("Software Hello binding saved.");
+        }
+        finally
+        {
+            session.ResumeAutoLock();
+            session.ResetAutoLock();
+        }
     }
 
     public async Task SyncHelloCredentialFromSessionAsync(bool? useHardwareBacking = null)
@@ -1178,8 +1313,8 @@ public sealed class ShellViewModel : ViewModelBase
         var manager = new HelloUnlockManager(HelloDataDirectory, IsEnterprise);
         try
         {
-            // KeyCredential / RequestSignAsync must run on the UI thread (WinRT).
-            await manager.StoreFromMasterKeyAsync(mk, useHardwareBacking);
+            App.BringMainWindowToFront();
+            await manager.StoreFromMasterKeyAsync(mk, useHardwareBacking).ConfigureAwait(true);
         }
         finally
         {
@@ -1189,7 +1324,7 @@ public sealed class ShellViewModel : ViewModelBase
 
     public async Task ClearHelloCredentialAsync()
     {
-        await new HelloUnlockManager(HelloDataDirectory, IsEnterprise).ClearAsync().ConfigureAwait(false);
+        await new HelloUnlockManager(HelloDataDirectory, IsEnterprise).ClearAsync().ConfigureAwait(true);
     }
 
     [Obsolete("Use SyncHelloCredentialAsync")]
@@ -1288,6 +1423,24 @@ public sealed class ShellViewModel : ViewModelBase
             Entries.Add(new VaultEntryViewModel(e));
         OnPropertyChanged(nameof(IsUnlocked));
         StateChanged?.Invoke();
+    }
+
+    private async Task RefreshEntriesAsync()
+    {
+        if (_session is null)
+            return;
+
+        var models = await Task.Run(() =>
+            _session.AllEntries().Select(e => new VaultEntryViewModel(e)).ToList()).ConfigureAwait(false);
+
+        await RunOnUiAsync(() =>
+        {
+            Entries.Clear();
+            foreach (var entry in models)
+                Entries.Add(entry);
+            OnPropertyChanged(nameof(IsUnlocked));
+            StateChanged?.Invoke();
+        }).ConfigureAwait(true);
     }
 
     private FortivaPolicy? TryLoadPolicy()

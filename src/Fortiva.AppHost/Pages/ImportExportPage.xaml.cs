@@ -99,9 +99,9 @@ public sealed partial class ImportExportPage : Page
         }
 
         var exact = _vaultDuplicateGroups.Count(g => g.Kind == VaultDuplicateKind.Exact);
-        var similar = _vaultDuplicateGroups.Count - exact;
+        var similar = _vaultDuplicateGroups.Count(g => g.Kind != VaultDuplicateKind.Exact);
         VaultDuplicateSummary.Text =
-            $"Found {_vaultDuplicateGroups.Count} group(s): {exact} exact duplicate(s), {similar} similar (same site + username).";
+            $"Found {_vaultDuplicateGroups.Count} group(s): {exact} exact duplicate(s), {similar} similar (URL variations or different passwords).";
         VaultDuplicateSummary.Visibility = Visibility.Visible;
         VaultDuplicateList.ItemsSource = _vaultDuplicateGroups.Select(g => new VaultDuplicateRow(g)).ToList();
         VaultDuplicateList.Visibility = Visibility.Visible;
@@ -795,6 +795,8 @@ public sealed partial class ImportExportPage : Page
         {
             VaultDuplicateKind.Exact =>
                 $"{Group.Username} · {Group.EntryIds.Count} exact duplicates",
+            VaultDuplicateKind.SimilarSite =>
+                $"{Group.Username} · {Group.EntryIds.Count} entries (same site, different URL variations)",
             _ =>
                 $"{Group.Username} · {Group.EntryIds.Count} entries (same site + username, different passwords)"
         };

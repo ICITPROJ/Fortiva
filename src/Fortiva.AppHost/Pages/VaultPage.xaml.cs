@@ -24,6 +24,7 @@ public sealed partial class VaultPage : Page
     private CancellationTokenSource? _faviconCts;
     private bool _syncingSelection;
     private Guid? _pendingRestoreEntryId;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _searchDebounceTimer;
     private const double MasterDetailMinWidth = 1080;
 
     public VaultPage()
@@ -40,7 +41,6 @@ public sealed partial class VaultPage : Page
         _stateChangedHandler = () => DispatcherQueue.TryEnqueue(() =>
         {
             ApplyReadOnlyChrome();
-            RefreshCategories();
             RefreshList();
         });
         _vm.StateChanged += _stateChangedHandler;
@@ -117,6 +117,8 @@ public sealed partial class VaultPage : Page
 
         _faviconCts?.Cancel();
         _faviconCts = null;
+        _searchDebounceTimer?.Stop();
+        _searchDebounceTimer = null;
         HideDetailPaneCore();
     }
 
@@ -467,7 +469,20 @@ public sealed partial class VaultPage : Page
     }
 
     private void SearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
-        => RefreshList();
+    {
+        _searchDebounceTimer ??= DispatcherQueue.CreateTimer();
+        _searchDebounceTimer.Interval = TimeSpan.FromMilliseconds(200);
+        _searchDebounceTimer.Stop();
+        _searchDebounceTimer.Tick -= SearchDebounceTimer_Tick;
+        _searchDebounceTimer.Tick += SearchDebounceTimer_Tick;
+        _searchDebounceTimer.Start();
+    }
+
+    private void SearchDebounceTimer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        RefreshList();
+    }
 
     private bool UseMasterDetail() => ActualWidth >= MasterDetailMinWidth;
 

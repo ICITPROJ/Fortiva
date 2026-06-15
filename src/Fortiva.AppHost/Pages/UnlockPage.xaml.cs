@@ -1,19 +1,19 @@
 using Fortiva.AppHost.Services;
 using Fortiva.AppHost.ViewModels;
-using Fortiva.Core.Platform;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 
 namespace Fortiva.AppHost.Pages;
 
-public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
+public sealed partial class UnlockPage : Page
 {
     private readonly ShellViewModel _vm = ShellViewModel.Current;
-    private HelloUnlockManager Hello => new(_vm.HelloDataDirectory, _vm.IsEnterprise);
+    private HelloUnlockManager? _hello;
     private bool _rollbackConfirmRequired;
     private bool _helloCheckComplete;
     private bool _bridgeUnlockMode;
     private bool _autoHelloAttempted;
+    private bool _passwordSectionVisible = true;
 
     public UnlockPage()
     {
@@ -21,6 +21,9 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
         LoadLogo();
         _vm.BrandAppearanceChanged += OnBrandAppearanceChanged;
     }
+
+    private HelloUnlockManager Hello =>
+        _hello ??= new HelloUnlockManager(_vm.HelloDataDirectory, _vm.IsEnterprise);
 
     private void OnBrandAppearanceChanged()
         => RefreshBrandLogo();
@@ -40,6 +43,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
     {
         base.OnNavigatedTo(e);
 
+        _hello = new HelloUnlockManager(_vm.HelloDataDirectory, _vm.IsEnterprise);
         _bridgeUnlockMode = e.Parameter is BridgeUnlockNavigationContext;
 
         if (_vm.IsUnlocked)
@@ -64,8 +68,12 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
         _helloCheckComplete = false;
         _autoHelloAttempted = false;
         HelloBtn.IsEnabled = false;
-        EnablePasswordWhileHelloProbes();
+        BusyRing.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+
+        ApplyHelloFirstLayout(Hello.IsConfigured && !_rollbackConfirmRequired);
         RefreshBrandLogo();
+        App.EnsureMainWindowIcon(_vm.PreferParanoiaMode);
+        _vm.BeginVaultPrefetch();
         _ = CheckHelloAsync();
     }
 
@@ -73,88 +81,135 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
         => BrandAssets.ApplyLogo(BrandLogo, _vm.PreferParanoiaMode);
 
     private void LoadLogo()
+        => RefreshBrandLogo();
+
+    private void ApplyHelloFirstLayout(bool helloPrimary)
     {
-        RefreshBrandLogo();
+        _passwordSectionVisible = !helloPrimary || _rollbackConfirmRequired;
+        PasswordSection.Visibility = _passwordSectionVisible
+            ? Microsoft.UI.Xaml.Visibility.Visible
+            : Microsoft.UI.Xaml.Visibility.Collapsed;
+        UnlockBtn.Visibility = _passwordSectionVisible
+            ? Microsoft.UI.Xaml.Visibility.Visible
+            : Microsoft.UI.Xaml.Visibility.Collapsed;
+        UsePasswordInsteadBtn.Visibility = helloPrimary && !_rollbackConfirmRequired
+            ? Microsoft.UI.Xaml.Visibility.Visible
+            : Microsoft.UI.Xaml.Visibility.Collapsed;
+    }
+
+    private void UsePasswordInstead_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        _passwordSectionVisible = true;
+        PasswordSection.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+        UnlockBtn.Visibility = Microsoft.UI.Xaml.Visibility.Visible;
+        UsePasswordInsteadBtn.Visibility = Microsoft.UI.Xaml.Visibility.Collapsed;
+        PasswordField.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
     }
 
     private async Task CheckHelloAsync()
     {
-        var available = await HelloService.IsAvailableAsync();
+        var configured = Hello.IsConfigured;
+        var consentAvailable = await HelloService.IsAvailableAsync();
+        var unlockReady = configured && await Hello.IsUnlockReadyAsync();
         DispatcherQueue.TryEnqueue(() =>
         {
-            var configured = Hello.IsConfigured;
-            var showHello = available && configured;
+            var showHello = unlockReady;
             HelloBtn.Visibility = showHello
                 ? Microsoft.UI.Xaml.Visibility.Visible
                 : Microsoft.UI.Xaml.Visibility.Collapsed;
 
+            if (showHello && !_rollbackConfirmRequired)
+                ApplyHelloFirstLayout(true);
+
             if (HelloMandatory && configured && !_rollbackConfirmRequired)
             {
-                PasswordField.IsEnabled = false;
-                UnlockBtn.IsEnabled = false;
-                SubtitleText.Text = "Your organization requires Windows Hello to unlock this vault.";
+                SubtitleText.Text = "Use your Windows PIN, face, or fingerprint to unlock.";
+                ApplyHelloFirstLayout(true);
             }
             else if (HelloMandatory && configured && _rollbackConfirmRequired)
             {
                 SubtitleText.Text =
                     "Rollback confirmation requires your master password. Enter it below and tap Unlock.";
+                ApplyHelloFirstLayout(false);
             }
             else if (HelloMandatory && !configured)
             {
-                SubtitleText.Text = available
+                SubtitleText.Text = consentAvailable
                     ? "Windows Hello is required by policy. Unlock with your master password once, then configure Hello in Settings."
                     : "Windows Hello is required by policy but unavailable on this device. Unlock with your master password and contact IT if Hello cannot be enabled.";
             }
-            else if (available && !configured)
+            else if (showHello && !_rollbackConfirmRequired)
+            {
+                SubtitleText.Text = _bridgeUnlockMode
+                    ? "Approve your Windows PIN, face, or fingerprint — Fill will finish automatically if the popup stays open."
+                    : "Approve your Windows PIN, face, or fingerprint to unlock quickly.";
+            }
+            else if (consentAvailable && !configured)
             {
                 SubtitleText.Text = "Enter your master password to continue. " +
                                      "You can set up Windows Hello in Settings → Windows Hello.";
+            }
+            else if (configured && !showHello)
+            {
+                SubtitleText.Text =
+                    "Windows Hello is set up but unavailable right now. Use your master password, or set it up again in Settings.";
+                ApplyHelloFirstLayout(false);
             }
             else
             {
                 SubtitleText.Text = "Enter your master password to continue.";
             }
 
-            if (_bridgeUnlockMode)
-            {
+            if (_bridgeUnlockMode && showHello)
                 HeadingText.Text = "Unlock for browser Fill";
-                SubtitleText.Text = "Your browser asked for credentials on this site. " +
-                                    "Unlock with Windows Hello or your master password — Fill will finish automatically if you keep the extension popup open.";
-            }
 
             _helloCheckComplete = true;
             ApplyUnlockControls();
 
-            if (_bridgeUnlockMode && showHello && configured)
+            if (showHello && !_rollbackConfirmRequired && !_autoHelloAttempted)
                 _ = AutoHelloUnlockAsync();
         });
     }
 
     private async Task AutoHelloUnlockAsync()
     {
-        if (_autoHelloAttempted)
+        if (_autoHelloAttempted || _rollbackConfirmRequired)
             return;
 
         _autoHelloAttempted = true;
 
         try
         {
-            // Cold-start from the browser extension often lands here before the WinUI HWND exists.
-            // Firing Hello too early produces COM errors and misleading "re-setup Hello" guidance.
-            for (var i = 0; i < 50; i++)
+            if (_bridgeUnlockMode)
             {
-                await Task.Delay(100);
-                if (!_bridgeUnlockMode || _vm.IsUnlocked || _vm.IsBusy)
-                    return;
-                if (App.EnsureMainWindowHandle() != IntPtr.Zero)
-                    break;
+                for (var i = 0; i < 50; i++)
+                {
+                    await Task.Delay(100);
+                    if (_vm.IsUnlocked || _vm.IsBusy)
+                        return;
+                    if (App.EnsureMainWindowHandle() != IntPtr.Zero)
+                        break;
+                }
+
+                await Task.Delay(400);
+            }
+            else
+            {
+                for (var i = 0; i < 6; i++)
+                {
+                    if (App.EnsureMainWindowHandle() != IntPtr.Zero)
+                        break;
+                    await Task.Delay(20);
+                }
+
+                await Task.Delay(40);
             }
 
-            await Task.Delay(500);
-            if (!_bridgeUnlockMode || _vm.IsUnlocked || _vm.IsBusy)
+            if (_vm.IsUnlocked || _vm.IsBusy)
                 return;
 
-            HelloBtn_Click(this, new Microsoft.UI.Xaml.RoutedEventArgs());
+            App.EnsureMainWindowHandle();
+            await HelloBtn_ClickCoreAsync();
         }
         catch (Exception ex)
         {
@@ -172,14 +227,6 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
         HelloBtn.IsEnabled = true;
     }
 
-    private void EnablePasswordWhileHelloProbes()
-    {
-        if (HelloMandatory && Hello.IsConfigured && !_rollbackConfirmRequired)
-            return;
-        PasswordField.IsEnabled = true;
-        UnlockBtn.IsEnabled = true;
-    }
-
     private async void UnlockBtn_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
         => await TryUnlockAsync(PasswordField.Password, _rollbackConfirmRequired);
 
@@ -190,37 +237,40 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
     }
 
     private async void HelloBtn_Click(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+        => await HelloBtn_ClickCoreAsync();
+
+    private async Task HelloBtn_ClickCoreAsync()
     {
-        SetBusy(true);
+        if (_vm.IsBusy)
+            return;
+
+        SetBusy(true, "Verifying Windows Hello…");
         ErrorBar.IsOpen = false;
 
-        if (!Hello.IsHardwareBacked)
-        {
-            var helloResult = await HelloService.VerifyAsync("Unlock Fortiva vault");
-            if (!helloResult.Verified)
-            {
-                SetBusy(false);
-                ShowError(helloResult.ErrorMessage ?? "Windows Hello verification failed.");
-                return;
-            }
-        }
-
-        var masterKey = await Hello.TryLoadMasterKeyAsync();
-        if (masterKey is null)
+        var helloResult = await Hello.TryUnlockMasterKeyAsync();
+        if (!helloResult.Ok || helloResult.MasterKey is null)
         {
             SetBusy(false);
+            if (helloResult.Cancelled)
+            {
+                if (!_passwordSectionVisible && !HelloMandatory)
+                    UsePasswordInstead_Click(this, new Microsoft.UI.Xaml.RoutedEventArgs());
+                return;
+            }
+
             if (HelloMandatory)
             {
                 SubtitleText.Text = "Windows Hello could not load your credential. Unlock with your master password, then re-configure Hello in Settings.";
+                ApplyHelloFirstLayout(false);
                 ApplyUnlockControls();
             }
-            ShowError(Hello.IsConfigured
-                ? "Windows Hello did not unlock the vault this time. Try the Hello button again, "
-                  + "or use your master password. Only re-enroll in Settings if Hello keeps failing after a successful password unlock."
-                : "Windows Hello could not unlock the vault key. Try again, use your master password, or set up Hello in Settings.");
+
+            ShowError(helloResult.Error
+                ?? "Windows Hello did not unlock the vault. Try again or use your master password.");
             return;
         }
 
+        var masterKey = helloResult.MasterKey;
         try
         {
             var (ok, error) = await _vm.UnlockWithMasterKeyAsync(
@@ -234,6 +284,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
                 if (HelloMandatory)
                 {
                     SubtitleText.Text = "Windows Hello unlock failed. Unlock with your master password, then re-configure Hello in Settings.";
+                    ApplyHelloFirstLayout(false);
                     ApplyUnlockControls();
                 }
                 ShowError(error ?? "Windows Hello unlock failed. Try your master password, or tap Hello again.");
@@ -246,6 +297,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
                 {
                     RollbackBar.Message = error + "\n\nVault is still read-only. Tap Unlock again to confirm rollback.";
                     _rollbackConfirmRequired = true;
+                    ApplyHelloFirstLayout(false);
                 }
             }
             else
@@ -278,7 +330,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
             return;
         }
 
-        if (HelloMandatory && Hello.IsConfigured && !_rollbackConfirmRequired)
+        if (HelloMandatory && Hello.IsConfigured && !confirmRollback)
         {
             ShowError("Your organization requires Windows Hello to unlock this vault.");
             return;
@@ -290,11 +342,14 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
             return;
         }
 
-        SetBusy(true);
+        SetBusy(true, "Deriving encryption key…");
         ErrorBar.IsOpen = false;
         RollbackBar.IsOpen = false;
 
-        var (ok, error) = await _vm.UnlockAsync(password, paranoiaMode: _vm.PreferParanoiaMode, confirmRollback: confirmRollback);
+        var (ok, error) = await _vm.UnlockAsync(
+            password,
+            paranoiaMode: _vm.PreferParanoiaMode,
+            confirmRollback: confirmRollback);
 
         SetBusy(false);
 
@@ -311,6 +366,7 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
             {
                 RollbackBar.Message = error + "\n\nVault is still read-only. Tap Unlock again to confirm rollback.";
                 _rollbackConfirmRequired = true;
+                ApplyHelloFirstLayout(false);
             }
         }
         else
@@ -330,10 +386,12 @@ public sealed partial class UnlockPage : Microsoft.UI.Xaml.Controls.Page
         ErrorBar.IsOpen = true;
     }
 
-    private void SetBusy(bool busy)
+    private void SetBusy(bool busy, string? status = null)
     {
         BusyRing.Visibility = busy ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
         BusyRing.IsActive = busy;
+        if (busy && status is not null)
+            SubtitleText.Text = status;
         var helloBlocksPassword = HelloMandatory && Hello.IsConfigured && !_rollbackConfirmRequired;
         UnlockBtn.IsEnabled = !busy && _helloCheckComplete && !helloBlocksPassword;
         HelloBtn.IsEnabled = !busy && _helloCheckComplete;

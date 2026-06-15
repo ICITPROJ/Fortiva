@@ -21,6 +21,7 @@ public sealed class VaultSession : IDisposable
     private BridgeLocalhostServer? _localhostBridge;
     private BrowserBridgeServer? _bridge;
     private BridgeTokenBroker? _tokenBroker;
+    private Task? _bridgeStartTask;
     private AutoLockTimer? _autoLock;
     private VaultUnlockContext? _context;
     private string? _bridgeSessionToken;
@@ -98,7 +99,11 @@ public sealed class VaultSession : IDisposable
     public void CreateVault(string masterPassword, SecurityLevel level)
         => _engine.CreateVault(masterPassword, level);
 
-    public void Unlock(string masterPassword, bool paranoiaMode = false, bool confirmRollback = false)
+    public void Unlock(
+        string masterPassword,
+        bool paranoiaMode = false,
+        bool confirmRollback = false,
+        byte[]? prefetchedVaultBytes = null)
     {
         lock (_sessionGate)
         {
@@ -109,7 +114,9 @@ public sealed class VaultSession : IDisposable
             try
             {
                 DisposeSessionCore();
-                _context = _engine.Unlock(masterPassword, paranoiaMode, confirmRollback);
+                _context = prefetchedVaultBytes is not null
+                    ? _engine.UnlockFromPreparedFile(prefetchedVaultBytes, masterPassword, paranoiaMode, confirmRollback)
+                    : _engine.Unlock(masterPassword, paranoiaMode, confirmRollback);
                 RegisterEnterpriseSeat();
                 _audit?.Log(AuditEventType.UnlockSuccess, "Unlock succeeded");
                 StartInfrastructure();
@@ -123,7 +130,11 @@ public sealed class VaultSession : IDisposable
         }
     }
 
-    public void UnlockWithMasterKey(byte[] masterKey, bool paranoiaMode = false, bool confirmRollback = false)
+    public void UnlockWithMasterKey(
+        byte[] masterKey,
+        bool paranoiaMode = false,
+        bool confirmRollback = false,
+        byte[]? prefetchedVaultBytes = null)
     {
         lock (_sessionGate)
         {
@@ -136,7 +147,9 @@ public sealed class VaultSession : IDisposable
             {
                 mkCopy = masterKey.ToArray();
                 DisposeSessionCore();
-                _context = _engine.UnlockWithMasterKey(mkCopy, paranoiaMode, confirmRollback);
+                _context = prefetchedVaultBytes is not null
+                    ? _engine.UnlockWithMasterKeyFromPreparedFile(prefetchedVaultBytes, mkCopy, paranoiaMode, confirmRollback)
+                    : _engine.UnlockWithMasterKey(mkCopy, paranoiaMode, confirmRollback);
                 RegisterEnterpriseSeat();
                 _audit?.Log(AuditEventType.UnlockSuccess, "Hello unlock succeeded");
                 StartInfrastructure();
@@ -321,7 +334,9 @@ public sealed class VaultSession : IDisposable
             if (_context is null)
                 throw new InvalidOperationException("Unlock the vault before reconnecting the browser.");
 
-            StartInfrastructure();
+            WaitForBridgeStartTask();
+            PrepareBridgeSession();
+            StartBridgePipesCore(waitForPriorShutdown: true);
             StateChanged?.Invoke();
         }
     }
@@ -333,6 +348,14 @@ public sealed class VaultSession : IDisposable
         {
             if (_context is null)
                 return false;
+
+            if (BridgeHealthCheck.AreListenersActive())
+                return true;
+
+            WaitForBridgeStartTask(TimeSpan.FromSeconds(3));
+
+            if (BridgeHealthCheck.AreListenersActive())
+                return true;
 
             if (_bridgeShutdownTask is { IsCompleted: false })
             {
@@ -347,10 +370,7 @@ public sealed class VaultSession : IDisposable
                 }
             }
 
-            if (BridgeHealthCheck.AreListenersActive())
-                return true;
-
-            StartInfrastructure();
+            StartBridgePipesCore(waitForPriorShutdown: true);
             StateChanged?.Invoke();
             return BridgeHealthCheck.AreListenersActive();
         }
@@ -706,11 +726,15 @@ public sealed class VaultSession : IDisposable
 
     private void StartInfrastructure()
     {
+        PrepareBridgeSession();
+        StartAutoLockTimer();
+        ScheduleBridgePipesStart();
+    }
+
+    private void PrepareBridgeSession()
+    {
         if (!BridgePipeNaming.HasActiveSession(_enterpriseClient))
             BridgePipeNaming.RotateSessionId(_enterpriseClient);
-
-        WaitForBridgeShutdown();
-        StopBridgeInfrastructure(waitForListeners: true);
 
         BridgeSessionAuth.ConfigureTokenDirectory(FortivaPaths.GetBridgeSessionDirectory(_enterpriseClient));
         BridgeSessionAuth.ClearSessionToken();
@@ -718,17 +742,72 @@ public sealed class VaultSession : IDisposable
         BridgeClientValidator.ConfigureAllowedInstallRoots(AppContext.BaseDirectory);
         _fillNonce = new BridgeFillNonce();
 
+        // HTTP localhost bridge is in-process — start immediately so the extension can connect
+        // while named pipes finish starting (native-messaging fallback uses pipes).
+        EnsureLocalhostBridgeRunning();
+    }
+
+    private void StartAutoLockTimer()
+    {
+        _autoLock?.Dispose();
+        var timeout = PolicyEnforcer.EnforceAutoLock(_autoLockTimeoutSeconds, _policy ?? new FortivaPolicy());
+        _autoLock = new AutoLockTimer(timeout);
+        _autoLock.LockRequested += () =>
+        {
+            if (IsAutoLockSuppressed) return;
+            AutoLockRequested?.Invoke();
+        };
+    }
+
+    private void ScheduleBridgePipesStart()
+    {
+        var prior = _bridgeStartTask;
+        _bridgeStartTask = Task.Run(() =>
+        {
+            try
+            {
+                if (prior is not null)
+                {
+                    try { prior.Wait(TimeSpan.FromSeconds(2)); }
+                    catch { /* superseded start */ }
+                }
+
+                lock (_sessionGate)
+                {
+                    if (_context is null)
+                        return;
+
+                    StartBridgePipesCore(waitForPriorShutdown: true);
+                }
+            }
+            catch (Exception ex)
+            {
+                FortivaDiagnosticLog.Write("VaultSession.ScheduleBridgePipesStart", ex);
+            }
+        });
+    }
+
+    private void StartBridgePipesCore(bool waitForPriorShutdown)
+    {
+        if (waitForPriorShutdown)
+            WaitForBridgeShutdown();
+
+        StopPipeInfrastructure(waitForListeners: true);
+
+        var sessionToken = _bridgeSessionToken
+            ?? throw new InvalidOperationException("Bridge session token is not initialized.");
+
         for (var attempt = 0; attempt < 3; attempt++)
         {
-            _tokenBroker = new BridgeTokenBroker(_bridgeSessionToken, _enterpriseClient);
+            _tokenBroker = new BridgeTokenBroker(sessionToken, _enterpriseClient);
             _tokenBroker.Start();
-            _bridge = new BrowserBridgeServer(ResolveForDomain, ListMatchesForDomain, _bridgeSessionToken, _enterpriseClient);
+            _bridge = new BrowserBridgeServer(ResolveForDomain, ListMatchesForDomain, sessionToken, _enterpriseClient);
             _bridge.Start();
 
             if (BridgeHealthCheck.AreListenersActive(BridgeHealthCheck.StartupHealthTimeoutMs))
                 break;
 
-            StopBridgeInfrastructure(waitForListeners: true);
+            StopPipeInfrastructure(waitForListeners: true);
             if (attempt < 2)
                 Thread.Sleep(100 * (attempt + 1));
         }
@@ -741,6 +820,21 @@ public sealed class VaultSession : IDisposable
                 success: false);
         }
 
+        EnsureLocalhostBridgeRunning();
+    }
+
+    private void WaitForBridgeStartTask(TimeSpan? maxWait = null)
+    {
+        var task = _bridgeStartTask;
+        if (task is null || task.IsCompleted)
+            return;
+
+        try { task.Wait(maxWait ?? TimeSpan.FromSeconds(2)); }
+        catch { /* best effort */ }
+    }
+
+    private void EnsureLocalhostBridgeRunning()
+    {
         try
         {
             _localhostBridge?.Dispose();
@@ -755,22 +849,18 @@ public sealed class VaultSession : IDisposable
             _localhostBridge = null;
             FortivaDiagnosticLog.Write("VaultSession.StartLocalhostBridge", ex);
         }
-
-        _autoLock?.Dispose();
-        var timeout = PolicyEnforcer.EnforceAutoLock(_autoLockTimeoutSeconds, _policy ?? new FortivaPolicy());
-        _autoLock = new AutoLockTimer(timeout);
-        _autoLock.LockRequested += () =>
-        {
-            if (IsAutoLockSuppressed) return;
-            AutoLockRequested?.Invoke();
-        };
     }
 
     private void StopBridgeInfrastructure(bool waitForListeners)
     {
+        WaitForBridgeStartTask(TimeSpan.FromSeconds(1));
         try { _localhostBridge?.Dispose(); } catch { /* best effort */ }
         _localhostBridge = null;
+        StopPipeInfrastructure(waitForListeners);
+    }
 
+    private void StopPipeInfrastructure(bool waitForListeners)
+    {
         var bridge = _bridge;
         var broker = _tokenBroker;
         _bridge = null;

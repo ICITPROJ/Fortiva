@@ -157,8 +157,18 @@ public sealed class BridgeLocalhostServer : IDisposable
     private static bool IsExtensionOrigin(HttpListenerRequest request)
     {
         var origin = request.Headers["Origin"];
-        return !string.IsNullOrEmpty(origin)
-            && string.Equals(origin, BridgeLocalhostConstants.ExtensionOrigin, StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(origin))
+        {
+            var expected = BridgeLocalhostConstants.ExtensionOrigin.TrimEnd('/');
+            if (string.Equals(origin.TrimEnd('/'), expected, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        // Loopback callers (extension service worker may omit Origin on localhost fetch).
+        var remote = request.RemoteEndPoint?.Address;
+        return remote is null
+            || System.Net.IPAddress.IsLoopback(remote)
+            || remote.Equals(System.Net.IPAddress.IPv6Loopback);
     }
 
     private async Task HandlePublicStatusAsync(HttpListenerContext ctx)

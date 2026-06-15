@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Fortiva.AppHost.ViewModels;
 using Fortiva.Core.Hello;
 using Windows.Security.Credentials.UI;
 
@@ -91,6 +92,8 @@ public static class HelloService
 
     private static void PrepareOwnerWindow(IntPtr hwnd)
     {
+        App.EnsureMainWindowIcon(ShellViewModel.Current.PreferParanoiaMode);
+
         if (hwnd == IntPtr.Zero)
             return;
 

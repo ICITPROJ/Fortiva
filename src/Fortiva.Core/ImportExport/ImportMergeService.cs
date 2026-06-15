@@ -220,7 +220,8 @@ public static class ImportMergeService
 
     public static string BuildMatchKey(VaultEntry entry)
     {
-        var host = ExtractHost(entry.Url);
+        var url = VaultEntryWebsite.GetEffectiveUrl(entry) ?? entry.Url;
+        var host = ExtractHost(url ?? "");
         if (string.IsNullOrWhiteSpace(host))
             host = entry.Title.Trim();
         if (string.IsNullOrWhiteSpace(host))

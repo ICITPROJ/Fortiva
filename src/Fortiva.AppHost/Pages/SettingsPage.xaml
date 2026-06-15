@@ -64,7 +64,7 @@
             <Border Style="{StaticResource FortivaSectionDivider}"/>
 
             <!-- Windows Hello -->
-            <StackPanel Spacing="12">
+            <StackPanel x:Name="HelloSection" Spacing="12">
                 <TextBlock Text="Windows Hello" Style="{StaticResource FortivaSectionTitle}"/>
                 <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13">
                     Windows Hello protects access to the vault key protector.

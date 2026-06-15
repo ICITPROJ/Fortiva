@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using Fortiva.Core.Crypto;
 using Fortiva.Core.Hello;
@@ -22,11 +23,11 @@ public static class HelloCredentialStore
 
         try
         {
-            var open = await KeyCredentialManager.OpenAsync(CredentialName);
+            var open = await KeyCredentialManager.OpenAsync(CredentialName).AsTask().ConfigureAwait(false);
             if (open.Status == KeyCredentialStatus.Success)
                 return true;
 
-            return await KeyCredentialManager.IsSupportedAsync();
+            return await KeyCredentialManager.IsSupportedAsync().AsTask().ConfigureAwait(false);
         }
         catch
         {
@@ -34,11 +35,43 @@ public static class HelloCredentialStore
         }
     }
 
-    public static async Task StoreAsync(string dataDirectory, byte[] masterKey)
+    public static async Task<bool> HasOrphanedCredentialAsync(string dataDirectory)
     {
-        var credential = await OpenOrCreateCredentialAsync();
+        if (HelloUnlockManager.HelloBundleExists(dataDirectory))
+            return false;
+
+        try
+        {
+            var open = await KeyCredentialManager.OpenAsync(CredentialName).AsTask().ConfigureAwait(false);
+            return open.Status == KeyCredentialStatus.Success;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static async Task StoreAsync(string dataDirectory, byte[] masterKey, bool forceRecreateCredential = false)
+    {
+        Directory.CreateDirectory(dataDirectory);
+
+        var credential = await OpenOrCreateCredentialAsync(forceRecreateCredential).ConfigureAwait(true);
+        HelloSetupLog.Step("KeyCredential ready; requesting Hello signature for vault binding.");
+
         var challenge = RandomNumberGenerator.GetBytes(32);
-        var signature = await SignChallengeAsync(credential, challenge);
+
+        App.BringMainWindowToFront();
+        byte[] signature;
+        try
+        {
+            signature = await SignChallengeAsync(credential, challenge).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (HelloHardwareErrors.IsHardwareUnavailable(ex))
+        {
+            throw new HelloHardwareUnavailableException(HelloHardwareErrors.Describe(ex), ex);
+        }
+
+        HelloSetupLog.Step("Hello signature received; writing binding files.");
         var wrapKey = DeriveWrapKey(challenge, signature);
 
         byte[]? wrappedMk = null;
@@ -53,12 +86,29 @@ public static class HelloCredentialStore
             var path = Path.Combine(dataDirectory, "hello.keyprotect");
             HelloFileSecurity.WriteRestrictedFile(path, payload);
             HelloFileSecurity.WriteRestrictedFile(Path.Combine(dataDirectory, "hello.binding"), challenge);
+            VerifyBundleWritten(dataDirectory);
         }
         finally
         {
             SecureMemory.Zero(wrapKey);
             SecureMemory.Zero(challenge);
             if (wrappedMk is not null) SecureMemory.Zero(wrappedMk);
+        }
+    }
+
+    private static void VerifyBundleWritten(string dataDirectory)
+    {
+        var path = Path.Combine(dataDirectory, "hello.keyprotect");
+        if (!File.Exists(path))
+        {
+            throw new InvalidOperationException(
+                $"Windows Hello binding was not saved to {path}. Check folder permissions and try again.");
+        }
+
+        if (new FileInfo(path).Length < WindowsHelloKeyProtector.MagicV4.Length + 33)
+        {
+            throw new InvalidOperationException(
+                $"Windows Hello binding at {path} is incomplete. Try setup again.");
         }
     }
 
@@ -78,11 +128,11 @@ public static class HelloCredentialStore
 
         try
         {
-            var open = await KeyCredentialManager.OpenAsync(CredentialName);
+            var open = await KeyCredentialManager.OpenAsync(CredentialName).AsTask().ConfigureAwait(false);
             if (open.Status != KeyCredentialStatus.Success || open.Credential is null)
                 return null;
 
-            var signature = await SignChallengeAsync(open.Credential, challenge);
+            var signature = await SignChallengeAsync(open.Credential, challenge).ConfigureAwait(false);
             var wrapKey = DeriveWrapKey(challenge, signature);
             try
             {
@@ -107,7 +157,7 @@ public static class HelloCredentialStore
     {
         try
         {
-            await KeyCredentialManager.DeleteAsync(CredentialName);
+            await KeyCredentialManager.DeleteAsync(CredentialName).AsTask().ConfigureAwait(false);
         }
         catch
         {
@@ -115,18 +165,34 @@ public static class HelloCredentialStore
         }
     }
 
-    private static async Task<KeyCredential> OpenOrCreateCredentialAsync()
+    private static async Task<KeyCredential> OpenOrCreateCredentialAsync(bool forceRecreate)
     {
-        var open = await KeyCredentialManager.OpenAsync(CredentialName);
-        if (open.Status == KeyCredentialStatus.Success && open.Credential is not null)
-            return open.Credential;
+        App.EnsureMainWindowIcon();
+        App.EnsureMainWindowHandle();
+
+        if (!forceRecreate)
+        {
+            var open = await KeyCredentialManager.OpenAsync(CredentialName).AsTask().ConfigureAwait(true);
+            if (open.Status == KeyCredentialStatus.Success && open.Credential is not null)
+                return open.Credential;
+        }
+
+        try { await KeyCredentialManager.DeleteAsync(CredentialName).AsTask().ConfigureAwait(true); }
+        catch { /* best effort */ }
 
         var create = await KeyCredentialManager.RequestCreateAsync(
             CredentialName,
-            KeyCredentialCreationOption.ReplaceExisting);
-        if (create.Status != KeyCredentialStatus.Success || create.Credential is null)
-            throw new InvalidOperationException("Windows Hello key credential could not be created.");
+            KeyCredentialCreationOption.ReplaceExisting).AsTask().ConfigureAwait(true);
 
+        if (create.Status != KeyCredentialStatus.Success || create.Credential is null)
+        {
+            HelloSetupLog.Step($"KeyCredential RequestCreate failed: {create.Status}");
+            throw new InvalidOperationException(
+                $"Windows Hello key credential could not be created ({create.Status}). " +
+                "Open Windows Settings → Accounts → Sign-in options and confirm PIN or biometrics are set up.");
+        }
+
+        HelloSetupLog.Step("KeyCredential created; next step is Hello signature.");
         return create.Credential;
     }
 
@@ -136,10 +202,27 @@ public static class HelloCredentialStore
 
     private static async Task<byte[]> SignChallengeAsync(KeyCredential credential, byte[] challenge)
     {
+        App.EnsureMainWindowIcon();
+        App.EnsureMainWindowHandle();
+        App.BringMainWindowToFront();
+
         var buffer = CryptographicBuffer.CreateFromByteArray(challenge);
-        var result = await credential.RequestSignAsync(buffer);
+        KeyCredentialOperationResult result;
+        try
+        {
+            result = await credential.RequestSignAsync(buffer).AsTask().ConfigureAwait(true);
+        }
+        catch (COMException ex) when (HelloHardwareErrors.IsHardwareUnavailable(ex))
+        {
+            throw new HelloHardwareUnavailableException(HelloHardwareErrors.Describe(ex), ex);
+        }
+
         if (result.Status != KeyCredentialStatus.Success || result.Result is null)
-            throw new InvalidOperationException("Windows Hello signature request failed.");
+        {
+            throw new InvalidOperationException(
+                $"Windows Hello signature request failed ({result.Status}). " +
+                "Try again, or remove Hello in Settings and set it up again.");
+        }
 
         CryptographicBuffer.CopyToByteArray(result.Result, out var bytes);
         return bytes;

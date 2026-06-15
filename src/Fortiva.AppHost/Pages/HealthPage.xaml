@@ -57,7 +57,7 @@
         </DataTemplate>
     </Page.Resources>
 
-    <ScrollViewer>
+    <ScrollViewer x:Name="PageScroll">
         <StackPanel Margin="24" Spacing="24" MaxWidth="960">
             <Grid ColumnSpacing="16">
                 <Grid.ColumnDefinitions>

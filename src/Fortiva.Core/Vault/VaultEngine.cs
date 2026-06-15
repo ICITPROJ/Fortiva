@@ -128,6 +128,13 @@ public sealed class VaultEngine
         return UnlockFromBytes(fileBytes, masterPassword, paranoiaMode, confirmRollback);
     }
 
+    public VaultUnlockContext UnlockFromPreparedFile(
+        byte[] fileBytes,
+        string masterPassword,
+        bool paranoiaMode = false,
+        bool confirmRollback = false)
+        => UnlockFromBytes(fileBytes, masterPassword, paranoiaMode, confirmRollback);
+
     public VaultUnlockContext UnlockFromSnapshot(
         int snapshotIndex,
         string masterPassword,
@@ -159,6 +166,22 @@ public sealed class VaultEngine
             throw new FileNotFoundException("Vault not found.", _snapshots.VaultPath);
 
         var fileBytes = File.ReadAllBytes(_snapshots.VaultPath);
+        return UnlockWithMasterKeyFromBytes(fileBytes, masterKey, paranoiaMode, confirmRollback);
+    }
+
+    public VaultUnlockContext UnlockWithMasterKeyFromPreparedFile(
+        byte[] fileBytes,
+        byte[] masterKey,
+        bool paranoiaMode = false,
+        bool confirmRollback = false)
+        => UnlockWithMasterKeyFromBytes(fileBytes, masterKey, paranoiaMode, confirmRollback);
+
+    private VaultUnlockContext UnlockWithMasterKeyFromBytes(
+        byte[] fileBytes,
+        byte[] masterKey,
+        bool paranoiaMode,
+        bool confirmRollback)
+    {
         if (fileBytes.Length > VaultConstants.MaxVaultFileBytes)
             throw new InvalidDataException("Vault file exceeds maximum allowed size.");
 

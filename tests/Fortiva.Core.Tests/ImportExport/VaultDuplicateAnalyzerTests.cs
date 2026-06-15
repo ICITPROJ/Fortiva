@@ -35,6 +35,24 @@ public sealed class VaultDuplicateAnalyzerTests
     }
 
     [Fact]
+    public void FindGroups_DetectsSimilarUrlVariations()
+    {
+        var entries = new List<VaultEntry>
+        {
+            Entry("IONOS login", "user@test.com", "same", "https://login.ionos.co.uk/"),
+            Entry("IONOS www", "user@test.com", "same", "https://www.ionos.co.uk/"),
+            Entry("Other", "bob", "x", "https://mail.example")
+        };
+
+        var groups = VaultDuplicateAnalyzer.FindGroups(entries);
+
+        Assert.Single(groups);
+        var ionos = groups[0];
+        Assert.Equal(VaultDuplicateKind.SimilarSite, ionos.Kind);
+        Assert.Equal(2, ionos.EntryIds.Count);
+    }
+
+    [Fact]
     public void FindGroups_IgnoresUniqueEntries()
     {
         var entries = new List<VaultEntry>

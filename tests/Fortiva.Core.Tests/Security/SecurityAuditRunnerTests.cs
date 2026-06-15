@@ -111,6 +111,22 @@ public class SecurityAuditRunnerTests
     }
 
     [Fact]
+    public void Run_WeakAndMissingPasswords_LinkToHealthSections()
+    {
+        var report = SecurityAuditRunner.Run(new SecurityAuditContext
+        {
+            Entries =
+            [
+                Entry("Weak", "123"),
+                Entry("Missing", "")
+            ]
+        });
+
+        Assert.Contains(report.Findings, f => f.Id == "weak" && f.ActionHint == "health-weak");
+        Assert.Contains(report.Findings, f => f.Id == "missing" && f.ActionHint == "health-missing");
+    }
+
+    [Fact]
     public void Run_CriticalFindings_LowersOverallScore()
     {
         var clean = SecurityAuditRunner.Run(new SecurityAuditContext

@@ -196,6 +196,7 @@ public sealed class BridgeCoordinator : IBridgeCoordinator
     private static bool IsHealthOnlyTrigger(string triggerReason) =>
         string.Equals(triggerReason, "Watchdog", StringComparison.OrdinalIgnoreCase)
         || string.Equals(triggerReason, "WindowActivated", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(triggerReason, "VaultUnlock", StringComparison.OrdinalIgnoreCase)
         || triggerReason.Contains("Health", StringComparison.OrdinalIgnoreCase);
 
     private bool ShouldRotateSession(string triggerReason)

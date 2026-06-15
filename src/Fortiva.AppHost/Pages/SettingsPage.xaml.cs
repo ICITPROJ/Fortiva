@@ -102,11 +102,8 @@ public sealed partial class SettingsPage : Page
             ClipboardSlider.IsEnabled = !policy.ClipboardDisabled;
         }
 
-        HelloStatus.Text = Hello.IsConfigured
-            ? Hello.IsHardwareBacked
-                ? "Windows Hello is configured (hardware-backed TPM)."
-                : "Windows Hello is configured (software protection — upgrade to TPM when available)."
-            : "Windows Hello is not configured.";
+        HelloStatus.Text = "Checking Windows Hello…";
+        _ = RefreshHelloStatusAsync();
         _ = RefreshHelloUpgradeBannerAsync();
 
         var canChangeSecrets = _vm.IsUnlocked && !_vm.IsReadOnly;
@@ -564,7 +561,7 @@ public sealed partial class SettingsPage : Page
             {
                 try
                 {
-                    await _vm.SyncHelloCredentialFromSessionAsync();
+                    await _vm.SyncHelloCredentialFromSessionAsync(Hello.IsHardwareBacked);
                 }
                 catch (Exception helloEx)
                 {
@@ -643,22 +640,76 @@ public sealed partial class SettingsPage : Page
 
         try
         {
-            await _vm.SyncHelloCredentialAsync(pwdBox.Password);
-            HelloStatus.Text = Hello.IsHardwareBacked
-                ? "Windows Hello is configured (hardware-backed)."
-                : "Windows Hello is configured.";
+            App.BringMainWindowToFront();
+            HelloStatus.Text = "Setting up Windows Hello… Watch for a Windows security prompt.";
+            RemoveHelloBtn.IsEnabled = false;
+            SetupHelloBtn.Content = "Setting up…";
+            HelloSection.StartBringIntoView();
+            await Task.Yield();
+
+            var upgradeToHardware = HelloUpgradeInfo.IsOpen
+                                    && !_vm.PersonalSettings.HelloHardwareUnavailable;
+            await _vm.RepairHelloSetupAsync(pwdBox.Password, upgradeToHardware);
+            await RefreshHelloStatusAsync();
+
+            if (!Hello.IsConfigured)
+            {
+                var fail =
+                    "Windows Hello was approved but Fortiva could not save the binding.\n\n" +
+                    $"Folder: {_vm.HelloDataDirectory}\n\n" +
+                    "Check that hello.keyprotect can be created next to vault.fva.";
+                await ShowMessageDialogAsync("Windows Hello setup incomplete", fail);
+                ShowInfo(fail, InfoBarSeverity.Error);
+                return;
+            }
+
             HelloUpgradeInfo.IsOpen = false;
             RemoveHelloBtn.IsEnabled = true;
-            ShowInfo("Windows Hello set up. You can unlock with face, fingerprint, or PIN.", InfoBarSeverity.Success);
+            var ok =
+                "Windows Hello is ready.\n\n" +
+                "Lock the vault (lock icon) and use the blue Hello button to unlock with PIN, face, or fingerprint.";
+            await ShowMessageDialogAsync("Windows Hello ready", ok);
+            ShowInfo("Windows Hello set up. Lock the vault to try Hello unlock.", InfoBarSeverity.Success);
+        }
+        catch (HelloHardwareUnavailableException ex)
+        {
+            HelloSetupLog.Error("SetupHello_Click", ex);
+            await RefreshHelloStatusAsync();
+            await ShowMessageDialogAsync("Hardware Hello unavailable", ex.Message);
+            ShowInfo(ex.Message, InfoBarSeverity.Warning);
         }
         catch (Exception ex)
         {
-            ShowInfo(App.DescribeException(ex), InfoBarSeverity.Error);
+            var detail = HelloHardwareErrors.IsHardwareUnavailable(ex)
+                ? HelloHardwareErrors.Describe(ex)
+                : App.DescribeException(ex);
+            HelloSetupLog.Error("SetupHello_Click", ex);
+            await ShowMessageDialogAsync("Windows Hello setup failed", detail);
+            ShowInfo(detail, InfoBarSeverity.Error);
+            await RefreshHelloStatusAsync();
         }
         finally
         {
+            SetupHelloBtn.Content = "Set up Windows Hello";
             SetupHelloBtn.IsEnabled = true;
         }
+    }
+
+    private async Task ShowMessageDialogAsync(string title, string message)
+    {
+        var dlg = new ContentDialog
+        {
+            Title = title,
+            Content = new TextBlock
+            {
+                Text = message,
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.WrapWholeWords
+            },
+            CloseButtonText = "OK",
+            XamlRoot = XamlRoot
+        };
+        FortivaDialogs.Configure(dlg, XamlRoot);
+        await dlg.ShowAsync();
     }
 
     private async void RemoveHello_Click(object sender, RoutedEventArgs e)
@@ -932,9 +983,33 @@ public sealed partial class SettingsPage : Page
         }
     }
 
+    private async Task RefreshHelloStatusAsync()
+    {
+        if (Hello.IsConfigured)
+        {
+            HelloStatus.Text = Hello.IsHardwareBacked
+                ? $"Windows Hello is configured (hardware-backed TPM). Binding: {_vm.HelloDataDirectory}"
+                : $"Windows Hello is configured (software protection). Binding: {_vm.HelloDataDirectory}";
+            RemoveHelloBtn.IsEnabled = true;
+            return;
+        }
+
+        if (await HelloCredentialStore.HasOrphanedCredentialAsync(_vm.HelloDataDirectory))
+        {
+            HelloStatus.Text =
+                "Windows Hello was set up but the vault binding is missing. Tap Set up below to repair it.";
+            RemoveHelloBtn.IsEnabled = true;
+            return;
+        }
+
+        HelloStatus.Text = $"Windows Hello is not configured. Binding folder: {_vm.HelloDataDirectory}";
+        RemoveHelloBtn.IsEnabled = false;
+    }
+
     private Task RefreshHelloUpgradeBannerAsync()
     {
         HelloUpgradeInfo.IsOpen = !_vm.PersonalSettings.HelloHardwareUpgradeDismissed
+            && !_vm.PersonalSettings.HelloHardwareUnavailable
             && Hello.UsesSoftwareOnlyHello;
         return Task.CompletedTask;
     }

@@ -29,10 +29,38 @@ public static class FortivaPaths
     public static string PersonalVaultPath =>
         Path.Combine(PersonalVaultDirectory, Vault.VaultConstants.VaultFileName);
 
-    public static string GetHelloDataDirectory(bool enterprise, string? vaultDirectory = null) =>
-        enterprise
-            ? Path.Combine(EnterpriseCrashLogDirectory, "Hello")
-            : vaultDirectory ?? PersonalVaultDirectory;
+    public static string GetHelloDataDirectory(bool enterprise, string? vaultDirectory = null)
+    {
+        if (enterprise)
+            return Path.Combine(EnterpriseCrashLogDirectory, "Hello");
+
+        var vaultDir = vaultDirectory ?? PersonalVaultDirectory;
+        MigrateLegacyHelloFilesIfNeeded(vaultDir);
+        return vaultDir;
+    }
+
+    private static void MigrateLegacyHelloFilesIfNeeded(string vaultDir)
+    {
+        Directory.CreateDirectory(vaultDir);
+        foreach (var legacyDir in new[]
+                 {
+                     PersonalLegacyDataRoot,
+                     Path.Combine(PersonalCrashLogDirectory, "Hello"),
+                     Path.Combine(PersonalLegacyLocalRoot, "Hello")
+                 })
+        {
+            foreach (var name in new[] { "hello.keyprotect", "hello.binding" })
+            {
+                var source = Path.Combine(legacyDir, name);
+                var dest = Path.Combine(vaultDir, name);
+                if (!File.Exists(source) || File.Exists(dest))
+                    continue;
+
+                try { File.Move(source, dest); }
+                catch { /* best effort */ }
+            }
+        }
+    }
 
     public static string GetBridgeSessionDirectory(bool enterprise) =>
         enterprise ? EnterpriseCrashLogDirectory : PersonalCrashLogDirectory;

@@ -23,6 +23,8 @@ public sealed class PersonalUserSettings
     public string? LastUpdateApplyError { get; set; }
     /// <summary>User dismissed the Hello v4 hardware upgrade prompt.</summary>
     public bool HelloHardwareUpgradeDismissed { get; set; }
+    /// <summary>TPM / KeyCredential store failed on this PC; stop offering hardware upgrade.</summary>
+    public bool HelloHardwareUnavailable { get; set; }
     /// <summary>Last portable vault directory (USB). Null when using the local profile vault.</summary>
     public string? PortableVaultDirectory { get; set; }
     /// <summary>User dismissed the one-time browser extension setup prompt.</summary>

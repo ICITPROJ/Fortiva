@@ -26,8 +26,6 @@ public sealed partial class HealthPage : Page
     private string? _categoryFilter;
     private AuditSeverity? _severityFilter;
 
-    private Action? _stateChangedHandler;
-
     public HealthPage()
     {
         InitializeComponent();
@@ -57,24 +55,17 @@ public sealed partial class HealthPage : Page
         base.OnNavigatedTo(e);
         ThemeService.ApplyToElement(this);
         _vm.ThemeChanged += OnThemeChanged;
-        _stateChangedHandler = () => DispatcherQueue.TryEnqueue(async () =>
-        {
-            if (_vm.IsUnlocked)
-                await BuildReportAsync();
-        });
-        _vm.StateChanged += _stateChangedHandler;
+
+        string? focusIssue = e.Parameter is HealthPageNavigationContext ctx ? ctx.FocusIssue : null;
         await BuildReportAsync();
+        if (focusIssue is not null)
+            FocusPasswordIssue(focusIssue);
     }
 
     protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
         _vm.ThemeChanged -= OnThemeChanged;
-        if (_stateChangedHandler is not null)
-        {
-            _vm.StateChanged -= _stateChangedHandler;
-            _stateChangedHandler = null;
-        }
     }
 
     private void OnThemeChanged()
@@ -93,16 +84,16 @@ public sealed partial class HealthPage : Page
         => NavigationService.Current.Navigate<PasswordGeneratorPage>();
 
     private void WeakCard_Pressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
-        => WeakExpander.IsExpanded = true;
+        => FocusPasswordIssue("weak");
 
     private void ReusedCard_Pressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
-        => ReusedExpander.IsExpanded = true;
+        => FocusPasswordIssue("reused");
 
     private void OldCard_Pressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
-        => OldExpander.IsExpanded = true;
+        => FocusPasswordIssue("old");
 
     private void MissingCard_Pressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
-        => MissingExpander.IsExpanded = true;
+        => FocusPasswordIssue("missing");
 
     private void TotalCard_Pressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
@@ -541,6 +532,7 @@ public sealed partial class HealthPage : Page
         "import" => "Import",
         "import-duplicates" => "View duplicates",
         "audit" => "View audit log",
+        "health-weak" or "health-reused" or "health-old" or "health-missing" => "View entries",
         _ => "Review"
     };
 
@@ -556,8 +548,43 @@ public sealed partial class HealthPage : Page
                 NavigationService.Current.Navigate<ImportExportPage>(ImportExportNavigationContext.ShowDuplicates);
                 break;
             case "audit": NavigationService.Current.Navigate<AuditPage>(); break;
+            case "health-weak": NavigateToPasswordIssue("weak"); break;
+            case "health-reused": NavigateToPasswordIssue("reused"); break;
+            case "health-old": NavigateToPasswordIssue("old"); break;
+            case "health-missing": NavigateToPasswordIssue("missing"); break;
             default: _vm.RequestNavigationTab("Vault"); NavigationService.Current.Navigate<VaultPage>(); break;
         }
+    }
+
+    private void NavigateToPasswordIssue(string issue)
+    {
+        _vm.RequestNavigationTab("Health");
+        if (NavigationService.Current.CurrentPageType == typeof(HealthPage))
+            FocusPasswordIssue(issue);
+        else
+            NavigationService.Current.Navigate<HealthPage>(HealthPageNavigationContext.ForIssue(issue));
+    }
+
+    private void FocusPasswordIssue(string issue)
+    {
+        WeakExpander.IsExpanded = issue == "weak";
+        ReusedExpander.IsExpanded = issue == "reused";
+        OldExpander.IsExpanded = issue == "old";
+        MissingExpander.IsExpanded = issue == "missing";
+
+        var target = issue switch
+        {
+            "weak" => WeakExpander,
+            "reused" => ReusedExpander,
+            "old" => OldExpander,
+            "missing" => MissingExpander,
+            _ => null
+        };
+
+        if (target is null)
+            return;
+
+        DispatcherQueue.TryEnqueue(() => target.StartBringIntoView());
     }
 
     private void PopulateStrengthBars(PasswordHealthReport report, int loginTotal)

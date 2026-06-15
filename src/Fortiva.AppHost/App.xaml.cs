@@ -116,6 +116,69 @@ public partial class App : Application
         return MainWindowHandle;
     }
 
+    /// <summary>Refreshes the taskbar/title-bar icon before system dialogs (Windows Hello) use the app HWND.</summary>
+    public static void EnsureMainWindowIcon(bool? paranoia = null)
+    {
+        try
+        {
+            if (_window is MainWindow mainWindow)
+            {
+                var useParanoia = paranoia ?? ShellViewModel.Current.PreferParanoiaMode;
+                BrandAssets.ApplyWindowIcon(mainWindow.AppWindow, useParanoia);
+            }
+        }
+        catch (Exception ex)
+        {
+            LogException("EnsureMainWindowIcon", ex);
+        }
+    }
+
+    public static void BringMainWindowToFront()
+    {
+        try
+        {
+            EnsureMainWindowHandle();
+            EnsureMainWindowIcon();
+            if (_window is null)
+                return;
+
+            _window.Activate();
+            if (_window is MainWindow mainWindow)
+                mainWindow.AppWindow.Show(true);
+        }
+        catch (Exception ex)
+        {
+            LogException("BringMainWindowToFront", ex);
+        }
+    }
+
+    public static async Task RunOnUiThreadAsync(Func<Task> action)
+    {
+        if (action is null)
+            throw new ArgumentNullException(nameof(action));
+
+        if (_uiDispatcher is null || _uiDispatcher.HasThreadAccess)
+        {
+            await action().ConfigureAwait(true);
+            return;
+        }
+
+        var tcs = new TaskCompletionSource();
+        _uiDispatcher.TryEnqueue(async () =>
+        {
+            try
+            {
+                await action().ConfigureAwait(true);
+                tcs.TrySetResult();
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        });
+        await tcs.Task.ConfigureAwait(true);
+    }
+
     internal static string DescribeException(Exception ex)
     {
         if (ex is AggregateException aggregate)

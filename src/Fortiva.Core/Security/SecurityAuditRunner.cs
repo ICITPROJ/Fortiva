@@ -126,7 +126,7 @@ public static class SecurityAuditRunner
                 Severity = health.ReusedCount >= 3 ? AuditSeverity.Critical : AuditSeverity.Warning,
                 Priority = 1,
                 AffectedCount = health.ReusedCount,
-                ActionHint = "generator"
+                ActionHint = "health-reused"
             });
         }
 
@@ -141,7 +141,7 @@ public static class SecurityAuditRunner
                 Severity = health.WeakCount >= 5 ? AuditSeverity.Critical : AuditSeverity.Warning,
                 Priority = 2,
                 AffectedCount = health.WeakCount,
-                ActionHint = "generator"
+                ActionHint = "health-weak"
             });
         }
 
@@ -156,7 +156,7 @@ public static class SecurityAuditRunner
                 Severity = AuditSeverity.Warning,
                 Priority = 3,
                 AffectedCount = health.OldCount,
-                ActionHint = "vault"
+                ActionHint = "health-old"
             });
         }
 
@@ -171,7 +171,7 @@ public static class SecurityAuditRunner
                 Severity = AuditSeverity.Warning,
                 Priority = 4,
                 AffectedCount = health.MissingCount,
-                ActionHint = "vault"
+                ActionHint = "health-missing"
             });
         }
     }
@@ -318,7 +318,7 @@ public static class SecurityAuditRunner
             return;
 
         var exact = groups.Where(g => g.Kind == VaultDuplicateKind.Exact).ToList();
-        var similar = groups.Where(g => g.Kind == VaultDuplicateKind.SameSiteUser).ToList();
+        var similar = groups.Where(g => g.Kind is VaultDuplicateKind.SameSiteUser or VaultDuplicateKind.SimilarSite).ToList();
 
         if (exact.Count > 0)
         {
@@ -344,7 +344,7 @@ public static class SecurityAuditRunner
                 Category = "Vault",
                 Id = "vault-similar-duplicates",
                 Title = $"{entryCount} entries in {similar.Count} similar login group{(similar.Count == 1 ? "" : "s")}",
-                Detail = "Same site and username appear more than once with different passwords (often from Keep both on import). Review in Import / Export → Duplicate management.",
+                Detail = "Same site and username appear more than once with different passwords or URL variations (often from Keep both on import). Review in Import / Export → Duplicate management.",
                 Severity = AuditSeverity.Info,
                 Priority = 25,
                 AffectedCount = entryCount,

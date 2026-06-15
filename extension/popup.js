@@ -77,6 +77,8 @@ const MESSAGES = {
     "Username submitted. Fortiva will fill the password when the next step appears — no second click needed.",
   multiStepFilled: (title) =>
     `Filled “${title}” through a multi-step login. Submit when you are ready.`,
+  passwordOnlyStep: (title) =>
+    `Filled “${title}”. Your email or username was already set on the previous step — submit when ready.`,
   usernamePartial:
     "Password filled, but the username field was not detected on this page. Paste your username manually or click the username box and Fill again.",
   fillFailed: "Could not fill the login fields on this page.",
@@ -239,6 +241,10 @@ function applyFillResult(result, host, title) {
   if (result?.ok) {
     if (result.multiStep) {
       setStatus(MESSAGES.multiStepFilled(title || host), "success");
+      return true;
+    }
+    if (result.passwordOnlyStep) {
+      setStatus(MESSAGES.passwordOnlyStep(title || host), "success");
       return true;
     }
     if (result.partial && result.reason === "username_not_found") {

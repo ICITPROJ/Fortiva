@@ -6,6 +6,10 @@ const EXECUTE_FILL_TIMEOUT_MS = 30000;
 
 let cachedBridgeToken = null;
 
+function extensionOrigin() {
+  return `chrome-extension://${chrome.runtime.id}/`;
+}
+
 function emptyStatus(error = "host_unreachable", message) {
   return {
     status: { appRunning: false, vaultUnlocked: false, error },
@@ -15,7 +19,11 @@ function emptyStatus(error = "host_unreachable", message) {
 }
 
 async function httpBridgeFetch(path, options = {}) {
-  const headers = { Accept: "application/json", ...(options.headers || {}) };
+  const headers = {
+    Accept: "application/json",
+    Origin: extensionOrigin(),
+    ...(options.headers || {}),
+  };
   if (cachedBridgeToken) headers["X-Fortiva-Bridge-Token"] = cachedBridgeToken;
 
   const controller = new AbortController();
@@ -37,31 +45,63 @@ async function httpBridgeFetch(path, options = {}) {
   }
 }
 
+async function httpBridgeFetchWithRetry(path, options = {}, attempts = 4) {
+  for (let i = 0; i < attempts; i++) {
+    const data = await httpBridgeFetch(path, options);
+    if (data) return data;
+    if (i < attempts - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 180 * (i + 1)));
+    }
+  }
+  return null;
+}
+
 async function ensureBridgeToken() {
   if (cachedBridgeToken) return true;
-  const boot = await httpBridgeFetch("/auth/session", { method: "POST" });
-  return !!cachedBridgeToken;
+
+  for (let i = 0; i < 5; i++) {
+    const boot = await httpBridgeFetch("/auth/session", { method: "POST" });
+    if (cachedBridgeToken) return true;
+    if (boot?.status?.error === "vault_locked") return false;
+    if (i < 4) {
+      await new Promise((resolve) => setTimeout(resolve, 200 * (i + 1)));
+    }
+  }
+
+  return false;
 }
 
 async function httpGetStatusAndMatches(domain, url) {
-  if (!(await ensureBridgeToken())) {
-    const params = new URLSearchParams({ domain: domain || "", url: url || "" });
-    return httpBridgeFetch(`/status-and-matches?${params}`, { method: "GET" });
-  }
   const params = new URLSearchParams({ domain: domain || "", url: url || "" });
-  return httpBridgeFetch(`/status-and-matches?${params}`, { method: "GET" });
+  const path = `/status-and-matches?${params}`;
+
+  if (await ensureBridgeToken()) {
+    const authed = await httpBridgeFetch(path, { method: "GET" });
+    if (authed?.status) return authed;
+    cachedBridgeToken = null;
+  }
+
+  return httpBridgeFetchWithRetry(path, { method: "GET" });
 }
 
 async function getStatusAndMatches(domain, url) {
   const http = await httpGetStatusAndMatches(domain, url);
-  if (http?.status && !http.authRequired) return http;
-  if (http?.status?.vaultUnlocked && http?.authRequired && (await ensureBridgeToken())) {
-    const authed = await httpBridgeFetch(
-      `/status-and-matches?${new URLSearchParams({ domain: domain || "", url: url || "" })}`,
-      { method: "GET" }
-    );
-    if (authed?.status) return authed;
+  if (http?.status) {
+    if (!http.authRequired) return http;
+    if (http.status.vaultUnlocked && (await ensureBridgeToken())) {
+      const params = new URLSearchParams({ domain: domain || "", url: url || "" });
+      const authed = await httpBridgeFetch(`/status-and-matches?${params}`, { method: "GET" });
+      if (authed?.status) return authed;
+    }
+    if (http.status.vaultUnlocked && http.authRequired) {
+      return {
+        ...http,
+        status: { ...http.status, error: "token_stale" },
+      };
+    }
+    return http;
   }
+
   return nativeCommand({
     command: "get_status_and_matches",
     payload: { domain: domain || "", url: url || "" },
@@ -72,6 +112,7 @@ async function executeFill(payload) {
   if (await ensureBridgeToken()) {
     const http = await httpExecuteFill(payload);
     if (http) return http;
+    cachedBridgeToken = null;
   }
   return nativeCommand({ command: "execute_fill", payload }, EXECUTE_FILL_TIMEOUT_MS);
 }
@@ -159,7 +200,8 @@ function mapStatusToLegacy(statusBlock, nativeError) {
     return {
       ok: false,
       status: "setup_required",
-      message: "Fortiva bridge error. Run Connect browser in Fortiva Settings.",
+      message:
+        "Fortiva bridge is still starting. Wait a moment, click Retry, or use Settings → Restart bridge.",
     };
   }
 

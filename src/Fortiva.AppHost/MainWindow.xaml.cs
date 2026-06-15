@@ -375,6 +375,8 @@ public sealed partial class MainWindow : Window
                 NavigationService.Current.ClearHistory();
                 StatusText.Text = "Locked";
                 RefreshStatusChrome();
+                Activate();
+                App.EnsureMainWindowHandle();
             }
             finally { _suppressNav = false; }
         });
@@ -455,6 +457,8 @@ public sealed partial class MainWindow : Window
 
         try
         {
+            // Bridge pipes start in the background during unlock — give the UI a moment first.
+            await Task.Delay(300).ConfigureAwait(true);
             await _vm.ReconcileBridgeLifecycleAsync("VaultUnlock").ConfigureAwait(true);
             StartBridgeWatchdog();
         }

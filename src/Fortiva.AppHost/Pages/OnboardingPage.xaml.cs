@@ -339,7 +339,7 @@ public sealed partial class OnboardingPage : Page
             {
                 try
                 {
-                    await _vm.SyncHelloCredentialFromSessionAsync();
+                    await _vm.SyncHelloCredentialFromSessionAsync(_vm.IsEnterprise);
                 }
                 catch (Exception helloEx)
                 {

@@ -3,7 +3,7 @@
  * Supports multi-step logins (username first, password on next screen) with automatic advance + watch.
  */
 (function () {
-  const COORDINATOR_VERSION = "1.0.43";
+  const COORDINATOR_VERSION = "1.0.45";
   if (document.documentElement.dataset.fortivaFillCoordinator === COORDINATOR_VERSION) return;
   document.documentElement.dataset.fortivaFillCoordinator = COORDINATOR_VERSION;
 
@@ -96,6 +96,30 @@
     if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
     if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
     return 0;
+  }
+
+  /** True when the page is a password-only step (username was entered on a prior screen). */
+  function isPasswordOnlyLoginStep(passField) {
+    if (!passField) return false;
+
+    const visibleUserField = findVisible(USERNAME_SELECTORS);
+    if (visibleUserField) return false;
+
+    const pathAndHash = `${location.pathname}${location.hash}${location.search}`.toLowerCase();
+    if (
+      /\/password|password-step|signin\/password|login\/password|auth\/password|verify-password|enter-password|step=password|step=2\b/i.test(
+        pathAndHash
+      )
+    ) {
+      return true;
+    }
+
+    const container = passField.closest("form, section, main, [role='main']") || document.body;
+    const text = String(container?.innerText || "");
+    const hasEmailOnPage = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(text);
+    if (hasEmailOnPage) return true;
+
+    return !findUsernameField(passField);
   }
 
   function findUsernameNearPassword(passField) {
@@ -367,6 +391,10 @@
     }
 
     if (username && !filledUser) {
+      if (isPasswordOnlyLoginStep(passField)) {
+        clearPendingFill();
+        return { ok: true, passwordOnlyStep: true };
+      }
       return { ok: true, partial: true, reason: "username_not_found" };
     }
 
