@@ -14,6 +14,7 @@ public sealed class BridgeLocalhostServer : IDisposable
     private readonly Func<bool> _isUnlocked;
     private readonly Func<CredentialRequest, CredentialResponse> _listMatches;
     private readonly Func<CredentialRequest, CredentialResponse> _resolveCredentials;
+    private readonly string _listenPrefix;
     private readonly string _bridgeToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
@@ -22,11 +23,15 @@ public sealed class BridgeLocalhostServer : IDisposable
     public BridgeLocalhostServer(
         Func<bool> isUnlocked,
         Func<CredentialRequest, CredentialResponse> listMatches,
-        Func<CredentialRequest, CredentialResponse> resolveCredentials)
+        Func<CredentialRequest, CredentialResponse> resolveCredentials,
+        string? listenPrefix = null)
     {
         _isUnlocked = isUnlocked ?? throw new ArgumentNullException(nameof(isUnlocked));
         _listMatches = listMatches ?? throw new ArgumentNullException(nameof(listMatches));
         _resolveCredentials = resolveCredentials ?? throw new ArgumentNullException(nameof(resolveCredentials));
+        _listenPrefix = string.IsNullOrWhiteSpace(listenPrefix)
+            ? BridgeLocalhostConstants.Prefix
+            : listenPrefix;
     }
 
     public void Start()
@@ -35,7 +40,7 @@ public sealed class BridgeLocalhostServer : IDisposable
             return;
 
         var listener = new HttpListener();
-        listener.Prefixes.Add(BridgeLocalhostConstants.Prefix);
+        listener.Prefixes.Add(_listenPrefix);
         listener.Start();
 
         _listener = listener;
