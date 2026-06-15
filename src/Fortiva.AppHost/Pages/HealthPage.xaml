@@ -57,17 +57,22 @@
         </DataTemplate>
     </Page.Resources>
 
-    <ScrollViewer x:Name="PageScroll" Style="{StaticResource FortivaPageScrollViewer}">
-        <StackPanel Spacing="24" MaxWidth="960" HorizontalAlignment="Stretch">
+    <Grid RowSpacing="0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Style="{StaticResource FortivaToolbar}" Padding="24,20,24,16">
             <Grid ColumnSpacing="16">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Security audit" Style="{StaticResource FortivaPageTitle}"/>
-                    <TextBlock Text="Full vault scan - passwords, settings, vault hygiene, and activity."
-                               Style="{StaticResource FortivaBodyText}" TextWrapping="WrapWholeWords"/>
+                    <TextBlock Text="Security audit" Style="{StaticResource FortivaHeroTitle}"/>
+                    <TextBlock Text="Full vault scan — passwords, settings, vault hygiene, and activity."
+                               Style="{StaticResource FortivaMutedText}" TextWrapping="WrapWholeWords"/>
                     <TextBlock x:Name="LastRunLabel" Style="{StaticResource FortivaMutedText}"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
@@ -92,8 +97,10 @@
                     <ProgressRing x:Name="LoadingRing" IsActive="False" Width="24" Height="24"/>
                 </StackPanel>
             </Grid>
+        </Border>
 
-            <!-- Category summary -->
+    <ScrollViewer x:Name="PageScroll" Grid.Row="1" Style="{StaticResource FortivaPageScrollViewer}">
+        <StackPanel Spacing="24" HorizontalAlignment="Stretch">
             <Grid x:Name="CategoryGrid" ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -312,4 +319,5 @@
             </Expander>
         </StackPanel>
     </ScrollViewer>
+    </Grid>
 </Page>
