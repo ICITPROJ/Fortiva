@@ -24,7 +24,7 @@ jobs:
           script: |
             const runId = context.payload.workflow_run.id;
             core.info(`Fortiva CI run ${runId} failed on attempt 1 — re-running failed jobs once.`);
-            await github.rest.actions.reRunFailedJobs({
+            await github.request('POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun-failed-jobs', {
               owner: context.repo.owner,
               repo: context.repo.repo,
               run_id: runId,
