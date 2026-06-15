@@ -526,7 +526,7 @@ public static class SecurityAuditRunner
             Category = "Vault",
             Id = "backup-tip",
             Title = "Export an encrypted backup periodically",
-            Detail = "Save a .fvab file to cloud storage so you can restore on a new PC with your master password.",
+            Detail = "Save a .fva file to cloud storage so you can restore on a new PC with your master password.",
             Severity = AuditSeverity.Info,
             Priority = 96,
             AffectedCount = 0,

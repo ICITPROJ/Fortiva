@@ -1,6 +1,6 @@
 # Fortiva Military-Grade Security Specification
 
-**Version:** 1.0.55  
+**Version:** 1.0.37  
 **Status:** Personal — **Tier B+** certified in automation; Enterprise — **Tier A−** when signed + Intune deployed  
 **Audience:** Security review, IT deployment, release engineering
 
@@ -50,8 +50,9 @@ This document is the authoritative checklist for “military-grade” Fortiva. E
 | SR-BRIDGE-08 | Punycode `xn--` labels rejected | `DomainSafety.ContainsAceEncodedLabel` | `DomainSafetyTests` |
 | SR-BRIDGE-09 | Native host path-under-install | `BridgeClientValidator`, `NativeHostIntegrity` | `BridgeAppLauncherTests` |
 | SR-BRIDGE-10 | Bounded pipe reads (DoS) | `BridgeJson.ReadBoundedLineAsync` | Unit tests |
-| SR-BRIDGE-11 | Single native-host spawn per Fill | `execute_fill` in `BridgeNativeForwarder` | Extension matrix |
+| SR-BRIDGE-11 | Single native-host spawn per Fill (fallback path) | `execute_fill` in `BridgeNativeForwarder` | Extension matrix |
 | SR-BRIDGE-12 | Unlock rate limit surfaced to user | `RATE_LIMITED` error path | Extension matrix |
+| SR-BRIDGE-13 | Loopback HTTP token auth on `:7847` | `BridgeLocalhostServer` | `BridgeLocalhostServerTests` |
 
 ### SR-EXT — Browser extension
 
@@ -62,6 +63,7 @@ This document is the authoritative checklist for “military-grade” Fortiva. E
 | SR-EXT-03 | `sender.id === chrome.runtime.id` | `background.js` | Code review |
 | SR-EXT-04 | SPA / React input events | Native value setter + `InputEvent` | Manual IONOS |
 | SR-EXT-05 | Multi-step login UX | `password_step_pending` message | Manual |
+| SR-EXT-06 | HTTP-first bridge; native one-shot fallback | `extension/background.js` | Manual + E2E script |
 
 ### SR-ENT — Enterprise deployment
 
@@ -91,11 +93,11 @@ This document is the authoritative checklist for “military-grade” Fortiva. E
 |------|----------|------------------------|-------------------------------------|
 | **A** | All SR-* pass + Authenticode + pen test sign-off | — | Target after cert + signing |
 | **A−** | All SR-* pass + Authenticode on Enterprise deploy | — | When customer + signing provisioned |
-| **B+** | Bridge validation + pipe sealing + extension matrix | **1.0.55** | Personal today (unsigned OK) |
+| **B+** | Bridge validation + pipe sealing + extension matrix | **1.0.37** | Personal today (unsigned OK) |
 | **B** | Sound crypto; bridge gaps | Pre-1.0.50 | — |
 | **C** | Broken fill / open pipes | — | — |
 
-**Personal 1.0.55 rating: B+** (unsigned installer is the main adoption blocker, not a crypto failure).
+**Personal 1.0.37 rating: B+** (unsigned installer is the main adoption blocker, not a crypto failure).
 
 ---
 

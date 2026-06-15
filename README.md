@@ -33,11 +33,11 @@ Master Key (MK)  ──AES-256-GCM (Windows CNG)──►  Wrapped Vault Key (VK
                                     Rollback state · Policy · License
 ```
 
-- **Windows Hello**: `UserConsentVerifier` gates access to DPAPI-protected key blob.
-  The master password remains the cryptographic root.
+- **Windows Hello**: Protects a `hello.keyprotect` blob next to your vault (software-backed by default; TPM/KeyCredential upgrade when available). One biometric prompt during setup. Auto-prompt on unlock when Hello is configured.
 - **Paranoia Mode**: Vault opens read-only if revision counter or DPAPI state indicates rollback.
 - **Snapshot rotation**: Last N vault snapshots retained for recovery.
-- **Security audit**: Full in-app scan (passwords, settings, vault hygiene) with JSON/HTML export.
+- **Security audit**: Full in-app scan (passwords, settings, vault hygiene) with actionable deep links and JSON/HTML export.
+- **Browser bridge**: Loopback HTTP (`127.0.0.1:7847`) with native-messaging fallback; one-shot host per Fill (see [`docs/BRIDGE-ARCHITECTURE.md`](docs/BRIDGE-ARCHITECTURE.md)).
 - **SecureZeroMemory**: All sensitive buffers explicitly zeroed via `CryptographicOperations.ZeroMemory`.
 
 ## Build
@@ -95,18 +95,21 @@ Installers bundle .NET 8 + Windows App SDK and install **WebView2** + **VC++ x64
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System overview, release/update flow, component map |
-| [`docs/UserManual.md`](docs/UserManual.md) | End-user guide (install, vault, security audit, backup) |
-| [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) | Threat model, trust boundaries, mitigations |
-| [`docs/VAULT-FORMAT.md`](docs/VAULT-FORMAT.md) | `.fva` binary format specification |
-| [`docs/POLICY-LICENSING.md`](docs/POLICY-LICENSING.md) | License structure, policy engine |
-| [`docs/ONBOARDING-RECOVERY.md`](docs/ONBOARDING-RECOVERY.md) | Onboarding, panic lock, snapshot recovery |
-| [`docs/UPDATE-STRATEGY.md`](docs/UPDATE-STRATEGY.md) | Personal auto-update via GitHub Releases |
-| [`docs/RELEASE-PIPELINE.md`](docs/RELEASE-PIPELINE.md) | CI/CD — auto-release on push to `main` |
-| [`docs/GIT-PUSH-WALKTHROUGH.pdf`](docs/GIT-PUSH-WALKTHROUGH.pdf) | Short git push guide for contributors |
-| [`docs/SECURITY-PENTEST-REPORT.md`](docs/SECURITY-PENTEST-REPORT.md) | Adversarial review findings |
+**[Documentation index](docs/README.md)** — pick your path: user, developer, or security/IT.
+
+| Audience | Document | Description |
+|----------|----------|-------------|
+| **Users** | [`docs/UserManual.md`](docs/UserManual.md) | Install, vault, Hello, browser Fill, backup, troubleshooting |
+| **Users** | [`docs/ONBOARDING-RECOVERY.md`](docs/ONBOARDING-RECOVERY.md) | First run checklist and recovery scenarios |
+| **Developers** | [`docs/DEVELOPER-GUIDE.md`](docs/DEVELOPER-GUIDE.md) | Repo layout, on-disk data, key classes, flows, tests |
+| **Developers** | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System overview, release/update pipeline |
+| **Developers** | [`docs/BRIDGE-ARCHITECTURE.md`](docs/BRIDGE-ARCHITECTURE.md) | Browser bridge — loopback HTTP + native fallback |
+| **Developers** | [`docs/VAULT-FORMAT.md`](docs/VAULT-FORMAT.md) | `.fva` binary format specification |
+| **Security / IT** | [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) | Threat model, trust boundaries, mitigations |
+| **Security / IT** | [`docs/POLICY-LICENSING.md`](docs/POLICY-LICENSING.md) | License structure, policy engine |
+| **Ops** | [`docs/RELEASE-PIPELINE.md`](docs/RELEASE-PIPELINE.md) | CI/CD — auto-release on push to `main` |
+| **Ops** | [`docs/UPDATE-STRATEGY.md`](docs/UPDATE-STRATEGY.md) | Personal auto-update via GitHub Releases |
+| **Compliance** | [`PRIVACY.md`](PRIVACY.md) | Privacy policy (local-first, no telemetry) |
 
 ## QA
 

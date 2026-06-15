@@ -2,7 +2,14 @@
 
 High-level structure of the Fortiva desktop stack: components, data flow, distribution, and how updates reach installed clients.
 
-For security boundaries see [`THREAT-MODEL.md`](THREAT-MODEL.md). For vault binary layout see [`VAULT-FORMAT.md`](VAULT-FORMAT.md).
+| Audience | Start here |
+|----------|------------|
+| **Users** | [User Manual](UserManual.md) — no code required |
+| **Developers** | [Developer guide](DEVELOPER-GUIDE.md) — repo layout, classes, flows |
+| **Security / IT** | [Threat model](THREAT-MODEL.md), [Policy & licensing](POLICY-LICENSING.md) |
+| **All docs** | [Documentation index](README.md) |
+
+For vault binary layout see [`VAULT-FORMAT.md`](VAULT-FORMAT.md). For on-disk paths see [`DEVELOPER-GUIDE.md`](DEVELOPER-GUIDE.md#on-disk-data-personal).
 
 ---
 
@@ -16,14 +23,15 @@ For security boundaries see [`THREAT-MODEL.md`](THREAT-MODEL.md). For vault bina
 │  │ (Pages, VM)  │  │ crypto/vault │  │ Settings…    │  │ policy/audit│ │
 │  └──────┬───────┘  └──────┬───────┘  └──────────────┘  └──────┬──────┘ │
 │         │                 │                                      │        │
-│         │    BrowserBridgeInstallService / BrowserBridgeServer │        │
+│         │ BridgeLocalhostServer :7847 + BrowserBridgeCoordinator │        │
 └─────────┼─────────────────┼──────────────────────────────────────┼────────┘
           │                 │                                      │
           ▼                 ▼                                      ▼
 ┌─────────────────┐  ┌──────────────────┐              ┌─────────────────┐
 │ Browser ext.    │  │ BrowserBridge    │              │ Local vault     │
 │ (MV3 Chromium)  │◄─┤ .Host.exe        │              │ %APPDATA%\      │
-│ native messaging│  │ named pipe       │              │ Fortiva\*.fva   │
+│ HTTP :7847 first│  │ one-shot native  │              │ Fortiva\*.fva   │
+│ native fallback │  │ → named pipes    │              │ hello.keyprotect│
 └─────────────────┘  └──────────────────┘              └─────────────────┘
 ```
 
@@ -31,7 +39,7 @@ For security boundaries see [`THREAT-MODEL.md`](THREAT-MODEL.md). For vault bina
 |-------|------------------|------|
 | **UI shell** | `Fortiva.AppHost`, `Fortiva.Personal`, `Fortiva.Enterprise`, `Fortiva.Admin` | WinUI 3 pages, navigation, settings, onboarding |
 | **Core** | `Fortiva.Core` | Vault format, Argon2id + AES-GCM (CNG), policy, audit, updates |
-| **Browser bridge** | `Fortiva.BrowserBridge.Host`, `extension/` | Manual fill only; native messaging + pipe to vault |
+| **Browser bridge** | `Fortiva.BrowserBridge.Host`, `extension/`, `BridgeLocalhostServer` | Manual fill only; loopback HTTP + one-shot native messaging fallback |
 | **Tooling** | `Fortiva.LicenseTool`, `scripts/`, `packaging/` | Licenses, installers, CI helpers |
 
 ---
@@ -134,7 +142,10 @@ is closed, or prompt to close-and-relaunch; manual **Load unpacked** remains the
 **Enterprise:** installer sets `ExtensionInstallForcelist` + HKLM native messaging (IT-managed);
 Intune Win32 packaging and daily HKLM drift repair are documented in [`packaging/intune/README.md`](../packaging/intune/README.md).
 
-The extension uses a **persistent native messaging port** and **push snapshots** from WinUI (no popup polling loop). When the vault is unlocked, `cachedSessionToken` travels on the Events push stream and is injected into `prepare_fill` / `execute_fill` requests so the native host can skip the token-broker pipe on warm fills. Full design: [`BRIDGE-ARCHITECTURE.md`](BRIDGE-ARCHITECTURE.md).
+As of **v1.0.37+**, the extension uses **loopback HTTP first** (`http://127.0.0.1:7847`) with a
+session token, falling back to **one-shot** `sendNativeMessage` per operation when HTTP is unavailable.
+There is **no persistent native port**, **no push cache**, and **no `cachedSessionToken` bypass**.
+Full design: [`BRIDGE-ARCHITECTURE.md`](BRIDGE-ARCHITECTURE.md).
 
 ```text
 App launch / Connect browser
@@ -151,14 +162,21 @@ Personal: --load-extension / close-browser prompt / Load unpacked
 Enterprise: policy force-install from GitHub CRX + updates.xml
         │
         ▼
-background.js: connectNative port + STATE_CHANGED push cache
-popup.js → prepare_fill / execute_fill (cachedSessionToken in envelope)
-        → native host → BridgeNativeForwarder → credential pipe → VaultSession
+Fortiva.Personal.exe (vault unlocked)
+  • BridgeLocalhostServer :7847 — GET status/matches, POST execute-fill (token auth)
+  • Named pipes — native host when extension falls back from HTTP
+        │
+        ▼
+extension/background.js
+  • HTTP /auth/session → bridge token → /status-and-matches
+  • Fallback: sendNativeMessage → one-shot Fortiva.BrowserBridge.Host.exe → pipes → VaultSession
+  • User-initiated Fill only (content script)
 ```
 
 | Component | Location |
 |-----------|----------|
 | Install / register | `Fortiva.Core/BrowserBridge/BrowserBridgeInstallService.cs` |
+| Loopback server | `Fortiva.Core/BrowserBridge/BridgeLocalhostServer.cs` |
 | UI helper | `Fortiva.AppHost/Services/BrowserExtensionSetupHelper.cs` |
 | Extension | `extension/` (MV3, manual fill only) |
 | Verification script | `scripts/test-browser-extension.ps1` |
@@ -178,15 +196,19 @@ Tests run **before** release artifacts are published.
 
 ## Repository map (documentation)
 
+Full index with audience tags: **[README.md](README.md)**.
+
 | Document | Topic |
 |----------|--------|
-| [`BRIDGE-ARCHITECTURE.md`](BRIDGE-ARCHITECTURE.md) | Browser bridge coordinator, session pipes, push cache, token bypass, Intune HKLM |
-| [`BRIDGE-VALIDATION.md`](BRIDGE-VALIDATION.md) | End-to-end validation report, risks, next actions |
-| [`RELEASE-PIPELINE.md`](RELEASE-PIPELINE.md) | CI release workflow, assets, troubleshooting |
-| [`UPDATE-STRATEGY.md`](UPDATE-STRATEGY.md) | Personal auto-update behaviour, enterprise Intune |
-| [`GIT-PUSH-WALKTHROUGH.pdf`](GIT-PUSH-WALKTHROUGH.pdf) | Short git push guide for contributors |
-| [`UserManual.md`](UserManual.md) | End-user install and browser extension |
+| [`DEVELOPER-GUIDE.md`](DEVELOPER-GUIDE.md) | Repo layout, on-disk data, key classes, runtime flows |
+| [`UserManual.md`](UserManual.md) | End-user install, vault, browser extension |
+| [`BRIDGE-ARCHITECTURE.md`](BRIDGE-ARCHITECTURE.md) | Loopback HTTP + one-shot native host |
+| [`BRIDGE-VALIDATION.md`](BRIDGE-VALIDATION.md) | Bridge smoke tests (v1.0.37+) |
+| [`VAULT-FORMAT.md`](VAULT-FORMAT.md) | `.fva` binary specification |
 | [`THREAT-MODEL.md`](THREAT-MODEL.md) | Trust boundaries and mitigations |
+| [`RELEASE-PIPELINE.md`](RELEASE-PIPELINE.md) | CI release workflow |
+| [`UPDATE-STRATEGY.md`](UPDATE-STRATEGY.md) | Personal auto-update behaviour |
+| [`POLICY-LICENSING.md`](POLICY-LICENSING.md) | Enterprise license and policy engine |
 
 ---
 

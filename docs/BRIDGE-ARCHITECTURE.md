@@ -1,41 +1,68 @@
 # Fortiva Browser Bridge Architecture (v1.0.37+)
 
-Fortiva’s browser integration connects a Chromium extension, a **one-shot** native messaging host (`Fortiva.BrowserBridge.Host`), and the WinUI desktop app through **session-scoped named pipes** and a **single lifecycle coordinator**.
+Fortiva’s browser integration connects a Chromium extension, a **one-shot** native messaging host (`Fortiva.BrowserBridge.Host`), and the WinUI desktop app. As of v1.0.37 the extension prefers **loopback HTTP** on `127.0.0.1:7847` (while Fortiva is running and unlocked) and falls back to native messaging when HTTP is unavailable.
+
+| Audience | What to read |
+|----------|--------------|
+| **Users** | [User Manual §11 — Browser Extension](UserManual.md#11-browser-extension) |
+| **Developers** | This document + [Developer guide — Browser Fill flow](DEVELOPER-GUIDE.md#runtime-flows) |
+| **QA** | [Bridge validation checklist](BRIDGE-VALIDATION.md) |
+
+### In one sentence (for everyone)
+
+The extension asks **your local Fortiva app** for matching logins over `127.0.0.1` — never the internet — and only fills fields when **you** click Fill.
+
+---
 
 ## Design principles
 
 | Rule | Implementation |
 |------|----------------|
-| No long-lived port | Extension uses `chrome.runtime.sendNativeMessage` per operation |
+| Prefer loopback HTTP when app is running | `BridgeLocalhostServer` on port **7847**; token via `POST /auth/session` |
+| Native fallback | `chrome.runtime.sendNativeMessage` — one spawn per operation, host exits after response |
+| No long-lived native port | Extension does not hold `connectNative` open |
 | No push cache | No `STATE_CHANGED`, no snapshot merge, no `cachedSessionToken` |
-| No session churn on focus | Watchdog / window-activate reconcile health only — no session rotate |
-| Strict timeouts | Status command: **5 s**; host exits after each request |
-| Single status command | `get_status_and_matches` replaces `ping`, `prepare_fill`, `list_credentials` for the extension |
+| No session churn on focus | Watchdog reconciles health only — no session rotate on window activate |
+| Strict timeouts | HTTP: **3 s** default; native status: **8 s**; execute fill: **30 s** |
+| Single status path | `get_status_and_matches` (HTTP or native) replaces legacy ping/prepare/list split |
 | No browser unlock | Locked vault returns `vault_locked` immediately; user unlocks in Fortiva |
 
 ## End-state pipeline
 
 ```text
 [Extension popup / background]
-   └── sendNativeMessage({ command: "get_status_and_matches", payload: { domain, url } })
+   ├── (preferred) fetch http://127.0.0.1:7847/auth/session → bridge token
+   │        └── GET /status-and-matches?domain=&url=  → { status, matches, fillNonce }
+   │
+   └── (fallback) sendNativeMessage({ command: "get_status_and_matches", ... })
         └── Fortiva.BrowserBridge.Host.exe  (spawn → one request → one response → exit)
-             └── Named pipes → Fortiva.Personal.exe (token broker + credential pipe)
-                  └── Returns { status, matches, fillNonce }
+             └── Named pipes → Fortiva.Personal.exe → VaultSession
 
 [Fill click]
-   └── sendNativeMessage({ command: "execute_fill", payload: { domain, url, entryId, fillNonce } })
-        └── Same one-shot host path → get_credentials on credential pipe
-             └── Extension injects username/password via content script
+   ├── POST /execute-fill  (HTTP, token header)
+   └── or sendNativeMessage({ command: "execute_fill", ... })
+        └── Same paths → credential release → content script fills fields
 ```
 
 ## Component overview
 
 | Layer | Responsibility |
 |-------|----------------|
-| **Extension** (`background.js`, `popup.js`) | One-shot native calls only; no cached bridge state |
+| **Extension** (`background.js`, `popup.js`) | HTTP-first status/fill; native fallback; in-memory `bridgeToken` only (no disk cache) |
+| **Loopback server** (`BridgeLocalhostServer`) | In-process HTTP on `:7847`; token auth; public status when locked |
 | **Native host** (`NativeMessagingHostPump`) | Read one stdin frame, dispatch, write one stdout frame, exit |
-| **Forwarder** (`BridgeNativeForwarder.GetStatusAndMatchesAsync`) | 5 s budget; token from broker (retry once on stale); list matches |
-| **WinUI** (`BridgeCoordinator`, `VaultSession`) | Pipes, session registry, hash sidecars; no push to extension |
+| **Forwarder** (`BridgeNativeForwarder.GetStatusAndMatchesAsync`) | Native path: token broker + list matches |
+| **WinUI** (`BridgeCoordinator`, `VaultSession`) | Pipes, session registry, hash sidecars; starts localhost server when unlocked |
+
+## Loopback HTTP API (v1.0.37+)
+
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `POST` | `/auth/session` | Extension `Origin` header | Issue `bridgeToken` when vault unlocked |
+| `GET` | `/status-and-matches` | Optional token | Status + credential matches for domain/URL |
+| `POST` | `/execute-fill` | `X-Fortiva-Bridge-Token` | Release credentials for fill (nonce required) |
+
+Unauthenticated `GET /status-and-matches` returns vault locked/unlocked summary with empty matches (`authRequired: true` when unlocked).
 
 ## `get_status_and_matches` response
 
@@ -107,6 +134,20 @@ With Fortiva running, vault unlocked, page URL `https://login.ionos.co.uk`:
 - [ ] Fill click completes when vault unlocked and fields visible
 - [ ] `Test-BrowserBridgeE2E.ps1 -RequireReady` passes
 - [ ] No `Fortiva.BrowserBridge.Host.exe` left running after native calls
+
+## Source files (developers)
+
+| Area | Path |
+|------|------|
+| Extension HTTP client | `extension/background.js` — `BRIDGE_HTTP`, timeouts, token cache |
+| Extension UI | `extension/popup.js`, `extension/content.js` |
+| Loopback server | `src/Fortiva.Core/BrowserBridge/BridgeLocalhostServer.cs` |
+| Port constant | `src/Fortiva.Core/BrowserBridge/BridgeLocalhostConstants.cs` |
+| Native one-shot host | `src/Fortiva.BrowserBridge.Host/` → `NativeMessagingHostPump` |
+| Pipe forwarder | `src/Fortiva.Core/BrowserBridge/BridgeNativeForwarder.cs` |
+| App lifecycle | `src/Fortiva.AppHost/Services/BridgeCoordinator.cs` |
+| Install / registry | `src/Fortiva.Core/BrowserBridge/BrowserBridgeInstallService.cs` |
+| Settings UI | `src/Fortiva.AppHost/Pages/SettingsPage.xaml.cs` |
 
 ## Enterprise
 

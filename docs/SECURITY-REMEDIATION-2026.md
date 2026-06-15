@@ -9,11 +9,11 @@ Fortiva is an **offline-first, local-trust** password manager. The realistic adv
 | Boundary | Trust | Residual risk |
 |----------|-------|----------------|
 | Vault file (`vault.fva`) | Argon2id + AES-GCM | Offline cracking if password weak |
-| Browser bridge pipes | Current-user ACL + client validation | Same-user pipe sniffing while unlocked |
+| Browser bridge | Loopback HTTP `:7847` + named pipes (native fallback) | Same-user pipe sniffing while unlocked |
 | Native messaging | HKCU registry + extension ID | Registry hijack until next app launch |
-| Windows Hello v4 | TPM/KeyCredential signature | User must complete Hello per unwrap |
+| Windows Hello | Software `hello.keyprotect` (v3) or TPM/KeyCredential (v4) | Same-user malware on software-only binding |
 
-**Design principle:** Fail closed on auth; minimize secret lifetime in pipes; never autofill without explicit user action in extension UI.
+**Design principle:** Fail closed on auth; minimize secret lifetime in pipes; loopback HTTP token auth when app unlocked; never autofill without explicit user action in extension UI.
 
 ## Penetration test — findings patched in 1.0.29
 
@@ -42,9 +42,10 @@ Fortiva is an **offline-first, local-trust** password manager. The realistic adv
 ## Remaining accepted risks (documented)
 
 1. **Unsigned Personal updates** — SHA-256 manifest + HTTPS allowlist until code signing ships (`docs/CODESIGNING.md`)
-2. **Plaintext credentials on local pipes** — same-user threat; mitigated by nonce + exact host match + audit log
+2. **Credential pipe sealing** — username/password AES-GCM sealed on release pipe; same-user threat remains while unlocked
 3. **HKCU native messaging** — re-registered on app launch; Enterprise should use HKLM installer path
-4. **Master passwords as `string` in CLR** — long-term refactor to pinned buffers
+4. **Loopback HTTP :7847** — localhost-only; other local processes could probe status when Fortiva is running (token required for fill)
+5. **Master passwords as `string` in CLR** — long-term refactor to pinned buffers
 
 ## Verification
 
@@ -53,5 +54,6 @@ Fortiva is an **offline-first, local-trust** password manager. The realistic adv
 dotnet test tests/Fortiva.Core.Tests
 
 # Live bridge (unlock vault first for -RequireReady)
-powershell -File scripts/Test-BrowserBridge.ps1 -Iterations 100 -RequireReady
+powershell -File scripts/Test-BrowserBridgeE2E.ps1 -RequireReady
+powershell -File scripts/test-browser-extension.ps1
 ```

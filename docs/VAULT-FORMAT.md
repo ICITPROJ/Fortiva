@@ -1,5 +1,8 @@
 # Fortiva Vault Format (`.fva`)
 
+> **Users:** Your vault is the file `vault.fva` in `%AppData%\Fortiva\`. You do not need this spec unless you integrate with Fortiva programmatically.  
+> **Developers:** Binary layout for parsers, migrations, and security review.
+
 ## File layout
 
 ```

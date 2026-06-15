@@ -1,6 +1,38 @@
 # Fortiva — User Manual
 ### Published by icmclab studio
 
+> **Who this is for:** Anyone using Fortiva Personal or Enterprise on Windows — no technical background required.  
+> **Developers / IT:** See [docs/README.md](README.md) for architecture, threat model, and deployment guides.
+
+---
+
+## Quick start (Personal)
+
+If you just installed Fortiva and want the essentials:
+
+1. **Create your vault** — pick a strong master password and write it down offline. Fortiva cannot reset it.
+2. **Add a login** — **My Vault** → **+ Add entry** → fill title, username, password, and **Website** (the login page URL).
+3. **Connect the browser** — **Settings** → **Browser extension** → **Connect browser**. Reload the extension if Settings shows a version mismatch.
+4. **Fill on a website** — open a login page → click the Fortiva icon → **Fill**.
+5. **Back up** — **Import / Export** → **Export encrypted** → save the `.fva` file somewhere safe (cloud or USB).
+
+Optional: enable **Windows Hello** in Settings for faster unlock, and run **Security audit** to review password health.
+
+---
+
+## Glossary (plain language)
+
+| Term | Meaning |
+|------|---------|
+| **Vault** | Your encrypted password store on this PC (`vault.fva`). |
+| **Master password** | The one password that unlocks the vault. Never stored by Fortiva. |
+| **Windows Hello** | Fingerprint, face, or PIN unlock — optional shortcut; master password still needed for recovery. |
+| **Fill** | You click Fill in the browser; Fortiva sends username/password to the page. Never automatic on page load. |
+| **Paranoia Mode** | Extra protection if an old copy of your vault is restored — vault may open read-only until you confirm. |
+| **Security audit** | In-app health check for weak/reused passwords and settings — no data sent online. |
+| **Encrypted backup** | A `.fva` file you export with its own password — safe to store in cloud or email. |
+| **Panic lock** | Shield icon (top-right) — locks vault and hides the window instantly. |
+
 ---
 
 ## Table of Contents
@@ -41,6 +73,14 @@ Fortiva never transmits your passwords to any server. There is no cloud sync, no
 | **Fortiva Personal** | Individuals | `FortivaPersonal-{version}-Setup.exe` from [GitHub Releases](https://github.com/ICITPROJ/Fortiva/releases) |
 | **Fortiva Enterprise** | Business users with IT-managed policies | `FortivaEnterprise-{version}-Setup.exe` |
 | **Fortiva Admin Console** | IT administrators | `FortivaAdmin-{version}-Setup.exe` |
+
+**Key capabilities (v1.0.37):**
+
+- **Security audit** — full-width dashboard with actionable deep links and JSON/HTML export
+- **Windows Hello** — software-backed unlock by default; optional TPM upgrade in Settings
+- **Browser extension** — fill logins from Chrome or Edge when you click **Fill** (see [§11](#11-browser-extension))
+- **Import/export** — duplicate scanning, encrypted `.fva` backups (import also accepts `.fvab`), preview before import
+- **Keyboard shortcuts** — **Ctrl+K** vault search, **Ctrl+Shift+P** command palette
 
 ---
 
@@ -133,7 +173,8 @@ This is the single password that protects everything. It is never stored anywher
 
 Windows Hello lets you unlock Fortiva using your fingerprint, face, or PIN instead of typing your master password every time.
 
-- Click **Enable Windows Hello** to set it up. Windows will prompt you for your chosen Hello method.
+- Click **Enable Windows Hello** to set it up. Windows prompts once for your chosen Hello method.
+- Fortiva stores a **`hello.keyprotect`** file next to your vault (software-backed by default; TPM/KeyCredential upgrade offered later in Settings when available).
 - Or click **Skip for now** to use your master password only. You can enable Hello later in Settings.
 
 ### Step 4 — Final Security Setup
@@ -159,8 +200,9 @@ On subsequent launches, the **Unlock** screen appears.
 2. Click **Unlock** (or press Enter).
 
 ### With Windows Hello
-1. Click the **Windows Hello** button (only shown if Hello is configured).
-2. Authenticate with your fingerprint, face, or PIN when Windows prompts.
+1. If Hello is configured, the unlock screen opens in **Hello-first** mode: Windows Hello may **prompt automatically**, and the password field is hidden until you choose **Use password instead**.
+2. Or click the **Windows Hello** button when shown.
+3. Authenticate with your fingerprint, face, or PIN when Windows prompts.
 
 ### Rollback Warning
 If the vault detects that a previous snapshot has been restored (e.g. due to a system restore or file copy), a yellow warning banner appears. In Paranoia Mode the vault opens in read-only mode until you acknowledge the warning in Settings.
@@ -176,10 +218,14 @@ The red **shield icon** in the top-right corner instantly locks the vault **and 
 ## 6. Managing Entries
 
 ### 6.1 Viewing Entries
-The **My Vault** screen shows all your saved entries as a scrollable list. Each row shows the entry title, username, and a domain initial avatar.
+The **My Vault** screen shows all your saved entries as a scrollable list or card grid (toggle in the toolbar). Each row shows the entry title, username, and a domain initial avatar.
 
 ### 6.2 Searching
-Type in the search box at the top of the vault screen. Results filter live as you type, matching against title, username, URL, and tags.
+When the vault is **unlocked**, use the **search box in the title bar** (or press **Ctrl+K** to focus it). Results filter live as you type, matching title, username, URL, and tags.
+
+Press **Ctrl+Shift+P** to open the **command palette** — jump to Settings, Security audit, Import/Export, lock the vault, and other actions without using the sidebar.
+
+Other shortcuts on the vault screen: **Ctrl+N** quick add, **Ctrl+G** generate password, **Ctrl+S** save (on the entry editor).
 
 ### 6.3 Adding a New Entry
 1. Click **+ Add entry** (top-right of the vault screen).
@@ -219,28 +265,28 @@ Open the entry editor and click **Delete**. A confirmation dialog appears — cl
 - A toast notification counts down the remaining time.
 
 ### 6.8 Revealing a Password
-Open the entry and click the **eye icon** next to the password field. The password is visible for **10 seconds** (5 seconds in Paranoia Mode) then automatically hidden again.
+Open the entry and click the **eye icon** next to the password field. The password is visible for **5 seconds**, then automatically hidden again.
 
 ---
 
 ## 7. Security Audit
 
-Navigate to **Security audit** in the left menu. This runs a **full vault scan** covering passwords, app settings, vault hygiene, and (Enterprise) recent activity.
+Navigate to **Security audit** in the left menu. The page uses the same full-width layout as Settings and Password generator (toolbar header + scrollable content). This runs a **full vault scan** covering passwords, app settings, vault hygiene, and (Enterprise) recent activity.
 
 ### 7.1 What it checks
 
 | Area | What it checks |
 |---|---|
-| **Passwords** | Weak, reused, old (12+ months), and missing passwords |
+| **Passwords** | Weak, reused, old (12+ months), missing passwords, similar URLs |
 | **Settings** | Auto-lock timeout, clipboard auto-clear, Windows Hello, Paranoia Mode |
-| **Vault hygiene** | HTTP URLs, missing site URLs, encrypted snapshot availability |
+| **Vault hygiene** | HTTP URLs, missing site URLs, encrypted backup recommendation, duplicate imports |
 | **Activity** (Enterprise) | Failed unlock attempts and policy violations (30-day window) |
 
 ### 7.2 Running an audit
 
-1. Click **Run full audit** (or open the page — it runs automatically).
-2. Review your **overall score** (0–100), category issue counts, and the findings list.
-3. Click any finding’s action button (**Open generator**, **Open settings**, **Export backup**, etc.) or expand password lists to jump to affected entries.
+1. Open **Security audit** — an audit runs automatically when you visit, or click **Run full audit**.
+2. Review your **overall score** (0–100), category cards, and the **Audit findings** list.
+3. Use action buttons on each finding — **View entries**, **Open settings**, **Open generator**, **View duplicates**, **Export backup**, etc. — to jump directly to the relevant screen or filtered list.
 
 Severity badges:
 
@@ -268,28 +314,40 @@ Exported reports include scores, findings, and password **counts only**. **No va
 
 ### 8.1 Importing
 
-Navigate to **Import / Export** in the left menu. Supported import formats:
+Navigate to **Import / Export** in the left menu. The page has a **toolbar header** at the top and scrollable content below (same layout pattern as Settings and Security audit).
+
+Supported import formats:
 
 | Format | How to export from source |
 |---|---|
-| Fortiva encrypted backup (`.fvab`) | Exported from another Fortiva installation |
+| Fortiva encrypted backup (`.fva`; import also accepts `.fvab` / `.json`) | **Export encrypted** on Import / Export |
 | Generic CSV | Any CSV with columns: `title, username, password, url, notes` |
-| Chrome / Edge CSV | Export via `chrome://password-manager/settings` → Export |
-| Firefox CSV | Export via Firefox Lockwise / `about:logins` → Export |
-| KeePass XML (`.kdbx` exported XML) | File → Export → KeePass XML in KeePass |
+| KeePass CSV | File → Export → KeePass CSV (KDBX XML is not supported) |
+| Browser CSV | Export via `chrome://password-manager/settings` → Export (Chrome / Edge) or Firefox Lockwise / `about:logins` |
+| Apple Keychain CSV | Export from iPhone / iCloud Keychain as CSV |
 
 Steps:
-1. Click **Browse…** next to the format you want.
-2. Select your export file.
-3. Click **Import**. A summary shows how many entries were imported.
+1. Choose the **source format** from the dropdown.
+2. Click **Choose file and review import…** and select your export file.
+3. Review the preview (new, duplicate, conflicting entries) and confirm. A summary shows how many entries were imported.
 
-> Imported entries are merged into the vault — existing entries are not overwritten.
+Imported entries are merged into the vault. **Duplicates** (same site + username + password) are skipped by default. **Conflicts** (same site + username, different password) are shown in the preview for you to resolve. Review skipped duplicates under **Import history** → **Review skipped duplicates from selected import**.
 
-### 8.2 Exporting
+### 8.2 Duplicate management
+
+Under **Import / Export → Duplicate management** (the vault is scanned automatically when you open this page):
+
+- **Scan vault for duplicate logins** — refreshes the scan; finds **exact** duplicates (same site + username + password) and **similar** groups (same site + username with different passwords, or same domain with URL variations).
+- Select a group and **Open selected entry** to review or consolidate manually.
+- Fortiva never deletes entries automatically.
+
+Security audit findings can also link to **View duplicates** when overlapping logins are detected.
+
+### 8.3 Exporting
 
 | Export type | Description |
 |---|---|
-| Encrypted backup (`.fvab`) | Full vault re-encrypted with a backup password. Safe to store anywhere. |
+| Encrypted backup (`.fva`) | Full vault re-encrypted with a separate backup password. Safe to store anywhere. Import accepts `.fva`, `.fvab`, or `.json`. |
 | Plaintext CSV | **Warning:** passwords are visible in plain text. Only use for migration. |
 
 > **Enterprise note:** Plaintext CSV export may be blocked by your organisation's policy. Contact your IT administrator.
@@ -298,14 +356,27 @@ Steps:
 
 ## 9. Settings
 
-Navigate to **Settings** in the left menu.
+Navigate to **Settings** in the left menu. Content appears in a glass panel with consistent 24px page margins (same as Import/Export and Password generator).
+
+### Appearance
+| Setting | Description |
+|---|---|
+| Theme | System, Light, or Dark |
 
 ### Security
 | Setting | Description |
 |---|---|
 | Paranoia Mode | Toggle extra-strict clipboard/visibility restrictions |
-| Auto-lock after inactivity | Drag slider from 30 seconds to 15 minutes |
-| Clipboard auto-clear | Drag slider from 5 to 120 seconds |
+| Auto-lock after inactivity | Drag slider from 30 seconds to 15 minutes (default 5 minutes) |
+| Clipboard auto-clear | Drag slider from 5 to 120 seconds (default 30 seconds) |
+
+### Updates (Personal)
+| Setting | Description |
+|---|---|
+| Automatic updates | When on, Fortiva checks GitHub Releases (at most once per 24 hours), verifies SHA-256, and installs silently. Vault and Hello data are preserved. |
+| Check for updates | Manual check and install from the latest GitHub Release |
+
+Before auto-update, Fortiva backs up vault sidecars to `%LocalAppData%\FortivaPersonal\pre-update-backups\` (last 3 kept).
 
 ### Windows Hello
 See [Section 10](#10-windows-hello-biometric-unlock).
@@ -340,42 +411,56 @@ Displays the Fortiva edition, version number, and publisher (icmclab studio).
 
 ## 10. Windows Hello Biometric Unlock
 
-Windows Hello lets you unlock Fortiva without typing your master password.
+Windows Hello lets you unlock Fortiva without typing your master password each time.
 
 ### Setting Up Hello
 1. Go to **Settings → Windows Hello → Set up Windows Hello**.
-2. Windows prompts you to authenticate using your chosen Hello method (fingerprint, face, or PIN).
-3. A protector key is stored securely using the Windows Hello credential store, tied to your Windows account.
+2. Windows prompts once for your fingerprint, face, or PIN (`UserConsentVerifier`).
+3. Fortiva stores a **`hello.keyprotect`** file next to your vault (`%AppData%\Fortiva\` for Personal).
+4. By default this uses **software-backed** protection (DPAPI + verification gate). If your PC supports TPM/KeyCredential, a **warning banner** may offer a one-time **hardware upgrade** — use **Set up Windows Hello** again while the banner is visible.
+
+> **Note:** If TPM enrollment fails (some corporate PCs), software Hello still works for unlock. Fortiva keeps your existing binding and shows that hardware upgrade is unavailable.
 
 ### Using Hello
-On the Unlock screen, click **Windows Hello** instead of typing your password.
+- On launch, Fortiva **auto-prompts Hello** when the vault is locked and Hello is configured (you can cancel and use your master password).
+- Or click **Windows Hello** on the Unlock screen.
+
+Settings shows status such as *Windows Hello is configured (software protection)* or *(hardware-backed TPM)* with the binding path (`hello.keyprotect` next to your vault; TPM upgrades may also use `hello.binding`).
 
 ### Removing Hello
-Go to **Settings → Windows Hello → Remove Hello credential**. This removes the stored protector key. Your vault is unchanged — you will just need to use your master password to unlock.
+Go to **Settings → Windows Hello → Remove Hello credential**. This removes `hello.keyprotect`. Your vault is unchanged — you will need your master password to unlock.
 
 ### Security model
 Windows Hello does **not** replace your master password. It protects a key protector that wraps the vault key. Your master password is still required:
 - When setting up a new device
 - After removing and re-enrolling Hello
 - As a fallback if biometrics fail
+- For **Change master password** and encrypted export
+
+Software-only Hello is easier for same-user malware on the PC to bypass than TPM-backed storage — use hardware upgrade when offered on personal machines.
 
 ---
 
 ## 11. Browser Extension
 
-The Fortiva browser extension connects to the desktop app via a local native messaging bridge and named pipe (no internet involved).
+The Fortiva browser extension lets you **Fill** saved logins into website forms. It talks only to the Fortiva app on **your PC** — not to any cloud server.
+
+**How it works (simple):**
+1. Fortiva must be installed and the extension connected (**Settings → Connect browser**).
+2. When you open the extension on a login page, it asks the local app (address `127.0.0.1:7847`) which entries match that site.
+3. You click **Fill** — username and password are sent to the page. Fortiva never fills automatically when a page loads.
+
+**Technical note (developers):** HTTP-first with native-messaging fallback — see [BRIDGE-ARCHITECTURE.md](BRIDGE-ARCHITECTURE.md).
 
 ### One-time setup (recommended)
 1. Open **Fortiva → Settings → Browser extension**.
-2. Click **Connect browser** (Fortiva copies the extension to a stable folder and registers the browser bridge automatically).
-3. If your browser is **closed**, Fortiva opens it with the extension already loaded.
-4. If your browser is **already open**, Fortiva offers to **close it and reopen with the extension** — or you can set up manually.
-5. **Manual fallback:** turn on **Developer mode**, click **Load unpacked**, and select the **extension** folder Fortiva opened (path is on your clipboard).
-6. **Enterprise (IT-managed):** the installer can force-install the extension via policy — restart Chrome or Edge after install.
+2. Click **Connect browser** (Fortiva copies the extension to a stable folder and registers the browser bridge).
+3. If your browser is **closed**, Fortiva opens it with the extension loaded.
+4. If your browser is **already open**, Fortiva offers to **close and reopen** — or set up manually.
+5. **Manual fallback:** Developer mode → **Load unpacked** → select the folder Fortiva opened (path copied to clipboard).
+6. **After Fortiva updates:** if Settings → Browser extension shows a **version mismatch**, run **Connect browser** and click **Reload** on the extension in `edge://extensions` or `chrome://extensions`.
 
-Done — you only do this once per PC (Personal) or once per managed deployment (Enterprise).
-
-The extension folder is always:
+The extension folder is:
 `%LOCALAPPDATA%\FortivaPersonal\extension` (Personal) or `%LOCALAPPDATA%\FortivaEnterprise\extension` (Enterprise).
 
 Extension ID (stable): **`llkpcnbhmhpenahlcdnbbfmkdfkgnpnj`**
@@ -383,16 +468,16 @@ Extension ID (stable): **`llkpcnbhmhpenahlcdnbbfmkdfkgnpnj`**
 ### Using the Extension
 1. Navigate to a website login page (Fortiva does not need to be open first).
 2. Click the Fortiva icon in the browser toolbar.
-3. Click **Fill** (Fortiva never autofills on page load or when you focus a password field).
+3. Click **Fill** (Fortiva never autofills on page load).
 4. If the vault is locked, Fortiva opens and asks for Windows Hello or your master password.
 5. Set each entry’s **Website** field in Fortiva (e.g. `https://login.example.com`) so Fill can match the page hostname.
 
 ### Troubleshooting
-- **“Fortiva did not answer the browser bridge…”** or **“Click Fill below — Fortiva will connect…”** — Run **Connect browser** in Settings → Browser extension, reload the extension at `edge://extensions`, then try Fill again.
-- **“Fortiva did not respond in time…”** — Fortiva may still be starting; click Fill again. If it persists, unlock Fortiva manually and restart the bridge in Settings.
-- **“No saved login”** — Edit the vault entry and set **Website** to the login page URL, then save.
-- **Bridge starting** — Wait a few seconds or click **Restart bridge** in Settings → Browser extension.
-- **Wrong folder when loading unpacked** — Use the path shown in Settings; do not pick the repo root or an empty directory.
+- **“Fortiva did not answer…”** — Unlock Fortiva, run **Connect browser**, reload the extension.
+- **“Fortiva did not respond in time…”** — Fortiva may still be starting; try Fill again or click **Restart bridge** in Settings.
+- **“No saved login”** — Edit the vault entry and set **Website** to the login page URL.
+- **Wrong folder when loading unpacked** — Use the path shown in Settings; do not pick the repo root.
+- **Stale extension after update** — Reload extension + **Connect browser** (version must match Fortiva — see `extension/manifest.json` vs About).
 
 ---
 
@@ -496,7 +581,7 @@ Open the **Audit** tab to view recent audit events. Click **Export log** to save
 3. **All user data is permanently deleted:**
    - `%AppData%\Fortiva\` — vault, snapshots, Windows Hello, settings
    - `%AppData%\Fortiva\Personal\` — legacy path (if present)
-   - `%LocalAppData%\FortivaPersonal\` — crash logs, appearance, bridge session
+   - `%LocalAppData%\FortivaPersonal\` — crash logs, appearance, extension staging
    - `%LocalAppData%\Fortiva\` — legacy bridge path (if present)
    - Downloaded update installers in `%TEMP%\FortivaPersonal-*-Setup.exe`
 4. Start Menu / Desktop shortcuts and Add/Remove Programs entry are removed.
@@ -534,25 +619,35 @@ If the problem persists after reinstalling, export a **Security audit** HTML rep
 - Contact your IT administrator for a renewed license.
 
 ### Forgot master password
-There is no password reset or recovery. This is by design — Fortiva is zero-knowledge and no copy of your password exists anywhere. If you have a previous encrypted backup (`.fvab`), restore it with the backup password.
+There is no password reset or recovery. This is by design — Fortiva is zero-knowledge and no copy of your password exists anywhere. If you have a previous encrypted backup (`.fva`), restore it with the backup password.
 
 ### Vault won't open after a system restore
-If Windows System Restore reverted your `%AppData%\Fortiva\` folder to an older snapshot, Fortiva detects a rollback and shows a warning. In Paranoia Mode the vault is read-only until acknowledged. To fully restore, go to **Settings** and acknowledge the rollback, or restore from a `.fvab` backup.
+If Windows System Restore reverted your `%AppData%\Fortiva\` folder to an older snapshot, Fortiva detects a rollback and shows a warning. In Paranoia Mode the vault is read-only until acknowledged. To fully restore, go to **Settings** and acknowledge the rollback, or restore from an encrypted `.fva` backup.
 
 ### Clipboard doesn't clear
 Check that **Clipboard auto-clear** is enabled and not set to 0 seconds in Settings. On some machines, clipboard monitoring by other software (e.g. clipboard managers) can interfere.
 
 ### Windows Hello button doesn't appear
-Windows Hello must be configured in **Windows Settings → Accounts → Sign-in options** before Fortiva can use it. Set up at least one Hello method there first.
+Windows Hello must be configured in **Windows Settings → Accounts → Sign-in options** before Fortiva can use it. Set up at least one Hello method there first, then use **Set up Windows Hello** in Fortiva Settings.
+
+If Hello was set up but the button is missing, check that `%AppData%\Fortiva\hello.keyprotect` exists. Re-run **Set up Windows Hello** from Settings if the file was lost.
+
+### Windows Hello setup fails or asks multiple times
+Fortiva should prompt **once** during setup. If setup fails with a TPM/hardware error, software Hello is still saved when possible. Check `%LocalAppData%\FortivaPersonal\fortiva-crash.log` for `HelloSetup:` lines. Use **Remove Hello credential** and set up again if the binding is orphaned.
+
+### Security audit layout looks different from other pages
+As of v1.0.37+, Security audit uses the same toolbar + full-width scroll layout as Settings. Update Fortiva if you still see a narrow centered column with large side margins.
 
 ---
 
 ## 16. Security & Privacy Notes
 
-- **Zero-knowledge**: icmclab studio has no access to your vault data. No data ever leaves your machine.
+> Full policy: [PRIVACY.md](../PRIVACY.md) · Technical boundaries: [THREAT-MODEL.md](THREAT-MODEL.md) (for engineers)
+
+- **Zero-knowledge**: icmclab studio has no access to your vault data. No data ever leaves your machine except the optional update check (Personal).
 - **No telemetry**: Fortiva contains no analytics, error reporting, or usage tracking code.
 - **No background service**: Fortiva only runs when you open it. Nothing runs at startup or in the background.
-- **Vault format**: AES-256-GCM (Windows CNG) for encryption at rest. Master key derived with Argon2id (memory-hard KDF). DPAPI protects local rollback state and bridge session tokens.
+- **Vault format**: AES-256-GCM (Windows CNG) for encryption at rest. Master key derived with Argon2id (memory-hard KDF). DPAPI protects local rollback state; Windows Hello uses `hello.keyprotect`; bridge session tokens exist in memory only while unlocked.
 - **Memory safety**: Sensitive key material is zeroed from memory immediately after use using `CryptographicOperations.ZeroMemory`.
 - **Integrity log**: Every vault mutation is recorded in a tamper-evident integrity log stored inside the encrypted vault.
 - **Snapshots**: Up to 5 rolling backup snapshots are kept alongside the vault. If the vault file is corrupted, the most recent clean snapshot is automatically restored.

@@ -9,7 +9,7 @@
 
 ## Executive summary
 
-Fortiva’s vault format, Argon2id + AES-GCM (CNG) stack, and DPAPI layering are sound for an offline password manager. The **highest-risk gaps** are not in primitive crypto but in **integration**: Windows Hello stores the master key in a DPAPI-only blob (UI gate only), rollback detection can be bypassed by deleting `local.state`, release builds can ship **version mismatches** (infinite update loop), and several **AppHost flows** can lock users out or auto-lock mid-operation.
+Fortiva’s vault format, Argon2id + AES-GCM (CNG) stack, and DPAPI layering are sound for an offline password manager. The **highest-risk gaps** are not in primitive crypto but in **integration**: rollback detection could be bypassed by deleting `local.state` (fixed), release builds could ship **version mismatches** (fixed), and several **AppHost flows** could lock users out or auto-lock mid-operation (fixed). Windows Hello now uses software-backed `hello.keyprotect` by default with optional TPM/KeyCredential upgrade (v4) when available.
 
 This document lists every finding by severity. Items marked **FIXED** were addressed in the audit follow-up pass; **OPEN** items remain for future work.
 
@@ -81,17 +81,20 @@ This document lists every finding by severity. Items marked **FIXED** were addre
 - **Key hierarchy:** Master password → MK → VK; Hello stores MK copy (see C1).
 - **Snapshots:** Rotating encrypted copies; restore should be read-only until rollback confirmed (C3).
 
-### Windows Hello (gap)
+### Windows Hello
 
-Current flow: UI verifies Hello → loads DPAPI-protected MK blob. **No** `KeyCredentialManager` / TPM wrap of vault key. Threat: same-user malware after one Hello unlock.
+- **Default (v3):** `hello.keyprotect` — DPAPI + `HelloVerificationGate` (UserConsentVerifier must succeed before unwrap).
+- **Upgrade (v4):** When TPM/KeyCredential is available, Settings offers a one-time hardware upgrade; MK wrap uses `KeyCredentialManager` + signature challenge.
+- **Unlock UX:** Auto-prompt on Unlock screen when Hello is configured; master password remains fallback.
+- **Residual risk:** Same-user malware on a software-only binding can bypass biometrics if verification gate is satisfied — prefer v4 on personal PCs.
 
-**Recommendation:** Wrap MK with Hello-protected key using WinRT `KeyCredentialManager` or NCrypt platform key; never store raw MK in DPAPI-only blob.
+### Browser bridge (v1.0.37+)
 
-### Browser bridge
-
-- Named pipe + session token; client validated by process name + install path (H3 fixed).
+- **Preferred path:** Loopback HTTP on `127.0.0.1:7847` (`BridgeLocalhostServer`) with session token auth while Fortiva is unlocked.
+- **Fallback:** One-shot `sendNativeMessage` → `Fortiva.BrowserBridge.Host.exe` → named pipes.
+- No persistent native port, no push cache, no on-disk session token (H1 fixed).
 - Extension ID stable: `llkpcnbhmhpenahlcdnbbfmkdfkgnpnj` (RSA key in `extension/manifest.json`).
-- Token on disk (H1) and plaintext creds on pipe (H2) remain accepted risks for v1 offline threat model.
+- Credentials sealed on credential pipe (H2 mitigated); usernames still plaintext on pipe.
 
 ### Rollback / paranoia
 

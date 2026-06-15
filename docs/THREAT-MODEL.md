@@ -1,5 +1,8 @@
 # Fortiva Threat Model
 
+> **Users:** Fortiva keeps passwords on your PC only; the optional browser extension talks to the local app, not the internet. See [User Manual §16](UserManual.md#16-security--privacy-notes).  
+> **Developers:** This document defines trust boundaries for code review and pen tests.
+
 ## Scope
 
 | Surface | Personal | Enterprise |
@@ -7,7 +10,7 @@
 | Vault file (`vault.fva`) | `%APPDATA%\Fortiva` | Policy-defined + shared paths |
 | Local metadata | DPAPI (user) | DPAPI (machine) |
 | Policy / license | N/A | `%PROGRAMDATA%\Fortiva` |
-| Browser bridge | Named pipe + native host | Same, policy-gated clipboard |
+| Browser bridge | Loopback HTTP `:7847` + one-shot native host → named pipes | Same, policy-gated clipboard |
 | Bridge session token | In-memory + secured token pipe while unlocked | Same |
 | Network | Optional update check (HTTPS, user-initiated or startup) | None by design |
 
@@ -31,7 +34,7 @@
 - **Memory**: `CryptographicOperations.ZeroMemory` / `RtlSecureZeroMemory`; panic lock scrubs entry secrets and session keys; process mitigations at startup.
 - **Hello unlock**: v4 uses `KeyCredentialManager` + `RequestSignAsync` (TPM when available); v3 requires recent UserConsentVerifier success via `HelloVerificationGate`.
 - **Browser autofill**: user-initiated Fill only; registrable-domain match for listing, **exact hostname** for password release; punycode (`xn--`) rejected; single-use fill nonce; tab re-validated on Fill click.
-- **Bridge IPC**: token and credential pipes validate client PID/path (only `Fortiva.BrowserBridge.Host.exe` under install root); session token in-memory only while unlocked; released credentials seal username + password on the pipe (AES-GCM).
+- **Bridge IPC**: loopback HTTP (`127.0.0.1:7847`) with token auth when app unlocked; native one-shot fallback to named pipes; token and credential pipes validate client PID/path (only `Fortiva.BrowserBridge.Host.exe` under install root); session token in-memory only while unlocked; released credentials seal username + password on the pipe (AES-GCM).
 - **Clipboard**: explicit copy, auto-clear, policy disable.
 - **Export**: encrypted default; plaintext requires explicit confirmation (Personal) or blocked (Enterprise policy).
 - **Enterprise seats**: `MaxSeats` enforced via `%PROGRAMDATA%\Fortiva\seats.dat` on unlock.

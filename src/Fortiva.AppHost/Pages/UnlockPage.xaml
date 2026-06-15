@@ -62,7 +62,7 @@
                 <TextBlock Grid.Row="5"
                            Style="{StaticResource FortivaHelperText}"
                            TextAlignment="Center"
-                           Text="Lost your master password? Fortiva cannot recover it - use an offline backup or encrypted .fvab export if you have one."/>
+                           Text="Lost your master password? Fortiva cannot recover it - use an offline backup or encrypted .fva export if you have one."/>
             </Grid>
         </Border>
     </Grid>

@@ -192,8 +192,8 @@ See `packaging/intune/` and [`UPDATE-STRATEGY.md`](UPDATE-STRATEGY.md).
 
 ### Post-release user actions (when extension or Hello changed)
 
-1. **Browser extension** — Fortiva → Settings → Browser extension → **Connect browser**, then **Reload extension** in each browser profile.
-2. **Windows Hello** — Existing Hello users may re-enroll once in Settings so v4 hardware-backed credentials apply when KeyCredential is available.
+1. **Browser extension** — When Settings → Browser extension shows extension version ≠ app version: **Connect browser**, then **Reload** the extension in each browser profile.
+2. **Windows Hello** — Existing Hello users on software-only bindings may use **Set up Windows Hello** again when Settings shows a hardware upgrade banner (TPM/KeyCredential when available). Software Hello continues to work if upgrade is unavailable.
 
 ---
 

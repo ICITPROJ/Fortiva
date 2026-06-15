@@ -141,7 +141,7 @@
                                 <StackPanel Spacing="10">
                                     <TextBlock Text="Offline password backup - required" Style="{StaticResource FortivaFieldLabel}"/>
                                     <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaBodyText}" FontSize="13" LineHeight="20">
-                                        If you lose this password, your vault cannot be opened - even by icmclab studio. Keep a written copy in a safe place (home safe, locked drawer). Consider exporting an encrypted .fvab backup after setup.
+                                        If you lose this password, your vault cannot be opened - even by icmclab studio. Keep a written copy in a safe place (home safe, locked drawer). Consider exporting an encrypted .fva backup after setup.
                                     </TextBlock>
                                     <CheckBox x:Name="OfflineAckCheck" Content="I have recorded my master password offline in a secure place"
                                               Checked="OfflineAck_Changed" Unchecked="OfflineAck_Changed"/>

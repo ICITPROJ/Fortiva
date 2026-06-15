@@ -200,7 +200,7 @@ public static class PasswordHealthAnalyzer
             {
                 Id = "backup",
                 Title = "Export an encrypted backup",
-                Detail = "Save a .fvab backup to cloud storage so you can restore if you change PCs.",
+                Detail = "Save a .fva backup to cloud storage so you can restore if you change PCs.",
                 Priority = 9,
                 AffectedCount = 0
             });

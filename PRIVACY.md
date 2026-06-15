@@ -25,9 +25,9 @@ USB drive you choose for portable mode), never transmitted to us:
   encrypted with AES-256-GCM; the key is derived from your master password with
   Argon2id.
 - Local rollback/integrity state (`local.state`), protected with Windows DPAPI.
-- Windows Hello key-protection material, if you enable Hello unlock.
+- Windows Hello key-protection material (`hello.keyprotect`), if you enable Hello unlock.
 - Non-secret preferences (e.g. auto-lock timeout, theme, last portable vault
-  location) in `user.prefs.json`.
+  location) in `%AppData%\Fortiva\user.prefs.json`.
 - A local crash log (`fortiva-crash.log`) and, for Enterprise, a local audit
   log. These are stored on your device and are never uploaded. They are written
   to record errors and security-relevant events and are designed not to contain
@@ -55,10 +55,12 @@ updated through your organization's IT tooling.
 ## Browser extension
 
 The optional Fortiva browser extension communicates only with the local Fortiva
-application on your own machine, using Windows named pipes via a native
-messaging host. It does not make its own network requests to icmclab studio or
-any third party. Credentials are only released after host (domain) verification
-and a single-use, host-bound fill token.
+application on your own machine:
+
+- **Preferred:** loopback HTTP to `http://127.0.0.1:7847` while Fortiva is running (session token auth).
+- **Fallback:** Windows named pipes via a one-shot native messaging host (`Fortiva.BrowserBridge.Host.exe`).
+
+The extension does not make its own network requests to icmclab studio or any third party. Credentials are only released after host (domain) verification and a single-use, host-bound fill token.
 
 ## Data sharing
 
