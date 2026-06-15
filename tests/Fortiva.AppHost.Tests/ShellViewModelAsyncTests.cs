@@ -8,14 +8,19 @@ public sealed class ShellViewModelAsyncTests : IDisposable
 {
     private readonly string _vaultDir;
     private readonly ShellViewModel _vm = ShellViewModel.Current;
-    private readonly List<Action> _uiQueue = [];
+    private int _uiInvokerCalls;
 
     public ShellViewModelAsyncTests()
     {
         _vaultDir = Path.Combine(Path.GetTempPath(), "FortivaVmTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_vaultDir);
         _vm.ResetForTesting();
-        _vm.SetUiInvoker(action => _uiQueue.Add(action));
+        // RunOnUiAsync awaits invoker completion — queued-only invokers deadlock UnlockAsync.
+        _vm.SetUiInvoker(action =>
+        {
+            _uiInvokerCalls++;
+            action();
+        });
         _vm.PreparePortableVaultLocation(_vaultDir);
     }
 
@@ -27,23 +32,12 @@ public sealed class ShellViewModelAsyncTests : IDisposable
             Directory.Delete(_vaultDir, recursive: true);
     }
 
-    private void DrainUiQueue()
-    {
-        while (_uiQueue.Count > 0)
-        {
-            var batch = _uiQueue.ToArray();
-            _uiQueue.Clear();
-            foreach (var action in batch)
-                action();
-        }
-    }
-
     [Fact]
     public async Task CreateVaultAsync_UpdatesStateOnUiInvoker()
     {
         await _vm.CreateVaultAsync("StrongTestPassword123!", SecurityLevel.Standard);
-        DrainUiQueue();
 
+        Assert.True(_uiInvokerCalls > 0);
         Assert.True(_vm.VaultExists);
         Assert.True(File.Exists(Path.Combine(_vaultDir, VaultConstants.VaultFileName)));
     }
@@ -52,16 +46,19 @@ public sealed class ShellViewModelAsyncTests : IDisposable
     public async Task UnlockAsync_MarshalsResultsThroughUiInvoker()
     {
         await _vm.CreateVaultAsync("StrongTestPassword123!", SecurityLevel.Standard);
-        DrainUiQueue();
 
         _vm.ResetForTesting();
-        _vm.SetUiInvoker(action => _uiQueue.Add(action));
+        _vm.SetUiInvoker(action =>
+        {
+            _uiInvokerCalls++;
+            action();
+        });
         _vm.SwitchToPortableVault(_vaultDir);
 
         var (ok, error) = await _vm.UnlockAsync("StrongTestPassword123!");
-        DrainUiQueue();
 
         Assert.True(ok, error);
         Assert.True(_vm.IsUnlocked);
+        Assert.True(_uiInvokerCalls > 0);
     }
 }
