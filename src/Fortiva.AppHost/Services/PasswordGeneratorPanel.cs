@@ -40,8 +40,6 @@ public sealed class PasswordGeneratorPanel
     private readonly TextBlock _strengthLabel;
     private readonly TextBlock _errorLabel;
     private readonly Border _previewBorder;
-    private readonly Grid _ambiguousRow = null!;
-    private readonly Grid _requireEachRow = null!;
     private readonly Border _optionsShell;
     private readonly VaultTagPickerPanel _tagPicker;
     private readonly TextBlock _categoriesLabel;
@@ -53,7 +51,6 @@ public sealed class PasswordGeneratorPanel
     private readonly Button? _dialogRegenerateBtn;
     private readonly List<TextBlock> _sectionLabelBlocks = [];
     private readonly List<ToggleSwitch> _charToggles = [];
-    private readonly List<TextBlock> _charToggleLabels = [];
 
     public StackPanel Root { get; }
 
@@ -111,17 +108,17 @@ public sealed class PasswordGeneratorPanel
         _separatorBox = new TextBox { Width = 80, Text = _options.PassphraseSeparator, MaxLength = 3, Visibility = Visibility.Collapsed };
         FortivaControlTheme.ApplyTextBox(_separatorBox);
 
-        var lowerToggle = CreateCharToggle(_options.IncludeLowercase);
-        var upperToggle = CreateCharToggle(_options.IncludeUppercase);
-        var digitToggle = CreateCharToggle(_options.IncludeDigits);
-        var symbolToggle = CreateCharToggle(_options.IncludeSymbols);
+        var lowerToggle = CreateCharToggle("Lowercase (a-z)", _options.IncludeLowercase);
+        var upperToggle = CreateCharToggle("Uppercase (A-Z)", _options.IncludeUppercase);
+        var digitToggle = CreateCharToggle("Digits (0-9)", _options.IncludeDigits);
+        var symbolToggle = CreateCharToggle("Symbols", _options.IncludeSymbols);
 
         _charSetsHeader = CreateSectionLabel("Character sets");
-        _charOptionsPanel = new StackPanel { Spacing = 6 };
-        _charOptionsPanel.Children.Add(CreateCharToggleRow("Lowercase (a-z)", lowerToggle));
-        _charOptionsPanel.Children.Add(CreateCharToggleRow("Uppercase (A-Z)", upperToggle));
-        _charOptionsPanel.Children.Add(CreateCharToggleRow("Digits (0-9)", digitToggle));
-        _charOptionsPanel.Children.Add(CreateCharToggleRow("Symbols", symbolToggle));
+        _charOptionsPanel = new StackPanel { Spacing = 4 };
+        _charOptionsPanel.Children.Add(lowerToggle);
+        _charOptionsPanel.Children.Add(upperToggle);
+        _charOptionsPanel.Children.Add(digitToggle);
+        _charOptionsPanel.Children.Add(symbolToggle);
 
         _presetBox.SelectedIndex = _options.Mode switch
         {
@@ -153,8 +150,8 @@ public sealed class PasswordGeneratorPanel
         };
         FortivaControlTheme.ApplyTextBox(_customCharsetBox);
 
-        _ambiguousToggle = CreateCharToggle(_options.ExcludeAmbiguous);
-        _requireEachToggle = CreateCharToggle(_options.RequireFromEachGroup);
+        _ambiguousToggle = CreateCharToggle("Exclude ambiguous (0/O, 1/l/I)", _options.ExcludeAmbiguous);
+        _requireEachToggle = CreateCharToggle("Require at least one of each selected type", _options.RequireFromEachGroup);
 
         _preview = new TextBlock
         {
@@ -239,8 +236,8 @@ public sealed class PasswordGeneratorPanel
             _customCharsetLabel.Visibility = isCustom ? Visibility.Visible : Visibility.Collapsed;
             _customCharsetBox.Visibility = isCustom ? Visibility.Visible : Visibility.Collapsed;
 
-            _ambiguousRow.Visibility = isPassphrase || isCustom ? Visibility.Collapsed : Visibility.Visible;
-            _requireEachRow.Visibility = isPassphrase || isPin || isCustom ? Visibility.Collapsed : Visibility.Visible;
+            _ambiguousToggle.Visibility = isPassphrase || isCustom ? Visibility.Collapsed : Visibility.Visible;
+            _requireEachToggle.Visibility = isPassphrase || isPin || isCustom ? Visibility.Collapsed : Visibility.Visible;
 
             if (isPin)
             {
@@ -342,10 +339,8 @@ public sealed class PasswordGeneratorPanel
         leftOptions.Children.Add(_wordCountSlider);
         leftOptions.Children.Add(_separatorLabel);
         leftOptions.Children.Add(_separatorBox);
-        _ambiguousRow = CreateCharToggleRow("Exclude ambiguous (0/O, 1/l/I)", _ambiguousToggle);
-        _requireEachRow = CreateCharToggleRow("Require at least one of each selected type", _requireEachToggle);
-        leftOptions.Children.Add(_ambiguousRow);
-        leftOptions.Children.Add(_requireEachRow);
+        leftOptions.Children.Add(_ambiguousToggle);
+        leftOptions.Children.Add(_requireEachToggle);
 
         var rightOptions = new StackPanel { Spacing = 12, VerticalAlignment = VerticalAlignment.Top };
         rightOptions.Children.Add(_charSetsHeader);
@@ -355,32 +350,20 @@ public sealed class PasswordGeneratorPanel
         rightOptions.Children.Add(_customCharsetLabel);
         rightOptions.Children.Add(_customCharsetBox);
 
-        FrameworkElement optionsContent;
-        if (hostMode == PasswordGeneratorHostMode.Page)
-        {
-            var optionsStack = new StackPanel { Spacing = 20 };
-            optionsStack.Children.Add(leftOptions);
-            optionsStack.Children.Add(rightOptions);
-            optionsContent = optionsStack;
-        }
-        else
-        {
-            var optionsGrid = new Grid { ColumnSpacing = 32 };
-            optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 200 });
-            optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 200 });
-            Grid.SetColumn(leftOptions, 0);
-            Grid.SetColumn(rightOptions, 1);
-            optionsGrid.Children.Add(leftOptions);
-            optionsGrid.Children.Add(rightOptions);
-            optionsContent = optionsGrid;
-        }
+        var optionsGrid = new Grid { ColumnSpacing = 24 };
+        optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 0 });
+        optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 0 });
+        Grid.SetColumn(leftOptions, 0);
+        Grid.SetColumn(rightOptions, 1);
+        optionsGrid.Children.Add(leftOptions);
+        optionsGrid.Children.Add(rightOptions);
 
         _optionsShell = new Border
         {
             CornerRadius = new CornerRadius(14),
             Padding = new Thickness(20, 18, 20, 18),
             BorderThickness = new Thickness(1),
-            Child = optionsContent
+            Child = optionsGrid
         };
 
         Root = new StackPanel
@@ -519,9 +502,6 @@ public sealed class PasswordGeneratorPanel
 
         _categoriesDivider.Background = FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", theme, Root);
 
-        foreach (var label in _charToggleLabels)
-            FortivaControlTheme.ApplyBodyText(label, Root);
-
         _errorLabel.Foreground = FortivaControlTheme.GetBrush("SystemFillColorCriticalBrush", theme, Root);
         FortivaControlTheme.ApplyMutedText(_strengthLabel, Root);
         FortivaControlTheme.ApplyMutedText(_lengthValue, Root);
@@ -560,37 +540,18 @@ public sealed class PasswordGeneratorPanel
         return label;
     }
 
-    private ToggleSwitch CreateCharToggle(bool isOn)
+    private ToggleSwitch CreateCharToggle(string header, bool isOn)
     {
         var toggle = new ToggleSwitch
         {
+            Header = header,
             IsOn = isOn,
-            MinWidth = 44,
-            HorizontalAlignment = HorizontalAlignment.Right
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            MinWidth = 0
         };
+        FortivaControlTheme.ApplyToggleSwitch(toggle);
+        FortivaControlTheme.TryApplyStyle(toggle, "FortivaToggleSwitch");
         _charToggles.Add(toggle);
         return toggle;
-    }
-
-    private Grid CreateCharToggleRow(string label, ToggleSwitch toggle)
-    {
-        var grid = new Grid { MinHeight = 36 };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-        var text = new TextBlock
-        {
-            Text = label,
-            FontSize = 13,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextWrapping = TextWrapping.WrapWholeWords,
-            Margin = new Thickness(0, 0, 12, 0)
-        };
-        _charToggleLabels.Add(text);
-        Grid.SetColumn(text, 0);
-        Grid.SetColumn(toggle, 1);
-        grid.Children.Add(text);
-        grid.Children.Add(toggle);
-        return grid;
     }
 }

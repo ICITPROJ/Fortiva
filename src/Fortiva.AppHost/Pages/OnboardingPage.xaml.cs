@@ -43,8 +43,10 @@ public sealed partial class OnboardingPage : Page
             e.Handled = true;
             if (_step == 1)
                 Step1Next_Click(sender, new RoutedEventArgs());
-            else if (_step == 4 && FinishBtn.IsEnabled)
+            else if (_step == 3 && FinishBtn.IsEnabled)
                 FinishOnboarding_Click(sender, new RoutedEventArgs());
+            else if (_step == 4)
+                BrowserExtContinue_Click(sender, new RoutedEventArgs());
         }
 
         NewPasswordBox.KeyDown += OnEnter;
@@ -430,6 +432,9 @@ public sealed partial class OnboardingPage : Page
         _vm.SkipNextBrowserExtensionPrompt = false;
         if (!_vm.IsEnterprise)
             _vm.SetBrowserExtensionSetupDismissed();
+
+        NavigationService.Current.ResetCurrent();
+        NavigationService.Current.ClearHistory();
         _vm.RequestNavigationTab("Vault");
     }
 }

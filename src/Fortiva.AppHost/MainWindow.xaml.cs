@@ -272,12 +272,12 @@ public sealed partial class MainWindow : Window
 
             switch (tag)
             {
-                case "Vault":        NavigationService.Current.Navigate<VaultPage>(); break;
-                case "Generator":    NavigationService.Current.Navigate<PasswordGeneratorPage>(); break;
-                case "Health":       NavigationService.Current.Navigate<HealthPage>(); break;
-                case "ImportExport": NavigationService.Current.Navigate<ImportExportPage>(); break;
-                case "Settings":     NavigationService.Current.Navigate<SettingsPage>(); break;
-                case "Audit":        NavigationService.Current.Navigate<AuditPage>(); break;
+                case "Vault":        NavigateToMainTab("Vault"); break;
+                case "Generator":    NavigateToMainTab("Generator"); break;
+                case "Health":       NavigateToMainTab("Health"); break;
+                case "ImportExport": NavigateToMainTab("ImportExport"); break;
+                case "Settings":     NavigateToMainTab("Settings"); break;
+                case "Audit":        NavigateToMainTab("Audit"); break;
             }
         }
         catch (Exception ex)
@@ -308,6 +308,28 @@ public sealed partial class MainWindow : Window
         });
     }
 
+    private void NavigateToMainTab(string tag)
+    {
+        if (!_vm.IsUnlocked)
+            return;
+
+        if (_vm.IsEnterprise && !_vm.IsLicenseValid && tag is not "Settings")
+        {
+            NavigationService.Current.Navigate<LicenseRequiredPage>();
+            return;
+        }
+
+        switch (tag)
+        {
+            case "Vault":        NavigationService.Current.Navigate<VaultPage>(); break;
+            case "Generator":    NavigationService.Current.Navigate<PasswordGeneratorPage>(); break;
+            case "Health":       NavigationService.Current.Navigate<HealthPage>(); break;
+            case "ImportExport": NavigationService.Current.Navigate<ImportExportPage>(); break;
+            case "Settings":     NavigationService.Current.Navigate<SettingsPage>(); break;
+            case "Audit":        NavigationService.Current.Navigate<AuditPage>(); break;
+        }
+    }
+
     private void SelectNavigationTab(string tag)
     {
         DispatcherQueue.TryEnqueue(() =>
@@ -323,6 +345,8 @@ public sealed partial class MainWindow : Window
                 _ => null
             };
             if (item is null) return;
+
+            NavigateToMainTab(tag);
 
             _suppressNav = true;
             try { NavView.SelectedItem = item; }
@@ -413,7 +437,7 @@ public sealed partial class MainWindow : Window
             // Navigate explicitly — do NOT rely on SelectionChanged while _suppressNav is true
             NavigationService.Current.ResetCurrent();
             NavigationService.Current.ClearHistory();
-            NavigationService.Current.Navigate<VaultPage>();
+            NavigateToMainTab("Vault");
             StatusText.Text = _vm.StatusMessage;
             RefreshStatusChrome();
             if (!_vm.IsAdmin)
