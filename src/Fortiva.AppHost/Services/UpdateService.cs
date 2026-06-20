@@ -152,6 +152,7 @@ public sealed class UpdateService
                     + "Please download and run the latest installer manually.");
             }
 
+            SchedulePostUpdateRelaunchWatchdog(installer!, ResolveInstalledExePath());
             _vm.ClearUpdateApplyFailure();
             App.ExitForUpdate();
             return true;
@@ -192,7 +193,7 @@ public sealed class UpdateService
     }
 
     /// <summary>
-    /// Waits briefly for the Inno Setup process to stay alive (started successfully).
+    /// Waits briefly for the Inno Setup process to start (or finish successfully if very fast).
     /// Returns false if the process never started or exited immediately with an error.
     /// </summary>
     internal static async Task<bool> ConfirmInstallerStartedAsync(Process? installer)
@@ -200,24 +201,66 @@ public sealed class UpdateService
         if (installer is null)
             return false;
 
-        for (var i = 0; i < 30; i++)
+        await Task.Delay(600).ConfigureAwait(false);
+
+        try
+        {
+            if (installer.HasExited)
+                return installer.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+
+        for (var i = 0; i < 24; i++)
         {
             await Task.Delay(100).ConfigureAwait(false);
             try
             {
-                if (!installer.HasExited)
-                    return true;
-                if (installer.ExitCode != 0)
-                    return false;
+                if (installer.HasExited)
+                    return installer.ExitCode == 0;
             }
             catch
             {
-                // Process handle may be unavailable after exit — treat as started if we got past launch.
-                return i > 0;
+                return true;
             }
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// After Fortiva exits for an in-app update, relaunch if the installer was cancelled or
+    /// finished without starting the app (Inno postinstall only runs on success).
+    /// </summary>
+    internal static void SchedulePostUpdateRelaunchWatchdog(Process installer, string exePath)
+    {
+        if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath))
+            return;
+
+        var pid = installer.Id;
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"fortiva-relaunch-{pid}.ps1");
+        var escapedExe = exePath.Replace("'", "''");
+        var escapedScript = scriptPath.Replace("'", "''");
+        var script =
+            "$ErrorActionPreference = 'SilentlyContinue'\r\n" +
+            $"Wait-Process -Id {pid} -ErrorAction SilentlyContinue\r\n" +
+            "Start-Sleep -Seconds 2\r\n" +
+            "if (-not (Get-Process -Name 'Fortiva.Personal' -ErrorAction SilentlyContinue)) {\r\n" +
+            $"  Start-Process -FilePath '{escapedExe}'\r\n" +
+            "}\r\n" +
+            $"Remove-Item -LiteralPath '{escapedScript}' -Force -ErrorAction SilentlyContinue\r\n";
+
+        File.WriteAllText(scriptPath, script);
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            Arguments = $"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{scriptPath}\"",
+            UseShellExecute = true,
+            CreateNoWindow = true,
+            WorkingDirectory = Path.GetTempPath()
+        });
     }
 
     internal static string ResolveInstalledExePath()

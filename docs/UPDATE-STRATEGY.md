@@ -47,6 +47,7 @@ Manual **Check for updates → Install now** and the 24-hour auto-update path sh
 5. Launch Inno Setup with `/VERYSILENT /FORCECLOSEAPPLICATIONS` and exit Fortiva.
 6. Installer upgrades files under `%LocalAppData%\Programs\icmclab studio\Fortiva Personal\`.
 7. Installer **relaunches** `Fortiva.Personal.exe` when setup was silent (`ShouldLaunchAfterSilentInstall`).
+8. If setup is cancelled or fails, a **relaunch watchdog** (spawned before exit) and installer `DeinitializeSetup` still reopen Fortiva when no instance is running.
 
 **Preserved across updates:** `vault.fva`, snapshots, `local.state`, Hello blobs, `user.prefs.json`, `appearance.json`, extension staging under `%LocalAppData%\FortivaPersonal\`, browser native-messaging registration (refreshed on next launch).
 

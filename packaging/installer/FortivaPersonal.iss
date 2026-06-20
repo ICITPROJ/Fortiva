@@ -520,4 +520,19 @@ begin
   FortivaPrereq_AfterInstall();
 end;
 
+procedure DeinitializeSetup();
+var
+  ResultCode: Integer;
+begin
+  { In-app updates exit before setup finishes. Relaunch if setup was cancelled or postinstall launch was missed. }
+  if not WizardSilent then
+    Exit;
+
+  Exec('powershell.exe',
+    '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ' +
+    '"Start-Sleep -Seconds 2; if (-not (Get-Process -Name Fortiva.Personal -ErrorAction SilentlyContinue)) { ' +
+    'Start-Process -FilePath ''' + ExpandConstant('{app}\{#AppExeName}') + ''' }"',
+    '', SW_HIDE, ewNoWait, ResultCode);
+end;
+
 
