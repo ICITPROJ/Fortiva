@@ -109,7 +109,16 @@ public sealed class PasswordGeneratorPanel
 
         _separatorLabel = CreateSectionLabel("Word separator");
         _separatorLabel.Visibility = Visibility.Collapsed;
-        _separatorBox = new TextBox { Width = 80, Text = _options.PassphraseSeparator, MaxLength = 3, Visibility = Visibility.Collapsed };
+        _separatorBox = new TextBox
+        {
+            Width = 120,
+            MaxWidth = 160,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Text = _options.PassphraseSeparator,
+            MaxLength = 3,
+            Visibility = Visibility.Collapsed,
+            TextAlignment = TextAlignment.Center
+        };
 
         var lowerToggle = CreateCharToggle("Lowercase (a-z)", _options.IncludeLowercase);
         var upperToggle = CreateCharToggle("Uppercase (A-Z)", _options.IncludeUppercase);
@@ -201,7 +210,6 @@ public sealed class PasswordGeneratorPanel
             CornerRadius = new CornerRadius(12),
             Child = previewInner
         };
-        FortivaControlTheme.ApplyPreviewSurface(_previewBorder, _preview);
 
         _strengthLabel = new TextBlock { FontSize = 12, Margin = new Thickness(2, 0, 0, 0) };
         _errorLabel = new TextBlock { FontSize = 12, Visibility = Visibility.Collapsed, Margin = new Thickness(2, 0, 0, 0) };
@@ -299,6 +307,10 @@ public sealed class PasswordGeneratorPanel
                 var analysis = _vm.AnalyzeStrength(pw);
                 _strengthLabel.Text = $"{analysis.Label} · {analysis.EntropyBits:F0} bits entropy";
                 ApplyStrengthColor(analysis.Strength);
+                var theme = _themeHost is not null
+                    ? FortivaControlTheme.ResolveHostTheme(_themeHost)
+                    : FortivaControlTheme.ResolveEffectiveTheme(Root.XamlRoot, Root);
+                _preview.Foreground = FortivaControlTheme.GetBrush("FortivaHeadingBrush", theme, _themeHost ?? Root);
             }
             catch (Exception ex)
             {
@@ -494,19 +506,18 @@ public sealed class PasswordGeneratorPanel
 
         if (_optionsShell is not null)
         {
+            _optionsShell.RequestedTheme = theme;
             _optionsShell.Background = FortivaControlTheme.GetBrush("FortivaGlassFillBrush", theme, themeHost);
             _optionsShell.BorderBrush = FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", theme, themeHost);
             FortivaSurfaceEffects.ApplyCardElevation(_optionsShell, 4f);
         }
 
-        FortivaControlTheme.ApplyPreviewSurface(_previewBorder, _preview, themeHost);
+        FortivaControlTheme.ApplyPreviewSurface(_previewBorder, _preview, themeHost, theme);
         FortivaSurfaceEffects.ApplyIconButton(_copyPreviewBtn, themeHost);
         FortivaControlTheme.ApplyComboBox(_presetBox, themeHost, theme);
         FortivaControlTheme.ApplyTextBox(_separatorBox, themeHost, theme);
         FortivaControlTheme.ApplyTextBox(_symbolsBox, themeHost, theme);
         FortivaControlTheme.ApplyTextBox(_customCharsetBox, themeHost, theme);
-        FortivaControlTheme.TryApplyStyle(_lengthSlider, "FortivaSlider");
-        FortivaControlTheme.TryApplyStyle(_wordCountSlider, "FortivaSlider");
         FortivaControlTheme.ApplySlider(_lengthSlider, themeHost, theme);
         FortivaControlTheme.ApplySlider(_wordCountSlider, themeHost, theme);
 

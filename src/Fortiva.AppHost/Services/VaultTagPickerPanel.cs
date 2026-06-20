@@ -78,11 +78,11 @@ public sealed class VaultTagPickerPanel
     public void ApplyTheme(FrameworkElement? context = null)
     {
         var host = context ?? Root;
-        var theme = FortivaControlTheme.ResolveEffectiveTheme(host.XamlRoot, host);
+        var theme = FortivaControlTheme.ResolveHostTheme(host);
         FortivaThemeResources.MergeOnto(Root, theme);
         Root.RequestedTheme = theme;
-        FortivaControlTheme.ApplyTextBox(_newTagBox, host);
-        FortivaControlTheme.ApplySecondaryButton(_addBtn, host);
+        FortivaControlTheme.ApplyTextBox(_newTagBox, host, theme);
+        FortivaControlTheme.ApplySecondaryButton(_addBtn, host, theme);
         FortivaControlTheme.ApplyMutedText(_emptyHint, host);
         if (_addBtn.Content is StackPanel addContent)
         {

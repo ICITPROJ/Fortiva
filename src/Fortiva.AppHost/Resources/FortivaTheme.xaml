@@ -75,8 +75,11 @@
             <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="#D8ECF8"/>
             <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="#C8E2F0"/>
             <SolidColorBrush x:Key="ControlFillColorDisabledBrush" Color="#6688959E"/>
+            <SolidColorBrush x:Key="ControlStrongFillColorDefaultBrush" Color="#B8CEDC"/>
+            <SolidColorBrush x:Key="ControlStrongFillColorDisabledBrush" Color="#6688959E"/>
             <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="#8EB4CC"/>
             <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="#6640BCF4"/>
+            <SolidColorBrush x:Key="FocusStrokeColorOuterBrush" Color="#8840BCF4"/>
             <SolidColorBrush x:Key="TextFillColorPrimaryBrush" Color="#0A0C10"/>
             <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="#3D4A56"/>
             <SolidColorBrush x:Key="TextFillColorDisabledBrush" Color="#5C6A78"/>
@@ -98,6 +101,9 @@
             <SolidColorBrush x:Key="ComboBoxForegroundFocused" Color="#0A0C10"/>
             <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#F5FAFE"/>
             <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#8EB4CC"/>
+            <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#F8FCFF"/>
+            <SolidColorBrush x:Key="ComboBoxHeaderForeground" Color="#0A0C10"/>
+            <SolidColorBrush x:Key="ComboBoxHeaderForegroundDisabled" Color="#5C6A78"/>
 
             <SolidColorBrush x:Key="TextControlBackground" Color="#F8FCFF"/>
             <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#EAF6FC"/>
@@ -141,7 +147,12 @@
             <SolidColorBrush x:Key="SliderTrackFill" Color="#C8DCE8"/>
             <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#B0D0E4"/>
             <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#A0C8E0"/>
+            <SolidColorBrush x:Key="SliderTrackFillDisabled" Color="#6688959E"/>
             <SolidColorBrush x:Key="SliderThumbFill" Color="#40BCF4"/>
+            <SolidColorBrush x:Key="SliderTrackValueFill" Color="#40BCF4"/>
+            <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="#5CC8F6"/>
+            <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#2AA8E0"/>
+            <SolidColorBrush x:Key="SliderTrackValueFillDisabled" Color="#6640BCF4"/>
 
             <!-- WinUI accent overrides -->
             <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="{StaticResource FortivaAccentColor}"/>
@@ -223,8 +234,11 @@
             <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="#141A22"/>
             <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="#10161E"/>
             <SolidColorBrush x:Key="ControlFillColorDisabledBrush" Color="#66101820"/>
+            <SolidColorBrush x:Key="ControlStrongFillColorDefaultBrush" Color="#2A3440"/>
+            <SolidColorBrush x:Key="ControlStrongFillColorDisabledBrush" Color="#66101820"/>
             <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush" Color="#2A3440"/>
             <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="#6640BCF4"/>
+            <SolidColorBrush x:Key="FocusStrokeColorOuterBrush" Color="#8840BCF4"/>
             <SolidColorBrush x:Key="TextFillColorPrimaryBrush" Color="#FFFFFF"/>
             <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="#A0AAB2"/>
             <SolidColorBrush x:Key="TextFillColorDisabledBrush" Color="#6B7580"/>
@@ -246,6 +260,9 @@
             <SolidColorBrush x:Key="ComboBoxForegroundFocused" Color="#FFFFFF"/>
             <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#161B22"/>
             <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#2A3440"/>
+            <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#0E1218"/>
+            <SolidColorBrush x:Key="ComboBoxHeaderForeground" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ComboBoxHeaderForegroundDisabled" Color="#6B7580"/>
 
             <SolidColorBrush x:Key="TextControlBackground" Color="#0E1218"/>
             <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#141A22"/>
@@ -293,7 +310,12 @@
             <SolidColorBrush x:Key="SliderTrackFill" Color="#2A3440"/>
             <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#354050"/>
             <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#404C5C"/>
+            <SolidColorBrush x:Key="SliderTrackFillDisabled" Color="#66101820"/>
             <SolidColorBrush x:Key="SliderThumbFill" Color="#40BCF4"/>
+            <SolidColorBrush x:Key="SliderTrackValueFill" Color="#40BCF4"/>
+            <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="#5CC8F6"/>
+            <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#2AA8E0"/>
+            <SolidColorBrush x:Key="SliderTrackValueFillDisabled" Color="#6640BCF4"/>
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 

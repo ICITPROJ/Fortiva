@@ -46,10 +46,13 @@ public static class FortivaControlTheme
     /// <summary>Theme from a known host page (most reliable for embedded panels).</summary>
     public static ElementTheme ResolveHostTheme(FrameworkElement host)
     {
+        if (host.RequestedTheme is ElementTheme.Light or ElementTheme.Dark)
+            return host.RequestedTheme;
+
         if (host.ActualTheme is ElementTheme.Light or ElementTheme.Dark)
             return host.ActualTheme;
 
-        return ResolveEffectiveTheme(host.XamlRoot, host);
+        return ThemeService.CurrentElementTheme;
     }
 
     public static ElementTheme ResolveAppTheme()
@@ -141,54 +144,75 @@ public static class FortivaControlTheme
 
     public static void ApplyTextBox(TextBox box, FrameworkElement? context = null, ElementTheme? theme = null)
     {
-        var resolved = theme ?? ResolveEffectiveTheme(context?.XamlRoot, context ?? box);
-        FortivaThemeResources.MergeOnto(box, resolved);
-        box.RequestedTheme = resolved;
-        box.Background = GetBrush("FortivaInputFillBrush", resolved, box);
-        box.BorderBrush = GetBrush("FortivaInputBorderBrush", resolved, box);
-        box.Foreground = GetBrush("FortivaHeadingBrush", resolved, box);
-        box.PlaceholderForeground = GetBrush("FortivaMutedBrush", resolved, box);
-        box.BorderThickness = new Thickness(1);
-        box.CornerRadius = new CornerRadius(8);
-        box.Padding = new Thickness(12, 10, 12, 10);
-        if (box.MinHeight < 44)
-            box.MinHeight = 44;
-        if (box.FontSize < 14)
-            box.FontSize = 14;
+        void Apply()
+        {
+            var resolved = theme ?? ResolveEffectiveTheme(context?.XamlRoot, context ?? box);
+            FortivaThemeResources.MergeOnto(box, resolved);
+            box.RequestedTheme = resolved;
+            TryApplyStyle(box, "FortivaTextBox");
+            box.Background = GetBrush("FortivaInputFillBrush", resolved, box);
+            box.BorderBrush = GetBrush("FortivaInputBorderBrush", resolved, box);
+            box.Foreground = GetBrush("FortivaHeadingBrush", resolved, box);
+            box.PlaceholderForeground = GetBrush("FortivaMutedBrush", resolved, box);
+            box.BorderThickness = new Thickness(1);
+            box.CornerRadius = new CornerRadius(8);
+            box.Padding = new Thickness(12, 10, 12, 10);
+            if (box.MinHeight < 44)
+                box.MinHeight = 44;
+            if (box.FontSize < 14)
+                box.FontSize = 14;
 
-        PinResource(box, "TextControlBackground", GetBrush("TextControlBackground", resolved, box));
-        PinResource(box, "TextControlBackgroundFocused", GetBrush("TextControlBackgroundFocused", resolved, box));
-        PinResource(box, "TextControlBackgroundPointerOver", GetBrush("TextControlBackgroundPointerOver", resolved, box));
-        PinResource(box, "TextControlForeground", GetBrush("TextControlForeground", resolved, box));
-        PinResource(box, "TextControlBorderBrush", GetBrush("TextControlBorderBrush", resolved, box));
-        PinResource(box, "TextControlPlaceholderForeground", GetBrush("TextControlPlaceholderForeground", resolved, box));
+            PinResource(box, "TextControlBackground", GetBrush("TextControlBackground", resolved, box));
+            PinResource(box, "TextControlBackgroundFocused", GetBrush("TextControlBackgroundFocused", resolved, box));
+            PinResource(box, "TextControlBackgroundPointerOver", GetBrush("TextControlBackgroundPointerOver", resolved, box));
+            PinResource(box, "TextControlForeground", GetBrush("TextControlForeground", resolved, box));
+            PinResource(box, "TextControlBorderBrush", GetBrush("TextControlBorderBrush", resolved, box));
+            PinResource(box, "TextControlPlaceholderForeground", GetBrush("TextControlPlaceholderForeground", resolved, box));
+            PinResource(box, "ControlFillColorDefaultBrush", GetBrush("ControlFillColorDefaultBrush", resolved, box));
+            PinResource(box, "TextFillColorPrimaryBrush", GetBrush("TextFillColorPrimaryBrush", resolved, box));
+        }
+
+        Apply();
+        ApplyWhenLoaded(box, Apply);
     }
 
     public static void ApplyComboBox(ComboBox box, FrameworkElement? context = null, ElementTheme? theme = null)
     {
-        var resolved = theme ?? ResolveEffectiveTheme(context?.XamlRoot, context ?? box);
-        FortivaThemeResources.MergeOnto(box, resolved);
-        box.RequestedTheme = resolved;
-        box.Background = GetBrush("FortivaInputFillBrush", resolved, box);
-        box.BorderBrush = GetBrush("FortivaInputBorderBrush", resolved, box);
-        box.Foreground = GetBrush("FortivaHeadingBrush", resolved, box);
-        box.BorderThickness = new Thickness(1);
-        box.CornerRadius = new CornerRadius(8);
-        box.Padding = new Thickness(12, 8, 12, 8);
-        box.MinHeight = 44;
-        box.FontSize = 14;
+        void Apply()
+        {
+            var resolved = theme ?? ResolveEffectiveTheme(context?.XamlRoot, context ?? box);
+            FortivaThemeResources.MergeOnto(box, resolved);
+            box.RequestedTheme = resolved;
+            TryApplyStyle(box, "FortivaComboBox");
+            box.Background = GetBrush("FortivaInputFillBrush", resolved, box);
+            box.BorderBrush = GetBrush("FortivaInputBorderBrush", resolved, box);
+            box.Foreground = GetBrush("FortivaHeadingBrush", resolved, box);
+            box.BorderThickness = new Thickness(1);
+            box.CornerRadius = new CornerRadius(8);
+            box.Padding = new Thickness(12, 8, 12, 8);
+            box.MinHeight = 44;
+            box.FontSize = 14;
 
-        // WinUI ComboBox template reads these keys — Background alone is not enough.
-        PinResource(box, "ComboBoxBackground", GetBrush("ComboBoxBackground", resolved, box));
-        PinResource(box, "ComboBoxBackgroundFocused", GetBrush("ComboBoxBackgroundFocused", resolved, box));
-        PinResource(box, "ComboBoxBackgroundPointerOver", GetBrush("ComboBoxBackgroundPointerOver", resolved, box));
-        PinResource(box, "ComboBoxBackgroundPressed", GetBrush("ComboBoxBackgroundPressed", resolved, box));
-        PinResource(box, "ComboBoxForeground", GetBrush("ComboBoxForeground", resolved, box));
-        PinResource(box, "ComboBoxForegroundFocused", GetBrush("ComboBoxForegroundFocused", resolved, box));
-        PinResource(box, "ComboBoxBorderBrush", GetBrush("ComboBoxBorderBrush", resolved, box));
-        PinResource(box, "ComboBoxBorderBrushFocused", GetBrush("ComboBoxBorderBrushFocused", resolved, box));
-        PinResource(box, "ComboBoxDropDownBackground", GetBrush("ComboBoxDropDownBackground", resolved, box));
-        PinResource(box, "ComboBoxDropDownGlyphForeground", GetBrush("ComboBoxDropDownGlyphForeground", resolved, box));
+            // WinUI ComboBox template reads these keys — Background alone is not enough.
+            PinResource(box, "ComboBoxBackground", GetBrush("ComboBoxBackground", resolved, box));
+            PinResource(box, "ComboBoxBackgroundUnfocused", GetBrush("ComboBoxBackgroundUnfocused", resolved, box));
+            PinResource(box, "ComboBoxBackgroundFocused", GetBrush("ComboBoxBackgroundFocused", resolved, box));
+            PinResource(box, "ComboBoxBackgroundPointerOver", GetBrush("ComboBoxBackgroundPointerOver", resolved, box));
+            PinResource(box, "ComboBoxBackgroundPressed", GetBrush("ComboBoxBackgroundPressed", resolved, box));
+            PinResource(box, "ComboBoxForeground", GetBrush("ComboBoxForeground", resolved, box));
+            PinResource(box, "ComboBoxForegroundFocused", GetBrush("ComboBoxForegroundFocused", resolved, box));
+            PinResource(box, "ComboBoxBorderBrush", GetBrush("ComboBoxBorderBrush", resolved, box));
+            PinResource(box, "ComboBoxBorderBrushFocused", GetBrush("ComboBoxBorderBrushFocused", resolved, box));
+            PinResource(box, "ComboBoxDropDownBackground", GetBrush("ComboBoxDropDownBackground", resolved, box));
+            PinResource(box, "ComboBoxDropDownGlyphForeground", GetBrush("ComboBoxDropDownGlyphForeground", resolved, box));
+            PinResource(box, "ComboBoxHeaderForeground", GetBrush("ComboBoxHeaderForeground", resolved, box));
+            PinResource(box, "ControlFillColorDefaultBrush", GetBrush("ControlFillColorDefaultBrush", resolved, box));
+            PinResource(box, "ControlFillColorSecondaryBrush", GetBrush("ControlFillColorSecondaryBrush", resolved, box));
+            PinResource(box, "TextFillColorPrimaryBrush", GetBrush("TextFillColorPrimaryBrush", resolved, box));
+        }
+
+        Apply();
+        ApplyWhenLoaded(box, Apply);
     }
 
     public static void ApplyPasswordBox(PasswordBox box, FrameworkElement? context = null, ElementTheme? theme = null)
@@ -243,17 +267,17 @@ public static class FortivaControlTheme
         PinButtonResources(button, resolved);
     }
 
-    public static void ApplyPreviewSurface(Border border, TextBlock content, FrameworkElement? context = null)
+    public static void ApplyPreviewSurface(Border border, TextBlock content, FrameworkElement? context = null, ElementTheme? theme = null)
     {
-        var theme = ResolveEffectiveTheme(context?.XamlRoot, context ?? border);
-        FortivaThemeResources.MergeOnto(border, theme);
-        border.RequestedTheme = theme;
-        content.RequestedTheme = theme;
-        border.Background = GetBrush("FortivaPreviewGradientBrush", theme, border);
-        border.BorderBrush = GetBrush("FortivaGlassBorderBrush", theme, border);
+        var resolved = theme ?? ResolveEffectiveTheme(context?.XamlRoot, context ?? border);
+        FortivaThemeResources.MergeOnto(border, resolved);
+        border.RequestedTheme = resolved;
+        content.RequestedTheme = resolved;
+        border.Background = GetBrush("FortivaPreviewGradientBrush", resolved, border);
+        border.BorderBrush = GetBrush("FortivaGlassBorderBrush", resolved, border);
         border.BorderThickness = new Thickness(1);
         border.CornerRadius = new CornerRadius(12);
-        content.Foreground = GetBrush("FortivaHeadingBrush", theme, border);
+        content.Foreground = GetBrush("FortivaHeadingBrush", resolved, border);
         FortivaSurfaceEffects.ApplyCardElevation(border, 4f);
     }
 
@@ -310,14 +334,27 @@ public static class FortivaControlTheme
 
     public static void ApplySlider(Slider slider, FrameworkElement? context = null, ElementTheme? theme = null)
     {
-        var resolved = theme ?? ResolveEffectiveTheme(context?.XamlRoot, context ?? slider);
-        FortivaThemeResources.MergeOnto(slider, resolved);
-        slider.RequestedTheme = resolved;
-        slider.Foreground = GetBrush("FortivaAccentBrush", resolved, slider);
-        PinResource(slider, "SliderTrackFill", GetBrush("SliderTrackFill", resolved, slider));
-        PinResource(slider, "SliderTrackFillPointerOver", GetBrush("SliderTrackFillPointerOver", resolved, slider));
-        PinResource(slider, "SliderTrackFillPressed", GetBrush("SliderTrackFillPressed", resolved, slider));
-        PinResource(slider, "SliderThumbFill", GetBrush("SliderThumbFill", resolved, slider));
+        void Apply()
+        {
+            var resolved = theme ?? ResolveEffectiveTheme(context?.XamlRoot, context ?? slider);
+            FortivaThemeResources.MergeOnto(slider, resolved);
+            slider.RequestedTheme = resolved;
+            TryApplyStyle(slider, "FortivaSlider");
+            slider.Foreground = GetBrush("FortivaAccentBrush", resolved, slider);
+            PinResource(slider, "SliderTrackFill", GetBrush("SliderTrackFill", resolved, slider));
+            PinResource(slider, "SliderTrackFillPointerOver", GetBrush("SliderTrackFillPointerOver", resolved, slider));
+            PinResource(slider, "SliderTrackFillPressed", GetBrush("SliderTrackFillPressed", resolved, slider));
+            PinResource(slider, "SliderTrackFillDisabled", GetBrush("SliderTrackFillDisabled", resolved, slider));
+            PinResource(slider, "SliderTrackValueFill", GetBrush("SliderTrackValueFill", resolved, slider));
+            PinResource(slider, "SliderTrackValueFillPointerOver", GetBrush("SliderTrackValueFillPointerOver", resolved, slider));
+            PinResource(slider, "SliderTrackValueFillPressed", GetBrush("SliderTrackValueFillPressed", resolved, slider));
+            PinResource(slider, "SliderTrackValueFillDisabled", GetBrush("SliderTrackValueFillDisabled", resolved, slider));
+            PinResource(slider, "SliderThumbFill", GetBrush("SliderThumbFill", resolved, slider));
+            PinResource(slider, "ControlStrongFillColorDefaultBrush", GetBrush("ControlStrongFillColorDefaultBrush", resolved, slider));
+        }
+
+        Apply();
+        ApplyWhenLoaded(slider, Apply);
     }
 
     public static void ApplyFontIcon(FontIcon icon, FrameworkElement? context = null, ElementTheme? theme = null)
@@ -390,6 +427,20 @@ public static class FortivaControlTheme
 
     private static void PinResource(FrameworkElement element, string key, Brush brush) =>
         element.Resources[key] = brush;
+
+    private static void ApplyWhenLoaded(FrameworkElement element, Action apply)
+    {
+        if (element.IsLoaded)
+            return;
+
+        RoutedEventHandler? handler = null;
+        handler = (_, _) =>
+        {
+            element.Loaded -= handler!;
+            apply();
+        };
+        element.Loaded += handler;
+    }
 
     private static void PinButtonResources(Button button, ElementTheme theme)
     {
