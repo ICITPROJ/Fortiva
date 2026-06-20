@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Fortiva Autofill",
-  "version": "1.0.43",
+  "version": "1.0.44",
   "description": "Fill logins from your Fortiva vault when you click — handles multi-step sign-in flows.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApgPHScbVbaCAFCslR8Uny0DNaUkISAkElV4tPeClgB9x3U6Um50R1wnhQjXkBQqY87nYv4B5WQcA8E+YGkzf0fViVz2mYzw4ctesC8ApiQX6EvdH4UCGE+fMc3CARfCSX/epMyiHuVAj5wrodxoxSHnlfohbuxOdzWRfp+RFiaqdFos1+S4Eia3F98BWymIQdK1PY+6ifAxG7aiYPs72Nbm4YGxs/Y3RA1ar3s/itgclpvs5gZHUQenLQHE7f/vSJkKN5onvBNVwJjlE9J94DYEjZDd1vUUGQ8+LBhGztgLUpS2Y4XdBmwrVjER/yXUx5KTAMI1cqycWaZqBIR9R2QIDAQAB",
   "permissions": [
