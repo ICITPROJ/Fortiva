@@ -50,6 +50,10 @@ public static class FortivaControlTheme
         if (host.RequestedTheme is ElementTheme.Light or ElementTheme.Dark)
             return host.RequestedTheme;
 
+        var preference = ShellViewModel.Current.ThemePreference;
+        if (preference != AppThemePreference.System)
+            return ThemeService.ToElementTheme(preference);
+
         if (host.ActualTheme is ElementTheme.Light or ElementTheme.Dark)
             return host.ActualTheme;
 
@@ -164,7 +168,7 @@ public static class FortivaControlTheme
                 box.FontSize = 14;
 
             PinSharedInputResources(box, resolved, context ?? box);
-            ForceTextBoxInnerChrome(box, resolved, context);
+            ForceInputInnerChrome(box, resolved, context);
         }
 
         Apply();
@@ -194,6 +198,7 @@ public static class FortivaControlTheme
 
             PinComboBoxResources(box, resolved, context ?? box);
             EnsureComboBoxDropDownHook(box, context);
+            ForceInputInnerChrome(box, resolved, context);
 
             for (var i = 0; i < box.Items.Count; i++)
             {
@@ -445,6 +450,14 @@ public static class FortivaControlTheme
                 : ResolveEffectiveTheme(box.XamlRoot, box);
             ApplyComboBoxDropDown(box, theme, context);
         };
+        box.DropDownClosed += (_, _) =>
+        {
+            var theme = context is not null
+                ? ResolveHostTheme(context)
+                : ResolveEffectiveTheme(box.XamlRoot, box);
+            ForceInputInnerChrome(box, theme, context);
+            PinComboBoxResources(box, theme, context ?? box);
+        };
     }
 
     private static void ApplyComboBoxDropDown(ComboBox box, ElementTheme theme, FrameworkElement? context)
@@ -452,23 +465,72 @@ public static class FortivaControlTheme
         box.RequestedTheme = theme;
         FortivaThemeResources.MergeOnto(box, theme);
         PinComboBoxResources(box, theme, context ?? box);
+        ForceInputInnerChrome(box, theme, context);
+
+        ThemeComboBoxOpenPopups(box, theme, context);
+
+        for (var i = 0; i < box.Items.Count; i++)
+        {
+            if (box.ContainerFromIndex(i) is ComboBoxItem item)
+                ApplyComboBoxItem(item, theme, context);
+        }
+
+        ScheduleComboBoxDropDownRetheme(box, theme, context, retriesRemaining: 4);
+    }
+
+    private static void ScheduleComboBoxDropDownRetheme(ComboBox box, ElementTheme theme, FrameworkElement? context, int retriesRemaining)
+    {
+        if (retriesRemaining <= 0 || !box.IsDropDownOpen)
+            return;
 
         box.DispatcherQueue.TryEnqueue(() =>
         {
-            if (FindDescendant<Popup>(box) is { Child: FrameworkElement dropDownRoot })
-            {
-                dropDownRoot.RequestedTheme = theme;
-                FortivaThemeResources.MergeOnto(dropDownRoot, theme);
-                PinComboBoxResources(dropDownRoot, theme, context ?? box);
-                PinComboBoxItemResources(dropDownRoot, theme, context ?? box);
-            }
+            if (!box.IsDropDownOpen)
+                return;
+
+            ThemeComboBoxOpenPopups(box, theme, context);
+            ForceInputInnerChrome(box, theme, context);
 
             for (var i = 0; i < box.Items.Count; i++)
             {
                 if (box.ContainerFromIndex(i) is ComboBoxItem item)
                     ApplyComboBoxItem(item, theme, context);
             }
+
+            ScheduleComboBoxDropDownRetheme(box, theme, context, retriesRemaining - 1);
         });
+    }
+
+    private static void ThemeComboBoxOpenPopups(ComboBox box, ElementTheme theme, FrameworkElement? context)
+    {
+        if (box.XamlRoot is null)
+            return;
+
+        foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(box.XamlRoot))
+        {
+            if (popup.Child is not FrameworkElement popupRoot)
+                continue;
+
+            if (!PopupBelongsToComboBox(popupRoot, box))
+                continue;
+
+            ThemePopupRoot(popupRoot, theme, context ?? box);
+        }
+
+        if (FindDescendant<Popup>(box) is { Child: FrameworkElement inlinePopupRoot })
+            ThemePopupRoot(inlinePopupRoot, theme, context ?? box);
+    }
+
+    private static bool PopupBelongsToComboBox(FrameworkElement popupRoot, ComboBox box) =>
+        box.IsDropDownOpen && FindDescendant<ComboBoxItem>(popupRoot) is not null;
+
+    private static void ThemePopupRoot(FrameworkElement popupRoot, ElementTheme theme, FrameworkElement context)
+    {
+        popupRoot.RequestedTheme = theme;
+        FortivaThemeResources.MergeOnto(popupRoot, theme);
+        PinComboBoxResources(popupRoot, theme, context);
+        PinComboBoxItemResources(popupRoot, theme, context);
+        ForceInputInnerChrome(popupRoot, theme, context);
     }
 
     private static void ApplyComboBoxItem(ComboBoxItem item, ElementTheme theme, FrameworkElement? context)
@@ -528,27 +590,56 @@ public static class FortivaControlTheme
         PinResource(element, "SubtleFillColorTertiaryBrush", GetBrush("SubtleFillColorTertiaryBrush", theme, context));
     }
 
-    private static void ForceTextBoxInnerChrome(TextBox box, ElementTheme theme, FrameworkElement? context)
+    private static void ForceInputInnerChrome(FrameworkElement control, ElementTheme theme, FrameworkElement? context)
     {
-        var host = context ?? box;
+        var host = context ?? control;
         var bg = GetBrush("FortivaInputFillBrush", theme, host);
         var fg = GetBrush("FortivaHeadingBrush", theme, host);
         var border = GetBrush("FortivaInputBorderBrush", theme, host);
-        box.Background = bg;
-        box.Foreground = fg;
-        box.BorderBrush = border;
+        var itemBg = GetBrush("ComboBoxItemBackground", theme, host);
+        var itemFg = GetBrush("ComboBoxItemForeground", theme, host);
+        var dropDownBg = GetBrush("ComboBoxDropDownBackground", theme, host);
 
-        foreach (var child in GetVisualDescendants(box))
+        control.RequestedTheme = theme;
+
+        switch (control)
         {
+            case TextBox textBox:
+                textBox.Background = bg;
+                textBox.Foreground = fg;
+                textBox.BorderBrush = border;
+                break;
+            case ComboBox comboBox:
+                comboBox.Background = bg;
+                comboBox.Foreground = fg;
+                comboBox.BorderBrush = border;
+                break;
+        }
+
+        foreach (var child in GetVisualDescendants(control))
+        {
+            if (child is FrameworkElement fe)
+                fe.RequestedTheme = theme;
+
             switch (child)
             {
-                case Border chrome when chrome.Name.Contains("Background", StringComparison.OrdinalIgnoreCase)
-                                         || chrome.Name.Contains("BorderElement", StringComparison.OrdinalIgnoreCase):
+                case Border chrome:
                     chrome.Background = bg;
-                    chrome.BorderBrush = border;
+                    if (chrome.BorderThickness != default)
+                        chrome.BorderBrush = border;
                     break;
                 case ScrollViewer scroll:
                     scroll.Background = bg;
+                    break;
+                case ContentPresenter presenter:
+                    presenter.Foreground = fg;
+                    break;
+                case ComboBoxItem item:
+                    item.Background = itemBg;
+                    item.Foreground = itemFg;
+                    break;
+                case ListViewBase list:
+                    list.Background = dropDownBg;
                     break;
             }
         }

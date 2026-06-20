@@ -21,10 +21,13 @@ public sealed partial class PasswordGeneratorPage : Page
     {
         if (sender is FrameworkElement root)
             root.Loaded -= OnPanelRootLoaded;
-        _panel?.ApplyThemeResources(this);
+        ApplyPanelTheme();
+        DispatcherQueue.TryEnqueue(ApplyPanelTheme);
     }
 
-    private void OnThemeChanged() => _panel?.ApplyThemeResources(this);
+    private void ApplyPanelTheme() => _panel?.ApplyThemeResources(this);
+
+    private void OnThemeChanged() => ApplyPanelTheme();
 
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {

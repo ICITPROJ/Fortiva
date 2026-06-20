@@ -310,7 +310,7 @@ public sealed class PasswordGeneratorPanel
                 ApplyStrengthColor(analysis.Strength);
                 var theme = _themeHost is not null
                     ? FortivaControlTheme.ResolveHostTheme(_themeHost)
-                    : FortivaControlTheme.ResolveEffectiveTheme(Root.XamlRoot, Root);
+                    : FortivaControlTheme.ResolveAppTheme();
                 _preview.Foreground = FortivaControlTheme.GetBrush("FortivaHeadingBrush", theme, _themeHost ?? Root);
             }
             catch (Exception ex)
@@ -500,7 +500,7 @@ public sealed class PasswordGeneratorPanel
         var themeHost = _themeHost ?? Root;
         var theme = _themeHost is not null
             ? FortivaControlTheme.ResolveHostTheme(_themeHost)
-            : FortivaControlTheme.ResolveEffectiveTheme(Root.XamlRoot, Root);
+            : FortivaControlTheme.ResolveAppTheme();
 
         Root.RequestedTheme = theme;
         FortivaThemeResources.MergeOnto(Root, theme);
