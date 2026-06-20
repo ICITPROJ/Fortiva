@@ -17,6 +17,13 @@ public sealed partial class PasswordGeneratorPage : Page
         _clipboard = new ClipboardService(_vm.Policy, _vm.PersonalSettings.ClipboardClearSeconds, _vm.LogPolicyViolation);
     }
 
+    private void OnPanelRootLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement root)
+            root.Loaded -= OnPanelRootLoaded;
+        _panel?.ApplyThemeResources(this);
+    }
+
     private void OnThemeChanged() => _panel?.ApplyThemeResources(this);
 
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
@@ -30,6 +37,7 @@ public sealed partial class PasswordGeneratorPage : Page
         {
             _panel = new PasswordGeneratorPanel(_vm, hostMode: PasswordGeneratorHostMode.Page, clipboard: _clipboard);
             _panel.Root.HorizontalAlignment = HorizontalAlignment.Stretch;
+            _panel.Root.Loaded += OnPanelRootLoaded;
             GeneratorHost.Children.Add(_panel.Root);
             _panel.ApplyThemeResources(this);
         }

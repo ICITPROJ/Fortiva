@@ -82,6 +82,7 @@ public sealed class PasswordGeneratorPanel
         _presetBox = new ComboBox
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
+            Header = "Preset",
             ItemsSource = new[]
             {
                 "Alphanumeric + symbols",
@@ -92,8 +93,6 @@ public sealed class PasswordGeneratorPanel
             },
             SelectedIndex = 0
         };
-        FortivaControlTheme.TryApplyStyle(_presetBox, "FortivaComboBox");
-        FortivaControlTheme.ApplyComboBox(_presetBox);
 
         _lengthLabel = CreateSectionLabel("Length");
         _lengthValue = new TextBlock
@@ -111,7 +110,6 @@ public sealed class PasswordGeneratorPanel
         _separatorLabel = CreateSectionLabel("Word separator");
         _separatorLabel.Visibility = Visibility.Collapsed;
         _separatorBox = new TextBox { Width = 80, Text = _options.PassphraseSeparator, MaxLength = 3, Visibility = Visibility.Collapsed };
-        FortivaControlTheme.ApplyTextBox(_separatorBox);
 
         var lowerToggle = CreateCharToggle("Lowercase (a-z)", _options.IncludeLowercase);
         var upperToggle = CreateCharToggle("Uppercase (A-Z)", _options.IncludeUppercase);
@@ -142,7 +140,6 @@ public sealed class PasswordGeneratorPanel
             PlaceholderText = PasswordGeneratorOptions.DefaultSymbols,
             HorizontalAlignment = HorizontalAlignment.Stretch
         };
-        FortivaControlTheme.ApplyTextBox(_symbolsBox);
 
         _customCharsetLabel = CreateSectionLabel("Custom charset (only these characters)", small: true);
         _customCharsetLabel.Visibility = Visibility.Collapsed;
@@ -153,7 +150,6 @@ public sealed class PasswordGeneratorPanel
             Visibility = Visibility.Collapsed,
             HorizontalAlignment = HorizontalAlignment.Stretch
         };
-        FortivaControlTheme.ApplyTextBox(_customCharsetBox);
 
         _ambiguousToggle = CreateCharToggle("Exclude ambiguous (0/O, 1/l/I)", _options.ExcludeAmbiguous);
         _requireEachToggle = CreateCharToggle("Require at least one of each selected type", _options.RequireFromEachGroup);
@@ -336,7 +332,6 @@ public sealed class PasswordGeneratorPanel
         lengthHeader.Children.Add(_lengthValue);
 
         var leftOptions = new StackPanel { Spacing = 12, VerticalAlignment = VerticalAlignment.Top };
-        leftOptions.Children.Add(CreateSectionLabel("Preset"));
         leftOptions.Children.Add(_presetBox);
         leftOptions.Children.Add(lengthHeader);
         leftOptions.Children.Add(_lengthSlider);
@@ -395,7 +390,8 @@ public sealed class PasswordGeneratorPanel
         Root = new StackPanel
         {
             Spacing = 16,
-            HorizontalAlignment = HorizontalAlignment.Stretch
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Padding = new Thickness(0, 0, 0, 24)
         };
 
         if (hostMode == PasswordGeneratorHostMode.Dialog)
@@ -445,7 +441,6 @@ public sealed class PasswordGeneratorPanel
         _vm.ThemeChanged += () => ApplyThemeResources(_themeHost);
 
         ApplyPresetUi();
-        ApplyThemeResources();
         Regenerate();
     }
 
@@ -506,20 +501,21 @@ public sealed class PasswordGeneratorPanel
 
         FortivaControlTheme.ApplyPreviewSurface(_previewBorder, _preview, themeHost);
         FortivaSurfaceEffects.ApplyIconButton(_copyPreviewBtn, themeHost);
-        FortivaControlTheme.ApplyComboBox(_presetBox, themeHost);
-        FortivaControlTheme.TryApplyStyle(_presetBox, "FortivaComboBox");
-        FortivaControlTheme.ApplyTextBox(_separatorBox, themeHost);
-        FortivaControlTheme.ApplyTextBox(_symbolsBox, themeHost);
-        FortivaControlTheme.ApplyTextBox(_customCharsetBox, themeHost);
-        FortivaControlTheme.ApplySlider(_lengthSlider, themeHost);
-        FortivaControlTheme.ApplySlider(_wordCountSlider, themeHost);
+        FortivaControlTheme.ApplyComboBox(_presetBox, themeHost, theme);
+        FortivaControlTheme.ApplyTextBox(_separatorBox, themeHost, theme);
+        FortivaControlTheme.ApplyTextBox(_symbolsBox, themeHost, theme);
+        FortivaControlTheme.ApplyTextBox(_customCharsetBox, themeHost, theme);
         FortivaControlTheme.TryApplyStyle(_lengthSlider, "FortivaSlider");
         FortivaControlTheme.TryApplyStyle(_wordCountSlider, "FortivaSlider");
+        FortivaControlTheme.ApplySlider(_lengthSlider, themeHost, theme);
+        FortivaControlTheme.ApplySlider(_wordCountSlider, themeHost, theme);
 
         foreach (var toggle in _charToggles.Concat([_ambiguousToggle, _requireEachToggle]))
         {
             FortivaControlTheme.ApplyToggleSwitch(toggle, themeHost);
             FortivaControlTheme.TryApplyStyle(toggle, "FortivaToggleSwitch");
+            toggle.RequestedTheme = theme;
+            toggle.Foreground = FortivaControlTheme.GetBrush("FortivaBodyBrush", theme, themeHost);
         }
 
         if (_introText is not null)
