@@ -82,17 +82,18 @@ public sealed class PasswordGeneratorPanel
         _presetBox = new ComboBox
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            Header = "Preset",
-            ItemsSource = new[]
-            {
-                "Alphanumeric + symbols",
-                "Alphanumeric only",
-                "Passphrase",
-                "PIN / numeric",
-                "Custom charset"
-            },
-            SelectedIndex = 0
+            Header = "Preset"
         };
+        foreach (var label in new[]
+                 {
+                     "Alphanumeric + symbols",
+                     "Alphanumeric only",
+                     "Passphrase",
+                     "PIN / numeric",
+                     "Custom charset"
+                 })
+            _presetBox.Items.Add(new ComboBoxItem { Content = label });
+        _presetBox.SelectedIndex = 0;
 
         _lengthLabel = CreateSectionLabel("Length");
         _lengthValue = new TextBlock
@@ -503,6 +504,7 @@ public sealed class PasswordGeneratorPanel
 
         Root.RequestedTheme = theme;
         FortivaThemeResources.MergeOnto(Root, theme);
+        FortivaControlTheme.ApplyThemeRecursively(Root, theme);
 
         if (_optionsShell is not null)
         {

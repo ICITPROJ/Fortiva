@@ -81,6 +81,7 @@ public sealed class VaultTagPickerPanel
         var theme = FortivaControlTheme.ResolveHostTheme(host);
         FortivaThemeResources.MergeOnto(Root, theme);
         Root.RequestedTheme = theme;
+        FortivaControlTheme.ApplyThemeRecursively(Root, theme);
         FortivaControlTheme.ApplyTextBox(_newTagBox, host, theme);
         FortivaControlTheme.ApplySecondaryButton(_addBtn, host, theme);
         FortivaControlTheme.ApplyMutedText(_emptyHint, host);
