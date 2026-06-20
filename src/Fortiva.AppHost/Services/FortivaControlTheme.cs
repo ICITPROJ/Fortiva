@@ -19,6 +19,8 @@ public static class FortivaControlTheme
         Brush BackgroundHover,
         Brush Foreground,
         Brush Border,
+        Brush BorderHover,
+        Brush BorderFocused,
         Brush Placeholder,
         Brush DropDownBackground,
         Brush ItemBackground,
@@ -28,6 +30,8 @@ public static class FortivaControlTheme
     private static readonly SolidColorBrush LightInputBackgroundHover = new(Color.FromArgb(255, 245, 250, 254));
     private static readonly SolidColorBrush LightInputForeground = new(Color.FromArgb(255, 10, 12, 16));
     private static readonly SolidColorBrush LightInputBorder = new(Color.FromArgb(255, 142, 180, 204));
+    private static readonly SolidColorBrush LightInputBorderHover = new(Color.FromArgb(255, 64, 188, 244));
+    private static readonly SolidColorBrush LightInputBorderFocused = new(Color.FromArgb(255, 64, 188, 244));
     private static readonly SolidColorBrush LightInputPlaceholder = new(Color.FromArgb(255, 92, 106, 120));
     private static readonly SolidColorBrush LightItemBackgroundHover = new(Color.FromArgb(255, 234, 246, 252));
 
@@ -222,6 +226,8 @@ public static class FortivaControlTheme
                 LightInputBackgroundHover,
                 LightInputForeground,
                 LightInputBorder,
+                LightInputBorderHover,
+                LightInputBorderFocused,
                 LightInputPlaceholder,
                 LightInputBackground,
                 LightInputBackground,
@@ -233,6 +239,8 @@ public static class FortivaControlTheme
             GetBrush("TextControlBackgroundPointerOver", theme, context),
             GetBrush("FortivaHeadingBrush", theme, context),
             GetBrush("FortivaInputBorderBrush", theme, context),
+            GetBrush("TextControlBorderBrushPointerOver", theme, context),
+            GetBrush("TextControlBorderBrushFocused", theme, context),
             GetBrush("FortivaMutedBrush", theme, context),
             GetBrush("ComboBoxDropDownBackground", theme, context),
             GetBrush("ComboBoxItemBackground", theme, context),
@@ -648,6 +656,8 @@ public static class FortivaControlTheme
         PinResource(element, "TextControlBackgroundPointerOver", brushes.BackgroundHover);
         PinResource(element, "TextControlForeground", brushes.Foreground);
         PinResource(element, "TextControlBorderBrush", brushes.Border);
+        PinResource(element, "TextControlBorderBrushPointerOver", brushes.BorderHover);
+        PinResource(element, "TextControlBorderBrushFocused", brushes.BorderFocused);
         PinResource(element, "TextControlPlaceholderForeground", brushes.Placeholder);
         PinResource(element, "ControlFillColorDefaultBrush", brushes.Background);
         PinResource(element, "ControlFillColorInputActiveBrush", brushes.Background);
@@ -662,7 +672,9 @@ public static class FortivaControlTheme
         PinResource(element, "ComboBoxForeground", brushes.Foreground);
         PinResource(element, "ComboBoxForegroundFocused", brushes.Foreground);
         PinResource(element, "ComboBoxBorderBrush", brushes.Border);
-        PinResource(element, "ComboBoxBorderBrushFocused", brushes.Border);
+        PinResource(element, "ComboBoxBorderBrushPointerOver", brushes.BorderHover);
+        PinResource(element, "ComboBoxBorderBrushPressed", brushes.BorderFocused);
+        PinResource(element, "ComboBoxBorderBrushFocused", brushes.BorderFocused);
         PinResource(element, "ComboBoxDropDownBackground", brushes.DropDownBackground);
         PinResource(element, "ComboBoxDropDownBorderBrush", brushes.Border);
         PinResource(element, "ComboBoxDropDownGlyphForeground", brushes.Foreground);
@@ -724,7 +736,17 @@ public static class FortivaControlTheme
             {
                 case Border chrome:
                     chrome.Background = brushes.Background;
-                    chrome.BorderBrush = brushes.Border;
+                    if (IsPrimaryInputBorder(chrome, control))
+                    {
+                        chrome.BorderBrush = brushes.Border;
+                        if (chrome.BorderThickness == default)
+                            chrome.BorderThickness = new Thickness(1);
+                    }
+                    else
+                    {
+                        chrome.BorderBrush = null;
+                        chrome.BorderThickness = new Thickness(0);
+                    }
                     break;
                 case ScrollViewer scroll:
                     scroll.Background = brushes.Background;
@@ -748,6 +770,11 @@ public static class FortivaControlTheme
             }
         }
     }
+
+    private static bool IsPrimaryInputBorder(Border border, FrameworkElement control) =>
+        border.Name.Contains("BorderElement", StringComparison.OrdinalIgnoreCase)
+        || (control is ComboBox && string.Equals(border.Name, "Background", StringComparison.Ordinal))
+        || border.Name.Contains("DropDownBorder", StringComparison.OrdinalIgnoreCase);
 
     private static IEnumerable<DependencyObject> GetVisualDescendants(DependencyObject root)
     {

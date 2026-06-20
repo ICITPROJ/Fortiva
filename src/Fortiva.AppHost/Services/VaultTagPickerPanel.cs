@@ -10,6 +10,7 @@ namespace Fortiva.AppHost.Services;
 public sealed class VaultTagPickerPanel
 {
     private readonly ShellViewModel _vm;
+    private FrameworkElement? _themeHost;
     private readonly HashSet<string> _selected = new(StringComparer.OrdinalIgnoreCase);
     private readonly StackPanel _chipPanel = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
     private readonly ScrollViewer _chipScroll = new()
@@ -77,7 +78,10 @@ public sealed class VaultTagPickerPanel
 
     public void ApplyTheme(FrameworkElement? context = null)
     {
-        var host = context ?? Root;
+        if (context is not null)
+            _themeHost = context;
+
+        var host = _themeHost ?? Root;
         var theme = FortivaControlTheme.ResolveHostTheme(host);
         FortivaThemeResources.MergeOnto(Root, theme);
         Root.RequestedTheme = theme;
@@ -88,7 +92,7 @@ public sealed class VaultTagPickerPanel
         if (_addBtn.Content is StackPanel addContent)
         {
             foreach (var child in addContent.Children.OfType<TextBlock>())
-                FortivaControlTheme.ApplyBodyText(child, context ?? Root);
+                FortivaControlTheme.ApplyBodyText(child, host);
         }
         RebuildChips();
     }
@@ -134,6 +138,8 @@ public sealed class VaultTagPickerPanel
     {
         _chipPanel.Children.Clear();
         var tags = _vm.GetKnownVaultTags();
+        var host = _themeHost ?? Root;
+        var theme = FortivaControlTheme.ResolveHostTheme(host);
         if (tags.Count == 0)
         {
             _chipPanel.Children.Add(_emptyHint);
@@ -150,17 +156,16 @@ public sealed class VaultTagPickerPanel
                 Tag = tag,
                 FontSize = 12
             };
-            FortivaSurfaceEffects.ApplyChipToggle(toggle, isSelected, Root);
+            FortivaSurfaceEffects.ApplyChipToggle(toggle, isSelected, host, theme);
             toggle.Checked += ChipToggleChanged;
             toggle.Unchecked += ChipToggleChanged;
             toggle.PointerEntered += (_, _) =>
             {
                 if (toggle.IsChecked != true)
-                    toggle.Background = FortivaControlTheme.GetBrush("FortivaSurfaceSubtleBrush",
-                        FortivaControlTheme.ResolveEffectiveTheme(Root.XamlRoot, Root), Root);
+                    toggle.Background = FortivaControlTheme.GetBrush("FortivaSurfaceSubtleBrush", theme, host);
             };
             toggle.PointerExited += (_, _) =>
-                FortivaSurfaceEffects.ApplyChipToggle(toggle, toggle.IsChecked == true, Root);
+                FortivaSurfaceEffects.ApplyChipToggle(toggle, toggle.IsChecked == true, host, theme);
             _chipPanel.Children.Add(toggle);
         }
     }
@@ -171,7 +176,8 @@ public sealed class VaultTagPickerPanel
             return;
 
         var selected = toggle.IsChecked == true;
-        FortivaSurfaceEffects.ApplyChipToggle(toggle, selected, Root);
+        var host = _themeHost ?? Root;
+        FortivaSurfaceEffects.ApplyChipToggle(toggle, selected, host);
 
         if (selected)
             _selected.Add(tag);

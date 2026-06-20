@@ -29,20 +29,22 @@ public static class FortivaSurfaceEffects
         border.PointerExited += (_, _) => border.Translation = new System.Numerics.Vector3(0, 0, resting);
     }
 
-    public static void ApplyChipToggle(ToggleButton toggle, bool selected, FrameworkElement context)
+    public static void ApplyChipToggle(ToggleButton toggle, bool selected, FrameworkElement context, ElementTheme? theme = null)
     {
-        var theme = FortivaControlTheme.ResolveEffectiveTheme(context.XamlRoot, context);
+        var resolved = theme ?? FortivaControlTheme.ResolveHostTheme(context);
+        toggle.RequestedTheme = resolved;
+        FortivaThemeResources.MergeOnto(toggle, resolved);
         toggle.CornerRadius = new CornerRadius(999);
         toggle.Padding = new Thickness(12, 7, 12, 7);
         toggle.BorderThickness = new Thickness(1);
         toggle.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
         toggle.Background = selected
-            ? FortivaControlTheme.GetBrush("FortivaAccentGlowBrush", theme, context)
-            : FortivaControlTheme.GetBrush("FortivaGlassFillBrush", theme, context);
+            ? FortivaControlTheme.GetBrush("FortivaAccentGlowBrush", resolved, context)
+            : FortivaControlTheme.GetBrush("FortivaInputFillBrush", resolved, context);
         toggle.BorderBrush = selected
-            ? FortivaControlTheme.GetBrush("FortivaAccentBrush", theme, context)
-            : FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", theme, context);
-        toggle.Foreground = FortivaControlTheme.GetBrush("FortivaHeadingBrush", theme, context);
+            ? FortivaControlTheme.GetBrush("FortivaAccentBrush", resolved, context)
+            : FortivaControlTheme.GetBrush("FortivaInputBorderBrush", resolved, context);
+        toggle.Foreground = FortivaControlTheme.GetBrush("FortivaHeadingBrush", resolved, context);
     }
 
     public static void ApplyIconButton(Button button, FrameworkElement? context = null)
