@@ -58,6 +58,18 @@
             <SolidColorBrush x:Key="FortivaStatusWarningBrush" Color="#33C88200"/>
             <SolidColorBrush x:Key="FortivaStatusErrorBrush" Color="#33DC3232"/>
 
+            <!-- Semantic accents (code-built health/strength UI) -->
+            <SolidColorBrush x:Key="FortivaSemanticErrorBrush" Color="#DC3232"/>
+            <SolidColorBrush x:Key="FortivaSemanticWarningBrush" Color="#C88200"/>
+            <SolidColorBrush x:Key="FortivaSemanticSuccessBrush" Color="#00A050"/>
+            <SolidColorBrush x:Key="FortivaSemanticInfoBrush" Color="#5082C8"/>
+            <SolidColorBrush x:Key="FortivaSemanticErrorBgBrush" Color="#24DC3232"/>
+            <SolidColorBrush x:Key="FortivaSemanticWarningBgBrush" Color="#24C88200"/>
+            <SolidColorBrush x:Key="FortivaSemanticSuccessBgBrush" Color="#2400A050"/>
+            <SolidColorBrush x:Key="FortivaSemanticInfoBgBrush" Color="#245082C8"/>
+            <SolidColorBrush x:Key="FortivaTrackSubtleBrush" Color="#1C808080"/>
+            <SolidColorBrush x:Key="FortivaOverlayScrimBrush" Color="#660A0C10"/>
+
             <!-- WinUI system control tokens (light frosted glass) -->
             <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="#E6F4FC"/>
             <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="#D8ECF8"/>
@@ -117,6 +129,7 @@
                 <GradientStop Color="#CCE8F6FC" Offset="0.5"/>
                 <GradientStop Color="#9940BCF4" Offset="1"/>
             </LinearGradientBrush>
+            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#40BCF4"/>
             <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#5CC8F6"/>
             <SolidColorBrush x:Key="ToggleSwitchFillOff" Color="#B8CEDC"/>
             <SolidColorBrush x:Key="ToggleSwitchFillOffPointerOver" Color="#A8C4D8"/>
@@ -194,6 +207,17 @@
             <SolidColorBrush x:Key="FortivaStatusWarningBrush" Color="#33C85000"/>
             <SolidColorBrush x:Key="FortivaStatusErrorBrush" Color="#33C83232"/>
 
+            <SolidColorBrush x:Key="FortivaSemanticErrorBrush" Color="#FF6060"/>
+            <SolidColorBrush x:Key="FortivaSemanticWarningBrush" Color="#FFB040"/>
+            <SolidColorBrush x:Key="FortivaSemanticSuccessBrush" Color="#40D080"/>
+            <SolidColorBrush x:Key="FortivaSemanticInfoBrush" Color="#70A8E8"/>
+            <SolidColorBrush x:Key="FortivaSemanticErrorBgBrush" Color="#33FF6060"/>
+            <SolidColorBrush x:Key="FortivaSemanticWarningBgBrush" Color="#33FFB040"/>
+            <SolidColorBrush x:Key="FortivaSemanticSuccessBgBrush" Color="#3340D080"/>
+            <SolidColorBrush x:Key="FortivaSemanticInfoBgBrush" Color="#3370A8E8"/>
+            <SolidColorBrush x:Key="FortivaTrackSubtleBrush" Color="#28808080"/>
+            <SolidColorBrush x:Key="FortivaOverlayScrimBrush" Color="#CC000000"/>
+
             <!-- WinUI control tokens (dark — parity with light theme) -->
             <SolidColorBrush x:Key="ControlFillColorDefaultBrush" Color="#1A2028"/>
             <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="#141A22"/>
@@ -257,6 +281,7 @@
             <SolidColorBrush x:Key="ContentDialogTopOverlay" Color="#00000000"/>
             <SolidColorBrush x:Key="ContentDialogSeparator" Color="#6640BCF4"/>
 
+            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#40BCF4"/>
             <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#5CC8F6"/>
             <SolidColorBrush x:Key="ToggleSwitchFillOff" Color="#2A3440"/>
             <SolidColorBrush x:Key="ToggleSwitchFillOffPointerOver" Color="#354050"/>

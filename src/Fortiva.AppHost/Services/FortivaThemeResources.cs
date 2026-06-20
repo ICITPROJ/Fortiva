@@ -10,11 +10,12 @@ namespace Fortiva.AppHost.Services;
 public static class FortivaThemeResources
 {
     public static Brush Body => FortivaControlTheme.GetBrush("FortivaBodyBrush");
-    public static Brush StatusSuccess => FortivaControlTheme.GetBrush("FortivaStatusSuccessBrush");
-    public static Brush StatusWarning => FortivaControlTheme.GetBrush("FortivaStatusWarningBrush");
-    public static Brush StatusError => FortivaControlTheme.GetBrush("FortivaStatusErrorBrush");
+    public static Brush StatusSuccess => FortivaControlTheme.GetBrush("FortivaSemanticSuccessBrush");
+    public static Brush StatusWarning => FortivaControlTheme.GetBrush("FortivaSemanticWarningBrush");
+    public static Brush StatusError => FortivaControlTheme.GetBrush("FortivaSemanticErrorBrush");
 
-    public static Brush GetBrush(string key) => FortivaControlTheme.GetBrush(key);
+    public static Brush GetBrush(string key, FrameworkElement? context = null)
+        => FortivaControlTheme.GetBrush(key, context: context);
 
     public static ElementTheme ResolveTheme() => FortivaControlTheme.ResolveEffectiveTheme();
 

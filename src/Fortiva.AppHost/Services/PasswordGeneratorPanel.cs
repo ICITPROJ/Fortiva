@@ -548,16 +548,7 @@ public sealed class PasswordGeneratorPanel
 
     private void ApplyStrengthColor(PasswordStrength strength)
     {
-        _strengthLabel.Foreground = strength switch
-        {
-            PasswordStrength.VeryWeak or PasswordStrength.Weak =>
-                new SolidColorBrush(Color.FromArgb(255, 220, 50, 50)),
-            PasswordStrength.Fair =>
-                new SolidColorBrush(Color.FromArgb(255, 200, 130, 0)),
-            PasswordStrength.Strong =>
-                new SolidColorBrush(Color.FromArgb(255, 0, 160, 80)),
-            _ => FortivaControlTheme.GetBrush("FortivaAccentBrush", FortivaControlTheme.ResolveHostTheme(_themeHost ?? Root), _themeHost ?? Root)
-        };
+        _strengthLabel.Foreground = FortivaControlTheme.GetPasswordStrengthBrush(strength, _themeHost ?? Root);
     }
 
     private TextBlock CreateSectionLabel(string text, bool small = false, bool pageHeader = false)

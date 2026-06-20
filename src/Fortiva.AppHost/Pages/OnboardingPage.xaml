@@ -201,7 +201,7 @@
         </ScrollViewer>
 
         <!-- Busy overlay during vault creation (Argon2) -->
-        <Grid x:Name="BusyOverlay" Visibility="Collapsed" Background="#99000000">
+        <Grid x:Name="BusyOverlay" Visibility="Collapsed">
             <Border Style="{StaticResource FortivaGlassPanel}" HorizontalAlignment="Center"
                     VerticalAlignment="Center" MinWidth="300" MaxWidth="360">
                 <StackPanel Spacing="16" HorizontalAlignment="Center">

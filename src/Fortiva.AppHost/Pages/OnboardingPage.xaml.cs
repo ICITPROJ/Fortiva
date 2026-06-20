@@ -3,11 +3,9 @@ using Fortiva.AppHost.ViewModels;
 using Fortiva.Core.Password;
 using Fortiva.Core.Platform;
 using Fortiva.Core.Vault;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Windows.UI;
 
 namespace Fortiva.AppHost.Pages;
 
@@ -57,6 +55,8 @@ public sealed partial class OnboardingPage : Page
     {
         base.OnNavigatedTo(e);
         ThemeService.ApplyToElement(this);
+        ApplyOverlayTheme();
+        _vm.ThemeChanged += OnThemeChanged;
         RefreshPortableHint();
 
         _vm.RefreshVaultExists();
@@ -114,8 +114,24 @@ public sealed partial class OnboardingPage : Page
     protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
+        _vm.ThemeChanged -= OnThemeChanged;
         _vm.BrandAppearanceChanged -= OnBrandAppearanceChanged;
     }
+
+    private void OnThemeChanged()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            ThemeService.ApplyToElement(this);
+            ApplyOverlayTheme();
+            RefreshStepDots();
+            if (!string.IsNullOrEmpty(NewPasswordBox.Password))
+                NewPassword_Changed(NewPasswordBox, new RoutedEventArgs());
+        });
+    }
+
+    private void ApplyOverlayTheme()
+        => BusyOverlay.Background = FortivaControlTheme.GetBrush("FortivaOverlayScrimBrush", context: this);
 
     private void ShowHelloContinue(bool hideSkip = false)
     {
@@ -145,15 +161,24 @@ public sealed partial class OnboardingPage : Page
             _steps[i].Visibility = i == step ? Visibility.Visible : Visibility.Collapsed;
 
         for (var i = 0; i < _dots.Length; i++)
-        {
-            _dots[i].Width = i == step ? 28 : 10;
-            _dots[i].Opacity = i == step ? 1.0 : 0.45;
-            _dots[i].Background = i == step
-                ? (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"]
-                : (Brush)Application.Current.Resources["ControlFillColorDefaultBrush"];
-        }
+            RefreshStepDot(i, i == step);
 
         _step = step;
+    }
+
+    private void RefreshStepDots()
+    {
+        for (var i = 0; i < _dots.Length; i++)
+            RefreshStepDot(i, i == _step);
+    }
+
+    private void RefreshStepDot(int index, bool active)
+    {
+        _dots[index].Width = active ? 28 : 10;
+        _dots[index].Opacity = active ? 1.0 : 0.45;
+        _dots[index].Background = active
+            ? FortivaControlTheme.GetBrush("FortivaAccentBrush", context: this)
+            : FortivaControlTheme.GetBrush("FortivaTrackSubtleBrush", context: this);
     }
 
     private void NextStep_Click(object sender, RoutedEventArgs e)
@@ -168,14 +193,7 @@ public sealed partial class OnboardingPage : Page
         StrengthBar.Value = (int)result.Strength;
         StrengthLabel.Text = $"{result.Label}  ({result.EntropyBits:F0} bits entropy)";
 
-        var color = result.Strength switch
-        {
-            PasswordStrength.VeryWeak or PasswordStrength.Weak => new SolidColorBrush(Color.FromArgb(255, 220, 50, 50)),
-            PasswordStrength.Fair => new SolidColorBrush(Color.FromArgb(255, 200, 130, 0)),
-            PasswordStrength.Strong => new SolidColorBrush(Color.FromArgb(255, 0, 160, 80)),
-            _ => new SolidColorBrush(Color.FromArgb(255, 0, 120, 215))
-        };
-        StrengthBar.Foreground = color;
+        StrengthBar.Foreground = FortivaControlTheme.GetPasswordStrengthBrush(result.Strength, this);
         StrengthSuggestion.Text = result.Suggestions.FirstOrDefault() ?? "";
     }
 

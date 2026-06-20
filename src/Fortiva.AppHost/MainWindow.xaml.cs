@@ -567,7 +567,18 @@ public sealed partial class MainWindow : Window
             ThemeService.ApplySystemBackdrop(this);
             RefreshBrandAppearance();
             RefreshStatusChrome();
+            RefreshSearchChrome();
         });
+    }
+
+    private void RefreshSearchChrome()
+    {
+        if (GlobalSearch.Visibility != Visibility.Visible)
+            return;
+
+        var theme = FortivaControlTheme.ResolveEffectiveTheme(GlobalSearch.XamlRoot, GlobalSearch);
+        FortivaControlTheme.ApplyAutoSuggestBox(GlobalSearch, GlobalSearch, theme);
+        FortivaControlTheme.TryApplyStyle(GlobalSearch, "FortivaSearchBox");
     }
 
     private void OnBridgeUnlockRequested()

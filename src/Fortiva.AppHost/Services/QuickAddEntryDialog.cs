@@ -26,9 +26,10 @@ public static class QuickAddEntryDialog
     public static async Task<Outcome> ShowAsync(
         XamlRoot xamlRoot,
         ShellViewModel vm,
-        IEnumerable<string>? preselectedTags = null)
+        IEnumerable<string>? preselectedTags = null,
+        FrameworkElement? themeHost = null)
     {
-        var theme = FortivaControlTheme.ResolveAppTheme();
+        var theme = FortivaControlTheme.ResolveDialogTheme(xamlRoot, themeHost);
 
         var titleBox = new TextBox { PlaceholderText = "e.g. GitHub, Work email…" };
         var usernameBox = new TextBox { PlaceholderText = "username or email (optional)" };
@@ -98,7 +99,7 @@ public static class QuickAddEntryDialog
         passwordRow.Children.Add(regenerateBtn);
         form.Children.Add(passwordRow);
 
-        var shell = FortivaDialogs.WrapDialogContent(form, theme);
+        var shell = FortivaDialogs.WrapDialogContent(form, xamlRoot, themeHost);
 
         var dlg = new ContentDialog
         {
@@ -112,7 +113,7 @@ public static class QuickAddEntryDialog
 
         void RefreshTheme()
         {
-            var currentTheme = FortivaControlTheme.ResolveAppTheme();
+            var currentTheme = FortivaControlTheme.ResolveDialogTheme(xamlRoot, themeHost);
             FortivaThemeResources.MergeOnto(form, currentTheme);
             form.RequestedTheme = currentTheme;
             FortivaDialogs.ApplyThemeToTree(form, currentTheme);
@@ -130,7 +131,7 @@ public static class QuickAddEntryDialog
             tagPicker.ApplyTheme(form);
         }
 
-        FortivaDialogs.Configure(dlg, xamlRoot, onOpened: RefreshTheme);
+        FortivaDialogs.Configure(dlg, xamlRoot, onOpened: RefreshTheme, themeHost: themeHost);
         RefreshTheme();
         void OnThemeChanged() => RefreshTheme();
         vm.ThemeChanged += OnThemeChanged;

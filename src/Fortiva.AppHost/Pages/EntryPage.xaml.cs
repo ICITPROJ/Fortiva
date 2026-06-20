@@ -86,7 +86,7 @@ public sealed partial class EntryPage : Page
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = Content.XamlRoot
         };
-        FortivaDialogs.Configure(dlg, Content.XamlRoot);
+        FortivaDialogs.Configure(dlg, Content.XamlRoot, themeHost: this);
         var result = await dlg.ShowAsync();
         if (result is not (ContentDialogResult.Primary or ContentDialogResult.Secondary))
             return false;
@@ -175,6 +175,7 @@ public sealed partial class EntryPage : Page
     {
         base.OnNavigatedTo(e);
         ThemeService.ApplyToElement(this);
+        _vm.ThemeChanged += OnThemeChanged;
         _clipboard.RefreshPolicy(_vm.Policy, _vm.PersonalSettings.ClipboardClearSeconds);
         _revealCts?.Cancel();
         PasswordBox.PasswordRevealMode = PasswordRevealMode.Peek;
@@ -250,6 +251,7 @@ public sealed partial class EntryPage : Page
     protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
+        _vm.ThemeChanged -= OnThemeChanged;
         StopOtpTimer();
     }
 
@@ -431,22 +433,23 @@ public sealed partial class EntryPage : Page
         var result = _vm.AnalyzeStrength(password);
         StrengthBar.Value = (int)result.Strength;
         StrengthLabel.Text = result.Label;
-        StrengthBar.Foreground = result.Strength switch
+        StrengthBar.Foreground = FortivaControlTheme.GetPasswordStrengthBrush(result.Strength, this);
+    }
+
+    private void OnThemeChanged()
+    {
+        DispatcherQueue.TryEnqueue(() =>
         {
-            PasswordStrength.VeryWeak or PasswordStrength.Weak =>
-                new SolidColorBrush(Color.FromArgb(255, 220, 50, 50)),
-            PasswordStrength.Fair =>
-                new SolidColorBrush(Color.FromArgb(255, 200, 130, 0)),
-            PasswordStrength.Strong =>
-                new SolidColorBrush(Color.FromArgb(255, 0, 160, 80)),
-            _ =>
-                new SolidColorBrush(Color.FromArgb(255, 0, 120, 215))
-        };
+            ThemeService.ApplyToElement(this);
+            _tagPicker.ApplyTheme(this);
+            if (!string.IsNullOrEmpty(PasswordBox.Password))
+                UpdateStrength(PasswordBox.Password);
+        });
     }
 
     private async void GeneratePassword_Click(object sender, RoutedEventArgs e)
     {
-        var generated = await PasswordGeneratorDialog.ShowAsync(Content.XamlRoot, _vm);
+        var generated = await PasswordGeneratorDialog.ShowAsync(Content.XamlRoot, _vm, themeHost: this);
         if (generated is null) return;
         PasswordBox.Password = generated.Password;
         UpdateStrength(generated.Password);
@@ -585,7 +588,7 @@ public sealed partial class EntryPage : Page
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = Content.XamlRoot
         };
-        FortivaDialogs.Configure(dlg, Content.XamlRoot);
+        FortivaDialogs.Configure(dlg, Content.XamlRoot, themeHost: this);
         if (await dlg.ShowAsync() == ContentDialogResult.Primary)
         {
             try
@@ -634,7 +637,7 @@ public sealed partial class EntryPage : Page
             CloseButtonText = "OK",
             XamlRoot = Content.XamlRoot
         };
-        FortivaDialogs.Configure(dlg, Content.XamlRoot);
+        FortivaDialogs.Configure(dlg, Content.XamlRoot, themeHost: this);
         await dlg.ShowAsync();
     }
 }

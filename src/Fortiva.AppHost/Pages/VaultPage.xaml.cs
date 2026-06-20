@@ -37,6 +37,7 @@ public sealed partial class VaultPage : Page
     {
         base.OnNavigatedTo(e);
         ThemeService.ApplyToElement(this);
+        _vm.ThemeChanged += OnThemeChanged;
         _clipboard.RefreshPolicy(_vm.Policy, _vm.PersonalSettings.ClipboardClearSeconds);
         _stateChangedHandler = () => DispatcherQueue.TryEnqueue(() =>
         {
@@ -101,6 +102,7 @@ public sealed partial class VaultPage : Page
     protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
+        _vm.ThemeChanged -= OnThemeChanged;
         if (_stateChangedHandler is not null)
         {
             _vm.StateChanged -= _stateChangedHandler;
@@ -120,6 +122,17 @@ public sealed partial class VaultPage : Page
         _searchDebounceTimer?.Stop();
         _searchDebounceTimer = null;
         HideDetailPaneCore();
+    }
+
+    private void OnThemeChanged()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            ThemeService.ApplyToElement(this);
+            ApplyViewToggleChrome();
+            if (DetailEditorFrame.Content is FrameworkElement detailContent)
+                ThemeService.ApplyToElement(detailContent);
+        });
     }
 
     private void Page_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -451,7 +464,7 @@ public sealed partial class VaultPage : Page
             return;
         }
 
-        var tag = await VaultCategoryDialog.ShowCreateAsync(Content.XamlRoot, _vm);
+        var tag = await VaultCategoryDialog.ShowCreateAsync(Content.XamlRoot, _vm, themeHost: this);
         if (tag is null)
             return;
 
@@ -584,7 +597,7 @@ public sealed partial class VaultPage : Page
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = Content.XamlRoot
         };
-        FortivaDialogs.Configure(dlg, Content.XamlRoot);
+        FortivaDialogs.Configure(dlg, Content.XamlRoot, themeHost: this);
         if (await dlg.ShowAsync() != ContentDialogResult.Primary)
             return;
 
@@ -615,7 +628,7 @@ public sealed partial class VaultPage : Page
         if (selected.Count == 0)
             return;
 
-        var tag = await VaultCategoryDialog.ShowCreateAsync(Content.XamlRoot, _vm, title: "Add tag to selection");
+        var tag = await VaultCategoryDialog.ShowCreateAsync(Content.XamlRoot, _vm, title: "Add tag to selection", themeHost: this);
         if (tag is null)
             return;
 
@@ -747,7 +760,7 @@ public sealed partial class VaultPage : Page
     {
         if (!_vm.IsUnlocked) return;
         var generated = await PasswordGeneratorDialog.ShowAsync(
-            Content.XamlRoot, _vm, preselectedTags: GetPreselectedTagsForNewEntry());
+            Content.XamlRoot, _vm, preselectedTags: GetPreselectedTagsForNewEntry(), themeHost: this);
         if (generated is null) return;
 
         var create = new ContentDialog
@@ -760,7 +773,7 @@ public sealed partial class VaultPage : Page
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Content.XamlRoot
         };
-        FortivaDialogs.Configure(create, Content.XamlRoot);
+        FortivaDialogs.Configure(create, Content.XamlRoot, themeHost: this);
         var choice = await create.ShowAsync();
         if (choice == ContentDialogResult.Primary)
         {
@@ -779,7 +792,7 @@ public sealed partial class VaultPage : Page
     private async Task QuickAddAsync()
     {
         if (_vm.IsReadOnly) { await ShowInfoAsync("Vault is read-only."); return; }
-        var outcome = await QuickAddEntryDialog.ShowAsync(Content.XamlRoot, _vm, GetPreselectedTagsForNewEntry());
+        var outcome = await QuickAddEntryDialog.ShowAsync(Content.XamlRoot, _vm, GetPreselectedTagsForNewEntry(), themeHost: this);
         if (outcome.Result == QuickAddEntryDialog.QuickAddResult.Saved)
         {
             RefreshList();
@@ -814,7 +827,7 @@ public sealed partial class VaultPage : Page
             DefaultButton  = ContentDialogButton.Close,
             XamlRoot       = Content.XamlRoot
         };
-        FortivaDialogs.Configure(dlg, Content.XamlRoot);
+        FortivaDialogs.Configure(dlg, Content.XamlRoot, themeHost: this);
         await dlg.ShowAsync();
     }
 }

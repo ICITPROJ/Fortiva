@@ -1,12 +1,9 @@
 using Fortiva.AppHost.Services;
 using Fortiva.AppHost.ViewModels;
 using Fortiva.Core.Audit;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Windows.Storage.Pickers;
-using Windows.UI;
 
 namespace Fortiva.AppHost.Pages;
 
@@ -50,7 +47,7 @@ public sealed partial class AuditPage : Page
         CountLabel.Text = $"{events.Count} events";
     }
 
-    private static Border BuildRow(AuditEvent ev)
+    private Border BuildRow(AuditEvent ev)
     {
         var row = new Grid();
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
@@ -62,7 +59,7 @@ public sealed partial class AuditPage : Page
             Text = ev.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss"),
             FontSize = 12,
             FontFamily = new FontFamily("Consolas"),
-            Foreground = FortivaThemeResources.Body,
+            Foreground = FortivaControlTheme.GetBrush("FortivaBodyBrush", context: this),
             VerticalAlignment = VerticalAlignment.Center
         };
         Grid.SetColumn(time, 0);
@@ -76,17 +73,17 @@ public sealed partial class AuditPage : Page
             Background = ev.EventType switch
             {
                 AuditEventType.UnlockFailure or AuditEventType.PolicyViolation =>
-                    FortivaThemeResources.StatusError,
+                    FortivaControlTheme.GetBrush("FortivaSemanticErrorBgBrush", context: this),
                 AuditEventType.UnlockSuccess =>
-                    FortivaThemeResources.StatusSuccess,
-                _ => FortivaThemeResources.GetBrush("AccentFillColorTertiaryBrush")
+                    FortivaControlTheme.GetBrush("FortivaSemanticSuccessBgBrush", context: this),
+                _ => FortivaControlTheme.GetBrush("FortivaTrackSubtleBrush", context: this)
             },
             Child = new TextBlock
             {
                 Text = typeText,
                 FontSize = 11,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                Foreground = FortivaControlTheme.GetBrush("FortivaHeadingBrush")
+                Foreground = FortivaControlTheme.GetBrush("FortivaHeadingBrush", context: this)
             }
         };
         Grid.SetColumn(badge, 1);
@@ -97,7 +94,7 @@ public sealed partial class AuditPage : Page
             FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            Foreground = FortivaControlTheme.GetBrush("FortivaBodyBrush")
+            Foreground = FortivaControlTheme.GetBrush("FortivaBodyBrush", context: this)
         };
         Grid.SetColumn(msg, 2);
 
@@ -107,8 +104,8 @@ public sealed partial class AuditPage : Page
 
         return new Border
         {
-            Background = FortivaThemeResources.GetBrush("FortivaGlassFillBrush"),
-            BorderBrush = FortivaThemeResources.GetBrush("FortivaGlassBorderBrush"),
+            Background = FortivaControlTheme.GetBrush("FortivaGlassFillBrush", context: this),
+            BorderBrush = FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", context: this),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(10),
             Padding = new Thickness(14, 10, 14, 10),
@@ -119,7 +116,7 @@ public sealed partial class AuditPage : Page
 
     private async void Export_Click(object sender, RoutedEventArgs e)
     {
-        var picker = new FileSavePicker();
+        var picker = new Windows.Storage.Pickers.FileSavePicker();
         WinRT.Interop.InitializeWithWindow.Initialize(picker, App.MainWindowHandle);
         picker.SuggestedFileName = $"fortiva-audit-{DateTime.Now:yyyyMMdd}";
         picker.FileTypeChoices.Add("JSONL", [".jsonl"]);

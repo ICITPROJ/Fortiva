@@ -44,6 +44,7 @@ public sealed partial class SettingsPage : Page
     {
         base.OnNavigatedTo(e);
         ThemeService.ApplyToElement(this);
+        _vm.ThemeChanged += OnThemeChanged;
         _stateChangedHandler ??= () => DispatcherQueue.TryEnqueue(RefreshBrowserExtensionUi);
         _vm.StateChanged += _stateChangedHandler;
         _bridgeHealthCheckedThisVisit = false;
@@ -53,9 +54,13 @@ public sealed partial class SettingsPage : Page
     protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
+        _vm.ThemeChanged -= OnThemeChanged;
         if (_stateChangedHandler is not null)
             _vm.StateChanged -= _stateChangedHandler;
     }
+
+    private void OnThemeChanged()
+        => DispatcherQueue.TryEnqueue(() => ThemeService.ApplyToElement(this));
 
     private void LoadSettings()
     {

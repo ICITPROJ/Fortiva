@@ -28,9 +28,13 @@ public sealed partial class UnlockPage : Page
     private void OnBrandAppearanceChanged()
         => RefreshBrandLogo();
 
+    private void OnThemeChanged()
+        => DispatcherQueue.TryEnqueue(() => ThemeService.ApplyToElement(this));
+
     protected override void OnNavigatedFrom(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedFrom(e);
+        _vm.ThemeChanged -= OnThemeChanged;
         _vm.BrandAppearanceChanged -= OnBrandAppearanceChanged;
         if (_bridgeUnlockMode && !_vm.IsUnlocked)
             _vm.CancelBridgeUnlockIfPending();
@@ -42,6 +46,9 @@ public sealed partial class UnlockPage : Page
     protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+
+        ThemeService.ApplyToElement(this);
+        _vm.ThemeChanged += OnThemeChanged;
 
         _hello = new HelloUnlockManager(_vm.HelloDataDirectory, _vm.IsEnterprise);
         _bridgeUnlockMode = e.Parameter is BridgeUnlockNavigationContext;

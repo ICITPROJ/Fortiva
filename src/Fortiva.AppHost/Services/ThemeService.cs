@@ -122,6 +122,25 @@ public static class ThemeService
             if (frame.Content is FrameworkElement page)
                 ApplyToElement(page, preference);
         }
+
+        ApplyThemeToAllFrames(root, preference);
+    }
+
+    private static void ApplyThemeToAllFrames(DependencyObject root, AppThemePreference preference)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is Frame frame)
+            {
+                frame.RequestedTheme = ToElementTheme(preference);
+                if (frame.Content is FrameworkElement page)
+                    ApplyToElement(page, preference);
+            }
+
+            ApplyThemeToAllFrames(child, preference);
+        }
     }
 
     private static void EnsureSystemThemeHook(FrameworkElement root)

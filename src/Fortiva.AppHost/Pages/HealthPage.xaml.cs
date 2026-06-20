@@ -5,13 +5,11 @@ using Fortiva.Core.Platform;
 using Fortiva.Core.Security;
 using Fortiva.Core.Updates;
 using Fortiva.Core.Vault;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.Storage;
 using Windows.Storage.Pickers;
-using Windows.UI;
 
 namespace Fortiva.AppHost.Pages;
 
@@ -373,10 +371,14 @@ public sealed partial class HealthPage : Page
         PopulateStrengthBars(report, loginTotal);
         PopulatePasswordLists(report, entries);
 
-        WeakExpander.Header = BuildExpanderHeader("Weak passwords", report.WeakCount, "\uEA3A", FortivaThemeResources.StatusError);
-        ReusedExpander.Header = BuildExpanderHeader("Reused passwords", report.ReusedCount, "\uE8AB", FortivaThemeResources.StatusWarning);
-        OldExpander.Header = BuildExpanderHeader("Old passwords (1+ year)", report.OldCount, "\uE787", FortivaThemeResources.StatusWarning);
-        MissingExpander.Header = BuildExpanderHeader("Missing passwords", report.MissingCount, "\uE946", FortivaThemeResources.Body);
+        WeakExpander.Header = BuildExpanderHeader("Weak passwords", report.WeakCount, "\uEA3A",
+            FortivaControlTheme.GetBrush("FortivaSemanticErrorBrush", context: this));
+        ReusedExpander.Header = BuildExpanderHeader("Reused passwords", report.ReusedCount, "\uE8AB",
+            FortivaControlTheme.GetBrush("FortivaSemanticWarningBrush", context: this));
+        OldExpander.Header = BuildExpanderHeader("Old passwords (1+ year)", report.OldCount, "\uE787",
+            FortivaControlTheme.GetBrush("FortivaSemanticWarningBrush", context: this));
+        MissingExpander.Header = BuildExpanderHeader("Missing passwords", report.MissingCount, "\uE946",
+            FortivaControlTheme.GetBrush("FortivaBodyBrush", context: this));
 
         HighlightCard(WeakCard, report.WeakCount > 0);
         HighlightCard(ReusedCard, report.ReusedCount > 0);
@@ -393,47 +395,39 @@ public sealed partial class HealthPage : Page
     private void ApplyScoreVisuals(int score, SecurityAuditReport audit)
     {
         var hasCritical = audit.CriticalCount > 0;
-        var (heading, detail, grade, ringColor, bannerColor) = score switch
+        var (heading, detail, grade) = score switch
         {
             >= 90 when !hasCritical => (
                 "Excellent - your vault passes the full audit",
                 $"{audit.PassCount} checks passed. Keep unique passwords and export encrypted backups regularly.",
-                "A",
-                Color.FromArgb(255, 16, 160, 90),
-                Color.FromArgb(36, 16, 160, 90)),
+                "A"),
             >= 75 => (
                 "Good - minor issues to address",
                 $"{audit.WarningCount + audit.InfoCount} recommendation(s) below will raise your score further.",
-                "B",
-                Color.FromArgb(255, 40, 150, 70),
-                Color.FromArgb(36, 40, 150, 70)),
+                "B"),
             >= 55 => (
                 "Fair - security gaps need attention",
                 "Review critical and warning findings. Start with reused and weak passwords.",
-                "C",
-                Color.FromArgb(255, 210, 130, 0),
-                Color.FromArgb(36, 210, 130, 0)),
+                "C"),
             >= 35 => (
                 "Needs work - multiple risks detected",
                 $"{audit.CriticalCount} critical and {audit.WarningCount} warning finding(s) in this audit.",
-                "D",
-                Color.FromArgb(255, 220, 110, 20),
-                Color.FromArgb(36, 220, 110, 20)),
+                "D"),
             _ => (
                 "Critical - immediate action required",
                 "This audit found serious issues across passwords and/or settings.",
-                "F",
-                Color.FromArgb(255, 220, 60, 60),
-                Color.FromArgb(36, 220, 60, 60))
+                "F")
         };
+
+        var (ring, banner) = FortivaControlTheme.GetHealthScoreBrushes(score, hasCritical, this);
 
         ScoreHeading.Text = heading;
         ScoreDetail.Text = detail;
         ScoreGrade.Text = grade;
-        ScoreRing.BorderBrush = new SolidColorBrush(ringColor);
-        ScoreValue.Foreground = new SolidColorBrush(ringColor);
-        ScoreGrade.Foreground = new SolidColorBrush(ringColor);
-        ScoreRing.Background = new SolidColorBrush(bannerColor);
+        ScoreRing.BorderBrush = ring;
+        ScoreValue.Foreground = ring;
+        ScoreGrade.Foreground = ring;
+        ScoreRing.Background = banner;
     }
 
     private void PopulateFindings(IReadOnlyList<SecurityAuditFinding> findings)
@@ -453,20 +447,17 @@ public sealed partial class HealthPage : Page
 
         foreach (var f in ordered)
         {
-            var (accent, label) = f.Severity switch
-            {
-                AuditSeverity.Critical => (Color.FromArgb(255, 220, 60, 60), "CRITICAL"),
-                AuditSeverity.Warning => (Color.FromArgb(255, 220, 130, 0), "WARNING"),
-                AuditSeverity.Info => (Color.FromArgb(255, 80, 130, 200), "INFO"),
-                _ => (Color.FromArgb(255, 16, 160, 90), "PASS")
-            };
+            var severityKey = FortivaControlTheme.GetAuditSeverityKey(f.Severity);
+            var accent = FortivaControlTheme.GetAuditSeverityBrush(severityKey, this);
+            var bg = FortivaControlTheme.GetAuditSeverityBgBrush(severityKey, this);
+            var label = FortivaControlTheme.GetAuditSeverityLabel(f.Severity);
 
             var card = new Border
             {
                 CornerRadius = new CornerRadius(12),
                 Padding = new Thickness(16),
-                Background = new SolidColorBrush(Color.FromArgb((byte)(f.Severity == AuditSeverity.Pass ? 16 : 24), accent.R, accent.G, accent.B)),
-                BorderBrush = new SolidColorBrush(Color.FromArgb(56, accent.R, accent.G, accent.B)),
+                Background = bg,
+                BorderBrush = accent,
                 BorderThickness = new Thickness(1)
             };
 
@@ -480,14 +471,14 @@ public sealed partial class HealthPage : Page
             {
                 CornerRadius = new CornerRadius(4),
                 Padding = new Thickness(6, 2, 6, 2),
-                Background = new SolidColorBrush(Color.FromArgb(48, accent.R, accent.G, accent.B)),
-                Child = new TextBlock { Text = label, FontSize = 10, FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = new SolidColorBrush(accent) }
+                Background = bg,
+                Child = new TextBlock { Text = label, FontSize = 10, FontWeight = Microsoft.UI.Text.FontWeights.Bold, Foreground = accent }
             });
             badges.Children.Add(new TextBlock
             {
                 Text = f.Category,
                 FontSize = 10,
-                Foreground = FortivaControlTheme.GetBrush("FortivaMutedBrush"),
+                Foreground = FortivaControlTheme.GetBrush("FortivaMutedBrush", context: this),
                 HorizontalAlignment = HorizontalAlignment.Center
             });
             grid.Children.Add(badges);
@@ -498,14 +489,14 @@ public sealed partial class HealthPage : Page
                 Text = f.Title,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 TextWrapping = TextWrapping.WrapWholeWords,
-                Foreground = FortivaControlTheme.GetBrush("FortivaHeadingBrush")
+                Foreground = FortivaControlTheme.GetBrush("FortivaHeadingBrush", context: this)
             });
             text.Children.Add(new TextBlock
             {
                 Text = f.Detail,
                 FontSize = 13,
                 TextWrapping = TextWrapping.WrapWholeWords,
-                Foreground = FortivaControlTheme.GetBrush("FortivaBodyBrush")
+                Foreground = FortivaControlTheme.GetBrush("FortivaBodyBrush", context: this)
             });
             Grid.SetColumn(text, 1);
             grid.Children.Add(text);
@@ -595,21 +586,22 @@ public sealed partial class HealthPage : Page
             StrengthBarsPanel.Children.Add(new TextBlock
             {
                 Text = "Add login entries to see a strength breakdown.",
-                Foreground = FortivaControlTheme.GetBrush("FortivaMutedBrush"),
+                Foreground = FortivaControlTheme.GetBrush("FortivaMutedBrush", context: this),
                 TextWrapping = TextWrapping.WrapWholeWords
             });
             return;
         }
 
-        AddStrengthBar("Very strong", report.VeryStrongCount, loginTotal, Color.FromArgb(255, 16, 160, 90));
-        AddStrengthBar("Strong", report.StrongCount, loginTotal, Color.FromArgb(255, 40, 150, 70));
-        AddStrengthBar("Fair", report.FairCount, loginTotal, Color.FromArgb(255, 210, 170, 0));
-        AddStrengthBar("Weak", report.WeakStrengthCount, loginTotal, Color.FromArgb(255, 220, 110, 20));
-        AddStrengthBar("Very weak", report.VeryWeakCount, loginTotal, Color.FromArgb(255, 220, 60, 60));
+        AddStrengthBar("Very strong", report.VeryStrongCount, loginTotal, PasswordStrength.VeryStrong);
+        AddStrengthBar("Strong", report.StrongCount, loginTotal, PasswordStrength.Strong);
+        AddStrengthBar("Fair", report.FairCount, loginTotal, PasswordStrength.Fair);
+        AddStrengthBar("Weak", report.WeakStrengthCount, loginTotal, PasswordStrength.Weak);
+        AddStrengthBar("Very weak", report.VeryWeakCount, loginTotal, PasswordStrength.VeryWeak);
     }
 
-    private void AddStrengthBar(string label, int count, int total, Color fill)
+    private void AddStrengthBar(string label, int count, int total, PasswordStrength strength)
     {
+        var fill = FortivaControlTheme.GetPasswordStrengthBrush(strength, this);
         var pct = total == 0 ? 0 : count * 100.0 / total;
         var row = new Grid { ColumnSpacing = 12 };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(92) });
@@ -621,14 +613,14 @@ public sealed partial class HealthPage : Page
             Text = label,
             FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
-            Foreground = FortivaControlTheme.GetBrush("FortivaBodyBrush")
+            Foreground = FortivaControlTheme.GetBrush("FortivaBodyBrush", context: this)
         });
 
         var track = new Grid
         {
             Height = 10,
             VerticalAlignment = VerticalAlignment.Center,
-            Background = new SolidColorBrush(Color.FromArgb(28, 128, 128, 128)),
+            Background = FortivaControlTheme.GetBrush("FortivaTrackSubtleBrush", context: this),
             CornerRadius = new CornerRadius(5)
         };
         track.SizeChanged += (_, _) =>
@@ -641,7 +633,7 @@ public sealed partial class HealthPage : Page
         {
             HorizontalAlignment = HorizontalAlignment.Left,
             Height = 10,
-            Background = new SolidColorBrush(fill),
+            Background = fill,
             CornerRadius = new CornerRadius(5)
         });
         Grid.SetColumn(track, 1);
@@ -668,20 +660,14 @@ public sealed partial class HealthPage : Page
         PopulateList(MissingList, report.MissingEntryIds, entries, "No password");
     }
 
-    private static void PopulateList(
+    private void PopulateList(
         ListView list,
         IReadOnlyList<Guid> ids,
         IList<VaultEntryViewModel> source,
         string issueLabel)
     {
         var lookup = source.ToDictionary(e => e.Id);
-        var (badgeBg, badgeFg) = issueLabel switch
-        {
-            "Weak" => (Color.FromArgb(48, 220, 60, 60), Color.FromArgb(255, 180, 40, 40)),
-            "Reused" => (Color.FromArgb(48, 220, 130, 0), Color.FromArgb(255, 180, 100, 0)),
-            "1y+ old" => (Color.FromArgb(48, 210, 130, 0), Color.FromArgb(255, 170, 100, 0)),
-            _ => (Color.FromArgb(48, 120, 120, 120), Color.FromArgb(255, 90, 90, 90))
-        };
+        var (badgeBg, badgeFg) = FortivaControlTheme.GetPasswordIssueBadgeBrushes(issueLabel, this);
 
         list.ItemsSource = ids
             .Where(id => lookup.ContainsKey(id))
@@ -692,13 +678,13 @@ public sealed partial class HealthPage : Page
                     e.Id, e.Title,
                     string.IsNullOrWhiteSpace(e.Username) ? e.DomainDisplay : e.Username,
                     e.Initial, issueLabel,
-                    new SolidColorBrush(badgeBg),
-                    new SolidColorBrush(badgeFg));
+                    badgeBg,
+                    badgeFg);
             })
             .ToList();
     }
 
-    private static object BuildExpanderHeader(string title, int count, string glyph, Brush accent)
+    private object BuildExpanderHeader(string title, int count, string glyph, Brush accent)
     {
         var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
         panel.Children.Add(new FontIcon { Glyph = glyph, FontSize = 14, Foreground = accent });
@@ -707,7 +693,7 @@ public sealed partial class HealthPage : Page
             Text = $"{title} ({count})",
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
-            Foreground = FortivaControlTheme.GetBrush("FortivaHeadingBrush")
+            Foreground = FortivaControlTheme.GetBrush("FortivaHeadingBrush", context: this)
         });
         return panel;
     }
@@ -747,7 +733,7 @@ public sealed partial class HealthPage : Page
             "Import duplicates (existing entries kept)",
             rows.Count,
             "\uE8C8",
-            FortivaThemeResources.StatusWarning);
+            FortivaControlTheme.GetBrush("FortivaSemanticWarningBrush", context: this));
         ImportDuplicatesList.ItemsSource = rows;
     }
 
@@ -764,7 +750,7 @@ public sealed partial class HealthPage : Page
         if (selected)
         {
             card.BorderThickness = new Thickness(2);
-            card.BorderBrush = FortivaThemeResources.GetBrush("AccentFillColorDefaultBrush");
+            card.BorderBrush = FortivaControlTheme.GetBrush("FortivaAccentBrush", context: this);
             card.Opacity = 1.0;
             return;
         }
@@ -776,11 +762,8 @@ public sealed partial class HealthPage : Page
     {
         card.Opacity = active ? 1.0 : 0.72;
         card.BorderThickness = active ? new Thickness(2) : new Thickness(0);
-        card.BorderBrush = active ? FortivaThemeResources.GetBrush("AccentFillColorDefaultBrush") : null;
+        card.BorderBrush = active ? FortivaControlTheme.GetBrush("FortivaAccentBrush", context: this) : null;
     }
-
-    private static Brush GetBrush(string key)
-        => FortivaThemeResources.GetBrush(key);
 }
 
 public sealed class HealthEntryDisplay

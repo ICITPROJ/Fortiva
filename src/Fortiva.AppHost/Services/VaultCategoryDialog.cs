@@ -6,7 +6,11 @@ namespace Fortiva.AppHost.Services;
 
 public static class VaultCategoryDialog
 {
-    public static async Task<string?> ShowCreateAsync(XamlRoot xamlRoot, ShellViewModel vm, string title = "New category")
+    public static async Task<string?> ShowCreateAsync(
+        XamlRoot xamlRoot,
+        ShellViewModel vm,
+        string title = "New category",
+        FrameworkElement? themeHost = null)
     {
         var box = new TextBox
         {
@@ -38,13 +42,13 @@ public static class VaultCategoryDialog
 
         void ApplyTheme()
         {
-            var theme = FortivaControlTheme.ResolveAppTheme();
+            var theme = FortivaControlTheme.ResolveDialogTheme(xamlRoot, themeHost);
             FortivaThemeResources.MergeOnto(form, theme);
-            FortivaControlTheme.ApplyTextBox(box, form);
+            FortivaControlTheme.ApplyTextBox(box, form, theme);
             FortivaControlTheme.ApplyBodyText(hint, form);
         }
 
-        FortivaDialogs.Configure(dlg, xamlRoot, onOpened: ApplyTheme);
+        FortivaDialogs.Configure(dlg, xamlRoot, onOpened: ApplyTheme, themeHost: themeHost);
         ApplyTheme();
 
         while (true)
@@ -62,7 +66,7 @@ public static class VaultCategoryDialog
                     CloseButtonText = "OK",
                     XamlRoot = xamlRoot
                 };
-                FortivaDialogs.Configure(warn, xamlRoot);
+                FortivaDialogs.Configure(warn, xamlRoot, themeHost: themeHost);
                 await warn.ShowAsync();
                 continue;
             }

@@ -95,7 +95,7 @@
                     <StackPanel Spacing="10">
                         <StackPanel Orientation="Horizontal" Spacing="12">
                             <FontIcon x:Name="BridgeHealthIcon" Glyph="&#xE946;" FontSize="20"
-                                      Foreground="{StaticResource FortivaAccentBrush}" VerticalAlignment="Top" Margin="0,2,0,0"/>
+                                      Foreground="{ThemeResource FortivaAccentBrush}" VerticalAlignment="Top" Margin="0,2,0,0"/>
                             <StackPanel Spacing="4">
                                 <TextBlock x:Name="BrowserExtensionHealthHeadline"
                                            Style="{StaticResource FortivaBodyText}" FontSize="14" FontWeight="SemiBold"/>

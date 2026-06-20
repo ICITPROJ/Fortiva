@@ -20,12 +20,13 @@ public static class PasswordGeneratorDialog
         XamlRoot xamlRoot,
         ShellViewModel vm,
         PasswordGeneratorOptions? initial = null,
-        IEnumerable<string>? preselectedTags = null)
+        IEnumerable<string>? preselectedTags = null,
+        FrameworkElement? themeHost = null)
     {
         var clipboard = new ClipboardService(vm.Policy, vm.PersonalSettings.ClipboardClearSeconds, vm.LogPolicyViolation);
         var panel = new PasswordGeneratorPanel(vm, initial, PasswordGeneratorHostMode.Dialog, clipboard);
         panel.SetSelectedTags(preselectedTags);
-        var theme = FortivaControlTheme.ResolveAppTheme();
+        var theme = FortivaControlTheme.ResolveDialogTheme(xamlRoot, themeHost);
 
         var scroll = new ScrollViewer
         {
@@ -38,7 +39,7 @@ public static class PasswordGeneratorDialog
         };
         FortivaThemeResources.MergeOnto(scroll, theme);
 
-        var shell = FortivaDialogs.WrapDialogContent(scroll, theme);
+        var shell = FortivaDialogs.WrapDialogContent(scroll, xamlRoot, themeHost);
 
         var dlg = new ContentDialog
         {
@@ -49,10 +50,10 @@ public static class PasswordGeneratorDialog
             DefaultButton = ContentDialogButton.Primary
         };
 
-        FortivaDialogs.Configure(dlg, xamlRoot, onOpened: () => panel.ApplyThemeResources());
-        panel.ApplyThemeResources();
+        FortivaDialogs.Configure(dlg, xamlRoot, onOpened: () => panel.ApplyThemeResources(themeHost), themeHost: themeHost);
+        panel.ApplyThemeResources(themeHost);
 
-        void OnThemeChanged() => panel.ApplyThemeResources();
+        void OnThemeChanged() => panel.ApplyThemeResources(themeHost);
         vm.ThemeChanged += OnThemeChanged;
 
         ContentDialogResult result;

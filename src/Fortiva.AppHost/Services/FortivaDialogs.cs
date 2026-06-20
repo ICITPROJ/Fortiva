@@ -10,13 +10,17 @@ namespace Fortiva.AppHost.Services;
 /// <summary>Ensures ContentDialog and code-built content match the app theme (light/dark).</summary>
 public static class FortivaDialogs
 {
-    public static void Configure(ContentDialog dialog, XamlRoot xamlRoot, Action? onOpened = null)
+    public static void Configure(
+        ContentDialog dialog,
+        XamlRoot xamlRoot,
+        Action? onOpened = null,
+        FrameworkElement? themeHost = null)
     {
         dialog.XamlRoot = xamlRoot;
 
         void ApplyDialogTheme()
         {
-            var theme = FortivaControlTheme.ResolveAppTheme();
+            var theme = FortivaControlTheme.ResolveDialogTheme(xamlRoot, themeHost);
             dialog.RequestedTheme = theme;
             FortivaThemeResources.MergeOnto(dialog, theme);
 
@@ -28,7 +32,7 @@ public static class FortivaDialogs
         }
 
         if (dialog.Content is FrameworkElement initialContent)
-            PrepareDialogContent(initialContent, FortivaControlTheme.ResolveAppTheme());
+            PrepareDialogContent(initialContent, FortivaControlTheme.ResolveDialogTheme(xamlRoot, themeHost));
 
         dialog.Opened += (_, _) =>
         {
@@ -203,9 +207,11 @@ public static class FortivaDialogs
         return null;
     }
 
-    public static Border WrapDialogContent(UIElement inner, ElementTheme? theme = null)
+    public static Border WrapDialogContent(UIElement inner, XamlRoot? xamlRoot = null, FrameworkElement? themeHost = null)
     {
-        theme ??= FortivaControlTheme.ResolveAppTheme();
+        var theme = xamlRoot is not null
+            ? FortivaControlTheme.ResolveDialogTheme(xamlRoot, themeHost)
+            : FortivaControlTheme.ResolveEffectiveTheme(themeHost?.XamlRoot, themeHost);
         var shell = new Border
         {
             Padding = new Thickness(20, 16, 20, 20),
@@ -228,25 +234,35 @@ public static class FortivaDialogs
 
     public static void ApplyThemeToTree(FrameworkElement element, ElementTheme? theme = null)
     {
-        theme ??= FortivaControlTheme.ResolveAppTheme();
-        FortivaThemeResources.MergeOnto(element, theme);
+        var resolved = theme ?? FortivaControlTheme.ResolveEffectiveTheme(element.XamlRoot, element);
+        FortivaThemeResources.MergeOnto(element, resolved);
+        element.RequestedTheme = resolved;
 
         switch (element)
         {
             case ComboBox comboBox:
-                FortivaControlTheme.ApplyComboBox(comboBox, element);
+                FortivaControlTheme.ApplyComboBox(comboBox, element, resolved);
                 break;
             case TextBox textBox:
-                FortivaControlTheme.ApplyTextBox(textBox, element);
+                FortivaControlTheme.ApplyTextBox(textBox, element, resolved);
                 break;
             case PasswordBox passwordBox:
-                FortivaControlTheme.ApplyPasswordBox(passwordBox, element);
+                FortivaControlTheme.ApplyPasswordBox(passwordBox, element, resolved);
+                break;
+            case AutoSuggestBox autoSuggestBox:
+                FortivaControlTheme.ApplyAutoSuggestBox(autoSuggestBox, element, resolved);
                 break;
             case ToggleSwitch toggleSwitch:
-                FortivaControlTheme.ApplyToggleSwitch(toggleSwitch, element);
+                FortivaControlTheme.ApplyToggleSwitch(toggleSwitch, element, resolved);
                 break;
             case Slider slider:
-                FortivaControlTheme.ApplySlider(slider, element);
+                FortivaControlTheme.ApplySlider(slider, element, resolved);
+                break;
+            case Button button:
+                FortivaControlTheme.ApplySecondaryButton(button, element, resolved);
+                break;
+            case FontIcon fontIcon:
+                FortivaControlTheme.ApplyFontIcon(fontIcon, element, resolved);
                 break;
             case TextBlock textBlock when textBlock.IsTextSelectionEnabled
                                       && textBlock.FontFamily?.Source == "Consolas":
@@ -271,13 +287,13 @@ public static class FortivaDialogs
             case Panel panel:
                 foreach (var child in panel.Children)
                     if (child is FrameworkElement fe)
-                        ApplyThemeToTree(fe, theme);
+                        ApplyThemeToTree(fe, resolved);
                 break;
             case ContentControl { Content: FrameworkElement contentFe }:
-                ApplyThemeToTree(contentFe, theme);
+                ApplyThemeToTree(contentFe, resolved);
                 break;
             case Border { Child: FrameworkElement borderFe }:
-                ApplyThemeToTree(borderFe, theme);
+                ApplyThemeToTree(borderFe, resolved);
                 break;
         }
     }
