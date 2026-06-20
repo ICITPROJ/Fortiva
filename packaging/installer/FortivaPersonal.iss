@@ -138,7 +138,7 @@ Name: "{userdesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: deskto
 #include "FortivaPrerequisitesRun.iss"
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 ; In-app updates use /VERYSILENT — always relaunch when Setup is silent (skipifsilent blocks the line above).
-Filename: "{app}\{#AppExeName}"; Flags: nowait postinstall; Check: ShouldLaunchAfterSilentInstall
+Filename: "{app}\{#AppExeName}"; Flags: nowait postinstall runascurrentuser; Check: ShouldLaunchAfterSilentInstall
 
 
 
@@ -523,15 +523,17 @@ end;
 procedure DeinitializeSetup();
 var
   ResultCode: Integer;
+  ExePath: String;
 begin
-  { In-app updates exit before setup finishes. Relaunch if setup was cancelled or postinstall launch was missed. }
+  { In-app updates exit before setup finishes. Relaunch if postinstall launch was missed. }
   if not WizardSilent then
     Exit;
 
+  ExePath := ExpandConstant('{app}\{#AppExeName}');
   Exec('powershell.exe',
     '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ' +
-    '"Start-Sleep -Seconds 2; if (-not (Get-Process -Name Fortiva.Personal -ErrorAction SilentlyContinue)) { ' +
-    'Start-Process -FilePath ''' + ExpandConstant('{app}\{#AppExeName}') + ''' }"',
+    '"Start-Sleep -Seconds 3; if (-not (Get-Process -Name Fortiva.Personal -ErrorAction SilentlyContinue)) { ' +
+    'Start-Process -FilePath ''' + ExePath + ''' }"',
     '', SW_HIDE, ewNoWait, ResultCode);
 end;
 

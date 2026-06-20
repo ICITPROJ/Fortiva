@@ -45,11 +45,34 @@ public sealed class UpdateServiceTests
     }
 
     [Fact]
-    public void SchedulePostUpdateRelaunchWatchdog_DoesNotThrow_WhenExeMissing()
+    public void BuildUpdateBatchScript_WaitsForFortivaExitThenRunsInstaller()
     {
-        using var process = Process.GetCurrentProcess();
-        var ex = Record.Exception(() =>
-            UpdateService.SchedulePostUpdateRelaunchWatchdog(process, Path.Combine(Path.GetTempPath(), "missing-fortiva.exe")));
-        Assert.Null(ex);
+        var script = UpdateService.BuildUpdateBatchScript(
+            @"C:\Temp\FortivaPersonal-1.0.0-Setup.exe",
+            "/VERYSILENT /FORCECLOSEAPPLICATIONS",
+            @"C:\Users\me\AppData\Local\Programs\icmclab studio\Fortiva Personal\Fortiva.Personal.exe",
+            @"C:\Temp\fortiva-update-abc.cmd");
+
+        Assert.Contains("waitfortiva", script);
+        Assert.Contains("start \"\" /wait \"C:\\Temp\\FortivaPersonal-1.0.0-Setup.exe\"", script);
+        Assert.Contains("/VERYSILENT /FORCECLOSEAPPLICATIONS", script);
+        Assert.Contains("Fortiva.Personal.exe", script);
+    }
+
+    [Fact]
+    public void LaunchInstallerWithRelaunch_ReturnsNull_WhenInstallerMissing()
+    {
+        var result = UpdateService.LaunchInstallerWithRelaunch(
+            Path.Combine(Path.GetTempPath(), "missing-fortiva-setup.exe"),
+            UpdateUrlPolicy.DefaultInstallerArgs,
+            UpdateService.ResolveInstalledExePath());
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void DefaultInstallerArgs_UsesForceCloseForSilentInAppUpdates()
+    {
+        Assert.Contains("FORCECLOSEAPPLICATIONS", UpdateUrlPolicy.DefaultInstallerArgs);
+        Assert.Contains("VERYSILENT", UpdateUrlPolicy.DefaultInstallerArgs);
     }
 }

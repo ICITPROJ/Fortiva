@@ -137,22 +137,23 @@ public sealed class UpdateService
                     "Could not back up your vault before updating. Close other Fortiva windows and try again.");
             }
 
-            var installer = Process.Start(new ProcessStartInfo
-            {
-                FileName = dest,
-                Arguments = UpdateUrlPolicy.ResolveInstallerArgs(manifest),
-                UseShellExecute = true,
-                WorkingDirectory = Path.GetTempPath()
-            });
-
-            if (!await ConfirmInstallerStartedAsync(installer).ConfigureAwait(false))
+            var exePath = ResolveInstalledExePath();
+            var installerArgs = UpdateUrlPolicy.ResolveInstallerArgs(manifest);
+            var helper = LaunchInstallerWithRelaunch(dest, installerArgs, exePath);
+            if (helper is null)
             {
                 throw new InvalidOperationException(
                     "The updater did not start correctly. Your current version is unchanged. "
                     + "Please download and run the latest installer manually.");
             }
 
-            SchedulePostUpdateRelaunchWatchdog(installer!, ResolveInstalledExePath());
+            if (!await ConfirmUpdateHelperStartedAsync(helper).ConfigureAwait(false))
+            {
+                throw new InvalidOperationException(
+                    "The updater did not start correctly. Your current version is unchanged. "
+                    + "Please download and run the latest installer manually.");
+            }
+
             _vm.ClearUpdateApplyFailure();
             App.ExitForUpdate();
             return true;
@@ -230,38 +231,76 @@ public sealed class UpdateService
         return true;
     }
 
-    /// <summary>
-    /// After Fortiva exits for an in-app update, relaunch if the installer was cancelled or
-    /// finished without starting the app (Inno postinstall only runs on success).
-    /// </summary>
-    internal static void SchedulePostUpdateRelaunchWatchdog(Process installer, string exePath)
+    internal static async Task<bool> ConfirmUpdateHelperStartedAsync(Process helper)
     {
-        if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath))
-            return;
-
-        var pid = installer.Id;
-        var scriptPath = Path.Combine(Path.GetTempPath(), $"fortiva-relaunch-{pid}.ps1");
-        var escapedExe = exePath.Replace("'", "''");
-        var escapedScript = scriptPath.Replace("'", "''");
-        var script =
-            "$ErrorActionPreference = 'SilentlyContinue'\r\n" +
-            $"Wait-Process -Id {pid} -ErrorAction SilentlyContinue\r\n" +
-            "Start-Sleep -Seconds 2\r\n" +
-            "if (-not (Get-Process -Name 'Fortiva.Personal' -ErrorAction SilentlyContinue)) {\r\n" +
-            $"  Start-Process -FilePath '{escapedExe}'\r\n" +
-            "}\r\n" +
-            $"Remove-Item -LiteralPath '{escapedScript}' -Force -ErrorAction SilentlyContinue\r\n";
-
-        File.WriteAllText(scriptPath, script);
-        Process.Start(new ProcessStartInfo
+        await Task.Delay(400).ConfigureAwait(false);
+        try
         {
-            FileName = "powershell.exe",
-            Arguments = $"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{scriptPath}\"",
-            UseShellExecute = true,
+            return !helper.HasExited || helper.ExitCode == 0;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Detached cmd helper: wait for Fortiva to exit, run installer to completion, relaunch if needed.
+    /// </summary>
+    internal static Process? LaunchInstallerWithRelaunch(string installerPath, string installerArgs, string exePath)
+    {
+        if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
+            return null;
+
+        var batchId = Guid.NewGuid().ToString("N");
+        var batchPath = Path.Combine(Path.GetTempPath(), $"fortiva-update-{batchId}.cmd");
+        File.WriteAllText(batchPath, BuildUpdateBatchScript(installerPath, installerArgs, exePath, batchPath));
+
+        return Process.Start(new ProcessStartInfo
+        {
+            FileName = "cmd.exe",
+            Arguments = $"/c \"\"{batchPath}\"\"",
+            UseShellExecute = false,
             CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden,
             WorkingDirectory = Path.GetTempPath()
         });
     }
+
+    internal static string BuildUpdateBatchScript(
+        string installerPath,
+        string installerArgs,
+        string exePath,
+        string batchPath)
+    {
+        var quotedInstaller = QuoteCmdPath(installerPath);
+        var quotedExe = QuoteCmdPath(exePath);
+        var quotedBatch = QuoteCmdPath(batchPath);
+        var args = string.IsNullOrWhiteSpace(installerArgs) ? string.Empty : installerArgs.Trim();
+
+        return
+            "@echo off\r\n" +
+            "set /a _tries=0\r\n" +
+            ":waitfortiva\r\n" +
+            "set /a _tries+=1\r\n" +
+            "if %_tries% gtr 90 goto runsetup\r\n" +
+            "tasklist /FI \"IMAGENAME eq Fortiva.Personal.exe\" 2>nul | find /I \"Fortiva.Personal.exe\" >nul\r\n" +
+            "if not errorlevel 1 (\r\n" +
+            "  timeout /t 1 /nobreak >nul\r\n" +
+            "  goto waitfortiva\r\n" +
+            ")\r\n" +
+            ":runsetup\r\n" +
+            $"start \"\" /wait {quotedInstaller} {args}\r\n" +
+            "timeout /t 3 /nobreak >nul\r\n" +
+            "tasklist /FI \"IMAGENAME eq Fortiva.Personal.exe\" 2>nul | find /I \"Fortiva.Personal.exe\" >nul\r\n" +
+            "if errorlevel 1 (\r\n" +
+            $"  start \"\" {quotedExe}\r\n" +
+            ")\r\n" +
+            $"del /f /q {quotedBatch}\r\n";
+    }
+
+    internal static string QuoteCmdPath(string path)
+        => $"\"{path.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
 
     internal static string ResolveInstalledExePath()
     {
