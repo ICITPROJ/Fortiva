@@ -8,6 +8,7 @@ using Fortiva.Core.Vault;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using System.Linq;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 
@@ -52,6 +53,7 @@ public sealed partial class HealthPage : Page
     {
         base.OnNavigatedTo(e);
         ThemeService.ApplyToElement(this);
+        ApplyExpanderThemes();
         _vm.ThemeChanged += OnThemeChanged;
 
         string? focusIssue = e.Parameter is HealthPageNavigationContext ctx ? ctx.FocusIssue : null;
@@ -71,6 +73,7 @@ public sealed partial class HealthPage : Page
         DispatcherQueue.TryEnqueue(async () =>
         {
             ThemeService.ApplyToElement(this);
+            ApplyExpanderThemes();
             if (_lastAuditReport is not null)
                 await BuildReportAsync();
         });
@@ -390,6 +393,13 @@ public sealed partial class HealthPage : Page
         if (_vm.IsEnterprise)
             HighlightCard(CatActivity, audit.ActivityFindings > 0);
         UpdateFilterHighlights();
+        ApplyExpanderThemes();
+    }
+
+    private void ApplyExpanderThemes()
+    {
+        foreach (var expander in new[] { WeakExpander, ReusedExpander, OldExpander, MissingExpander, ImportDuplicatesExpander })
+            FortivaControlTheme.ApplyExpander(expander, this);
     }
 
     private void ApplyScoreVisuals(int score, SecurityAuditReport audit)
@@ -686,14 +696,17 @@ public sealed partial class HealthPage : Page
 
     private object BuildExpanderHeader(string title, int count, string glyph, Brush accent)
     {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
-        panel.Children.Add(new FontIcon { Glyph = glyph, FontSize = 14, Foreground = accent });
+        var theme = FortivaControlTheme.ResolveHostTheme(this);
+        var heading = FortivaControlTheme.GetBrush("FortivaHeadingBrush", theme, this);
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, RequestedTheme = theme };
+        panel.Children.Add(new FontIcon { Glyph = glyph, FontSize = 14, Foreground = accent, RequestedTheme = theme });
         panel.Children.Add(new TextBlock
         {
             Text = $"{title} ({count})",
             FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
             VerticalAlignment = VerticalAlignment.Center,
-            Foreground = FortivaControlTheme.GetBrush("FortivaHeadingBrush", context: this)
+            Foreground = heading,
+            RequestedTheme = theme
         });
         return panel;
     }

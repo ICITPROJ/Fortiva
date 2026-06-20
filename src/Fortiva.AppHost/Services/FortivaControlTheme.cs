@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using Windows.UI;
 
@@ -207,6 +208,83 @@ public static class FortivaControlTheme
 
         Apply();
         ApplyWhenLoaded(box, Apply);
+    }
+
+    public static void ApplyExpander(Expander expander, FrameworkElement? context = null, ElementTheme? theme = null)
+    {
+        void Apply()
+        {
+            var resolved = theme ?? ResolveInputTheme(context, expander);
+            var host = context ?? expander;
+            var brushes = GetInputBrushes(resolved, host);
+
+            expander.RequestedTheme = resolved;
+            FortivaThemeResources.MergeOnto(expander, resolved);
+            expander.Style = null;
+            TryApplyStyle(expander, "FortivaExpander");
+            expander.Background = brushes.Background;
+            expander.Foreground = brushes.Foreground;
+            expander.BorderBrush = brushes.Border;
+            expander.BorderThickness = new Thickness(1);
+            expander.CornerRadius = new CornerRadius(8);
+
+            PinExpanderResources(expander, brushes);
+            ForceExpanderInnerChrome(expander, resolved, brushes);
+        }
+
+        Apply();
+        ApplyWhenLoaded(expander, Apply);
+    }
+
+    private static void PinExpanderResources(FrameworkElement element, InputBrushSet brushes)
+    {
+        PinResource(element, "ExpanderBackground", brushes.Background);
+        PinResource(element, "ExpanderHeaderBackground", brushes.Background);
+        PinResource(element, "ExpanderHeaderForeground", brushes.Foreground);
+        PinResource(element, "ExpanderHeaderForegroundPointerOver", brushes.Foreground);
+        PinResource(element, "ExpanderHeaderForegroundPressed", brushes.Foreground);
+        PinResource(element, "ExpanderHeaderBorderBrush", brushes.Border);
+        PinResource(element, "ExpanderHeaderBorderPointerOverBrush", brushes.BorderHover);
+        PinResource(element, "ExpanderHeaderBorderPressedBrush", brushes.BorderFocused);
+        PinResource(element, "CardBackgroundFillColorDefaultBrush", brushes.Background);
+        PinResource(element, "CardStrokeColorDefaultBrush", brushes.Border);
+        PinResource(element, "TextFillColorPrimaryBrush", brushes.Foreground);
+    }
+
+    private static void ForceExpanderInnerChrome(Expander expander, ElementTheme theme, InputBrushSet brushes)
+    {
+        expander.RequestedTheme = theme;
+
+        if (FindDescendant<ToggleButton>(expander) is ToggleButton { Name: "ExpanderHeader" } header)
+        {
+            header.RequestedTheme = theme;
+            header.Background = brushes.Background;
+            header.Foreground = brushes.Foreground;
+            header.BorderBrush = brushes.Border;
+
+            foreach (var child in GetVisualDescendants(header))
+            {
+                if (child is FrameworkElement fe)
+                    fe.RequestedTheme = theme;
+
+                switch (child)
+                {
+                    case TextBlock text:
+                        text.Foreground = brushes.Foreground;
+                        break;
+                    case ContentPresenter presenter:
+                        presenter.Foreground = brushes.Foreground;
+                        break;
+                }
+            }
+        }
+
+        if (expander.Header is StackPanel headerPanel)
+        {
+            headerPanel.RequestedTheme = theme;
+            foreach (var item in headerPanel.Children.OfType<TextBlock>())
+                item.Foreground = brushes.Foreground;
+        }
     }
 
     private static ElementTheme ResolveInputTheme(FrameworkElement? context, Control control)

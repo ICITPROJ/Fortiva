@@ -173,6 +173,19 @@
             <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="#3340BCF4"/>
             <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FFFFFF"/>
             <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#FFFFFF"/>
+
+            <!-- Expander / card chrome (WinUI Expander template tokens) -->
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="#8EB4CC"/>
+            <SolidColorBrush x:Key="ExpanderBackground" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ExpanderHeaderForeground" Color="#0A0C10"/>
+            <SolidColorBrush x:Key="ExpanderHeaderForegroundPointerOver" Color="#0A0C10"/>
+            <SolidColorBrush x:Key="ExpanderHeaderForegroundPressed" Color="#0A0C10"/>
+            <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="#8EB4CC"/>
+            <SolidColorBrush x:Key="ExpanderHeaderBorderPointerOverBrush" Color="#40BCF4"/>
+            <SolidColorBrush x:Key="ExpanderHeaderBorderPressedBrush" Color="#40BCF4"/>
+
             <SolidColorBrush x:Key="NavigationViewExpandedPaneBackground" Color="#CAE4F4"/>
             <SolidColorBrush x:Key="NavigationViewDefaultPaneBackground" Color="#CAE4F4"/>
             <SolidColorBrush x:Key="NavigationViewTopPaneBackground" Color="#CAE4F4"/>
@@ -314,6 +327,18 @@
             <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="#3340BCF4"/>
             <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="{StaticResource FortivaAccentButtonFgColor}"/>
             <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="{StaticResource FortivaAccentButtonFgColor}"/>
+
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush" Color="#10161E"/>
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush" Color="#2A3440"/>
+            <SolidColorBrush x:Key="ExpanderBackground" Color="#10161E"/>
+            <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="#10161E"/>
+            <SolidColorBrush x:Key="ExpanderHeaderForeground" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ExpanderHeaderForegroundPointerOver" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ExpanderHeaderForegroundPressed" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="#2A3440"/>
+            <SolidColorBrush x:Key="ExpanderHeaderBorderPointerOverBrush" Color="#6640BCF4"/>
+            <SolidColorBrush x:Key="ExpanderHeaderBorderPressedBrush" Color="#8840BCF4"/>
+
             <SolidColorBrush x:Key="NavigationViewExpandedPaneBackground" Color="#77101820"/>
             <SolidColorBrush x:Key="NavigationViewDefaultPaneBackground" Color="#77101820"/>
             <SolidColorBrush x:Key="NavigationViewTopPaneBackground" Color="#77101820"/>
@@ -520,6 +545,17 @@
         <Setter Property="HorizontalAlignment" Value="Stretch"/>
         <!-- Thumb extends past track at min/max; inset so edges are not clipped -->
         <Setter Property="Margin" Value="8,0,12,0"/>
+    </Style>
+
+    <Style x:Key="FortivaExpander" TargetType="Expander">
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="Background" Value="{ThemeResource FortivaInputFillBrush}"/>
+        <Setter Property="Foreground" Value="{ThemeResource FortivaHeadingBrush}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource FortivaInputBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="Padding" Value="0"/>
     </Style>
 
     <!-- Standard scrollable page chrome: padding lives on the viewer, not the panel -->

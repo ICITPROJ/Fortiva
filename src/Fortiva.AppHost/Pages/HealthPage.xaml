@@ -228,7 +228,8 @@
                 <StackPanel x:Name="FindingsPanel" Spacing="10"/>
             </StackPanel>
 
-            <Expander x:Name="ImportDuplicatesExpander" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+            <Expander x:Name="ImportDuplicatesExpander" Style="{StaticResource FortivaExpander}"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                       Visibility="Collapsed">
                 <ListView x:Name="ImportDuplicatesList" SelectionMode="Single" MaxHeight="320"
                           ItemTemplate="{StaticResource ImportDuplicateTemplate}"
@@ -297,22 +298,26 @@
                 </Border>
             </Grid>
 
-            <Expander x:Name="WeakExpander" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+            <Expander x:Name="WeakExpander" Style="{StaticResource FortivaExpander}"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                 <ListView x:Name="WeakList" SelectionMode="Single" MaxHeight="280"
                           ItemTemplate="{StaticResource HealthEntryTemplate}"
                           SelectionChanged="HealthList_SelectionChanged"/>
             </Expander>
-            <Expander x:Name="ReusedExpander" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+            <Expander x:Name="ReusedExpander" Style="{StaticResource FortivaExpander}"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                 <ListView x:Name="ReusedList" SelectionMode="Single" MaxHeight="280"
                           ItemTemplate="{StaticResource HealthEntryTemplate}"
                           SelectionChanged="HealthList_SelectionChanged"/>
             </Expander>
-            <Expander x:Name="OldExpander" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+            <Expander x:Name="OldExpander" Style="{StaticResource FortivaExpander}"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                 <ListView x:Name="OldList" SelectionMode="Single" MaxHeight="280"
                           ItemTemplate="{StaticResource HealthEntryTemplate}"
                           SelectionChanged="HealthList_SelectionChanged"/>
             </Expander>
-            <Expander x:Name="MissingExpander" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+            <Expander x:Name="MissingExpander" Style="{StaticResource FortivaExpander}"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                 <ListView x:Name="MissingList" SelectionMode="Single" MaxHeight="280"
                           ItemTemplate="{StaticResource HealthEntryTemplate}"
                           SelectionChanged="HealthList_SelectionChanged"/>
