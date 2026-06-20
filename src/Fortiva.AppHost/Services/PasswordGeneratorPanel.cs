@@ -52,7 +52,7 @@ public sealed class PasswordGeneratorPanel
     private readonly List<TextBlock> _sectionLabelBlocks = [];
     private readonly List<ToggleSwitch> _charToggles = [];
 
-    public StackPanel Root { get; }
+    private readonly PasswordGeneratorHostMode _hostMode;
 
     public string CurrentPassword => _preview.Text;
 
@@ -60,12 +60,15 @@ public sealed class PasswordGeneratorPanel
 
     public void SetSelectedTags(IEnumerable<string>? tags) => _tagPicker.SetSelectedTags(tags);
 
+    public StackPanel Root { get; }
+
     public PasswordGeneratorPanel(
         ShellViewModel vm,
         PasswordGeneratorOptions? initial = null,
         PasswordGeneratorHostMode hostMode = PasswordGeneratorHostMode.Page,
         ClipboardService? clipboard = null)
     {
+        _hostMode = hostMode;
         _vm = vm;
         _clipboard = clipboard ?? new ClipboardService(
             vm.Policy,
@@ -350,20 +353,32 @@ public sealed class PasswordGeneratorPanel
         rightOptions.Children.Add(_customCharsetLabel);
         rightOptions.Children.Add(_customCharsetBox);
 
-        var optionsGrid = new Grid { ColumnSpacing = 24 };
-        optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 0 });
-        optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 0 });
-        Grid.SetColumn(leftOptions, 0);
-        Grid.SetColumn(rightOptions, 1);
-        optionsGrid.Children.Add(leftOptions);
-        optionsGrid.Children.Add(rightOptions);
+        FrameworkElement optionsContent;
+        if (_hostMode == PasswordGeneratorHostMode.Page)
+        {
+            var optionsStack = new StackPanel { Spacing = 20 };
+            optionsStack.Children.Add(leftOptions);
+            optionsStack.Children.Add(rightOptions);
+            optionsContent = optionsStack;
+        }
+        else
+        {
+            var optionsGrid = new Grid { ColumnSpacing = 24 };
+            optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 0 });
+            optionsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 0 });
+            Grid.SetColumn(leftOptions, 0);
+            Grid.SetColumn(rightOptions, 1);
+            optionsGrid.Children.Add(leftOptions);
+            optionsGrid.Children.Add(rightOptions);
+            optionsContent = optionsGrid;
+        }
 
         _optionsShell = new Border
         {
             CornerRadius = new CornerRadius(14),
             Padding = new Thickness(20, 18, 20, 18),
             BorderThickness = new Thickness(1),
-            Child = optionsGrid
+            Child = optionsContent
         };
 
         Root = new StackPanel
@@ -547,7 +562,9 @@ public sealed class PasswordGeneratorPanel
             Header = header,
             IsOn = isOn,
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            MinWidth = 0
+            MinWidth = 0,
+            OffContent = "Off",
+            OnContent = "On"
         };
         FortivaControlTheme.ApplyToggleSwitch(toggle);
         FortivaControlTheme.TryApplyStyle(toggle, "FortivaToggleSwitch");
