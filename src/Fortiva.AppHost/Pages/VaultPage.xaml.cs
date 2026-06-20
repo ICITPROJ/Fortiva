@@ -302,7 +302,7 @@ public sealed partial class VaultPage : Page
 
     private void ApplyViewToggleChrome()
     {
-        var theme = FortivaControlTheme.ResolveAppTheme();
+        var theme = FortivaControlTheme.ResolveEffectiveTheme(GridViewBtn.XamlRoot, GridViewBtn);
         var accent = FortivaControlTheme.GetBrush("FortivaAccentGlowBrush", theme, GridViewBtn);
         var glass = FortivaControlTheme.GetBrush("FortivaGlassFillBrush", theme, GridViewBtn);
         var border = FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", theme, GridViewBtn);

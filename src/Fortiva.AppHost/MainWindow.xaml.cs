@@ -612,7 +612,7 @@ public sealed partial class MainWindow : Window
 
     private void RefreshStatusChrome()
     {
-        var theme = FortivaControlTheme.ResolveAppTheme();
+        var theme = FortivaControlTheme.ResolveEffectiveTheme(PanicBtn.XamlRoot, PanicBtn);
         FortivaSurfaceEffects.ApplyIconButton(PanicBtn, PanicBtn);
         FortivaSurfaceEffects.ApplyIconButton(LockBtn, LockBtn);
         GlobalSearch.Visibility = _vm.IsUnlocked && !_vm.IsAdmin

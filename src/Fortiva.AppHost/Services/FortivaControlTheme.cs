@@ -9,9 +9,37 @@ namespace Fortiva.AppHost.Services;
 /// <summary>Applies Fortiva theme brushes to code-built controls (dialogs, panels).</summary>
 public static class FortivaControlTheme
 {
-    /// <summary>Effective Fortiva theme from user preference — never trust ContentDialog ActualTheme.</summary>
-    public static ElementTheme ResolveEffectiveTheme(XamlRoot? xamlRoot = null, FrameworkElement? element = null)
-        => ResolveAppTheme();
+    /// <summary>
+    /// Prefer the host element's resolved theme so code-built UI matches surrounding XAML.
+    /// Dialog subtrees fall back to user preference (ActualTheme is unreliable there).
+    /// </summary>
+    public static ElementTheme ResolveEffectiveTheme(XamlRoot? xamlRoot = null, FrameworkElement? context = null)
+    {
+        if (IsInContentDialogSubtree(context))
+            return ResolveAppTheme();
+
+        // Code-built roots often pin the wrong RequestedTheme — prefer ancestors.
+        if (TryGetVisualTreeTheme(context, out var fromHost, includeStart: false))
+            return fromHost;
+
+        if (TryGetVisualTreeTheme(context, out var fromContext, includeStart: true))
+            return fromContext;
+
+        if (xamlRoot?.Content is FrameworkElement rootContent
+            && TryGetVisualTreeTheme(rootContent, out var fromRoot, includeStart: true))
+            return fromRoot;
+
+        return ThemeService.CurrentElementTheme;
+    }
+
+    /// <summary>Theme from a known host page (most reliable for embedded panels).</summary>
+    public static ElementTheme ResolveHostTheme(FrameworkElement host)
+    {
+        if (host.ActualTheme is ElementTheme.Light or ElementTheme.Dark)
+            return host.ActualTheme;
+
+        return ResolveEffectiveTheme(host.XamlRoot, host);
+    }
 
     public static ElementTheme ResolveAppTheme()
     {
@@ -21,8 +49,7 @@ public static class FortivaControlTheme
         if (preference == AppThemePreference.Dark)
             return ElementTheme.Dark;
 
-        var bg = new UISettings().GetColorValue(UIColorType.Background);
-        return (bg.R + bg.G + bg.B) > 383 ? ElementTheme.Light : ElementTheme.Dark;
+        return ThemeService.ResolveSystemElementTheme();
     }
 
     public static Brush GetBrush(string key, ElementTheme? theme = null, FrameworkElement? context = null)
@@ -53,14 +80,14 @@ public static class FortivaControlTheme
     /// <summary>Apply resolved theme + merged dictionary to a code-built subtree root.</summary>
     public static void ApplyResolvedTheme(FrameworkElement element)
     {
-        var theme = ResolveAppTheme();
+        var theme = ResolveEffectiveTheme(element.XamlRoot, element);
         element.RequestedTheme = theme;
         FortivaThemeResources.MergeOnto(element, theme);
     }
 
     public static void ApplyTextBox(TextBox box, FrameworkElement? context = null)
     {
-        var theme = ResolveAppTheme();
+        var theme = ResolveEffectiveTheme(context?.XamlRoot, context ?? box);
         FortivaThemeResources.MergeOnto(box, theme);
         box.RequestedTheme = theme;
         box.Background = GetBrush("FortivaInputFillBrush", theme, box);
@@ -78,7 +105,7 @@ public static class FortivaControlTheme
 
     public static void ApplyPasswordBox(PasswordBox box, FrameworkElement? context = null)
     {
-        var theme = ResolveAppTheme();
+        var theme = ResolveEffectiveTheme(context?.XamlRoot, context ?? box);
         FortivaThemeResources.MergeOnto(box, theme);
         box.RequestedTheme = theme;
         box.Background = GetBrush("FortivaInputFillBrush", theme, box);
@@ -100,7 +127,7 @@ public static class FortivaControlTheme
 
     public static void ApplySecondaryButton(Button button, FrameworkElement? context = null)
     {
-        var theme = ResolveAppTheme();
+        var theme = ResolveEffectiveTheme(context?.XamlRoot, context ?? button);
         FortivaThemeResources.MergeOnto(button, theme);
         button.RequestedTheme = theme;
         TryApplyStyle(button, "FortivaSecondaryButton");
@@ -108,7 +135,7 @@ public static class FortivaControlTheme
 
     public static void ApplyComboBox(ComboBox box, FrameworkElement? context = null)
     {
-        var theme = ResolveAppTheme();
+        var theme = ResolveEffectiveTheme(context?.XamlRoot, context ?? box);
         FortivaThemeResources.MergeOnto(box, theme);
         box.RequestedTheme = theme;
         box.Background = GetBrush("FortivaInputFillBrush", theme, box);
@@ -123,7 +150,7 @@ public static class FortivaControlTheme
 
     public static void ApplyPreviewSurface(Border border, TextBlock content, FrameworkElement? context = null)
     {
-        var theme = ResolveAppTheme();
+        var theme = ResolveEffectiveTheme(context?.XamlRoot, context ?? border);
         FortivaThemeResources.MergeOnto(border, theme);
         border.RequestedTheme = theme;
         content.RequestedTheme = theme;
@@ -137,7 +164,7 @@ public static class FortivaControlTheme
 
     public static void ApplyAccentButton(Button button, FrameworkElement? context = null)
     {
-        var theme = ResolveAppTheme();
+        var theme = ResolveEffectiveTheme(context?.XamlRoot, context ?? button);
         FortivaThemeResources.MergeOnto(button, theme);
         button.RequestedTheme = theme;
         TryApplyStyle(button, "FortivaAccentButton");
@@ -145,7 +172,7 @@ public static class FortivaControlTheme
 
     public static void ApplySectionLabel(TextBlock label, bool muted = false, bool pageHeader = false, FrameworkElement? context = null)
     {
-        var theme = ResolveAppTheme();
+        var theme = ResolveEffectiveTheme(context?.XamlRoot, context ?? label);
         label.RequestedTheme = theme;
         if (pageHeader)
             label.FontSize = 16;
@@ -157,21 +184,21 @@ public static class FortivaControlTheme
 
     public static void ApplyBodyText(TextBlock text, FrameworkElement? context = null)
     {
-        var theme = ResolveAppTheme();
+        var theme = ResolveEffectiveTheme(context?.XamlRoot, context ?? text);
         text.RequestedTheme = theme;
         text.Foreground = GetBrush("FortivaBodyBrush", theme, text);
     }
 
     public static void ApplyMutedText(TextBlock text, FrameworkElement? context = null)
     {
-        var theme = ResolveAppTheme();
+        var theme = ResolveEffectiveTheme(context?.XamlRoot, context ?? text);
         text.RequestedTheme = theme;
         text.Foreground = GetBrush("FortivaMutedBrush", theme, text);
     }
 
     public static void ApplyToggleSwitch(ToggleSwitch toggle, FrameworkElement? context = null)
     {
-        var theme = ResolveAppTheme();
+        var theme = ResolveEffectiveTheme(context?.XamlRoot, context ?? toggle);
         FortivaThemeResources.MergeOnto(toggle, theme);
         toggle.RequestedTheme = theme;
         toggle.Foreground = GetBrush("FortivaBodyBrush", theme, toggle);
@@ -179,7 +206,7 @@ public static class FortivaControlTheme
 
     public static void ApplySlider(Slider slider, FrameworkElement? context = null)
     {
-        var theme = ResolveAppTheme();
+        var theme = ResolveEffectiveTheme(context?.XamlRoot, context ?? slider);
         FortivaThemeResources.MergeOnto(slider, theme);
         slider.RequestedTheme = theme;
         slider.Foreground = GetBrush("FortivaAccentBrush", theme, slider);
@@ -189,5 +216,32 @@ public static class FortivaControlTheme
     {
         if (Application.Current?.Resources.TryGetValue(styleKey, out var value) == true && value is Style style)
             element.Style = style;
+    }
+
+    private static bool IsInContentDialogSubtree(FrameworkElement? element)
+    {
+        for (var el = element; el is not null; el = VisualTreeHelper.GetParent(el) as FrameworkElement)
+        {
+            if (el is ContentDialog)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetVisualTreeTheme(FrameworkElement? start, out ElementTheme theme, bool includeStart = true)
+    {
+        var el = includeStart ? start : VisualTreeHelper.GetParent(start) as FrameworkElement;
+        for (; el is not null; el = VisualTreeHelper.GetParent(el) as FrameworkElement)
+        {
+            if (el.ActualTheme is ElementTheme.Light or ElementTheme.Dark)
+            {
+                theme = el.ActualTheme;
+                return true;
+            }
+        }
+
+        theme = default;
+        return false;
     }
 }

@@ -63,6 +63,9 @@ public static class ThemeService
             window.SystemBackdrop = new DesktopAcrylicBackdrop();
     }
 
+    /// <summary>Resolved light/dark theme from the last <see cref="Apply"/> call.</summary>
+    public static ElementTheme CurrentElementTheme => ToElementTheme(_preference);
+
     public static ElementTheme ToElementTheme(AppThemePreference preference) => preference switch
     {
         AppThemePreference.Light => ElementTheme.Light,

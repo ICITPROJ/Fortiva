@@ -77,12 +77,13 @@ public sealed class VaultTagPickerPanel
 
     public void ApplyTheme(FrameworkElement? context = null)
     {
-        var theme = FortivaControlTheme.ResolveAppTheme();
+        var host = context ?? Root;
+        var theme = FortivaControlTheme.ResolveEffectiveTheme(host.XamlRoot, host);
         FortivaThemeResources.MergeOnto(Root, theme);
         Root.RequestedTheme = theme;
-        FortivaControlTheme.ApplyTextBox(_newTagBox, context ?? Root);
-        FortivaControlTheme.ApplySecondaryButton(_addBtn, context ?? Root);
-        FortivaControlTheme.ApplyMutedText(_emptyHint, Root);
+        FortivaControlTheme.ApplyTextBox(_newTagBox, host);
+        FortivaControlTheme.ApplySecondaryButton(_addBtn, host);
+        FortivaControlTheme.ApplyMutedText(_emptyHint, host);
         if (_addBtn.Content is StackPanel addContent)
         {
             foreach (var child in addContent.Children.OfType<TextBlock>())
@@ -155,7 +156,7 @@ public sealed class VaultTagPickerPanel
             {
                 if (toggle.IsChecked != true)
                     toggle.Background = FortivaControlTheme.GetBrush("FortivaSurfaceSubtleBrush",
-                        FortivaControlTheme.ResolveAppTheme(), Root);
+                        FortivaControlTheme.ResolveEffectiveTheme(Root.XamlRoot, Root), Root);
             };
             toggle.PointerExited += (_, _) =>
                 FortivaSurfaceEffects.ApplyChipToggle(toggle, toggle.IsChecked == true, Root);

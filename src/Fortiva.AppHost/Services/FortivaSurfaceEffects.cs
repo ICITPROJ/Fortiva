@@ -31,7 +31,7 @@ public static class FortivaSurfaceEffects
 
     public static void ApplyChipToggle(ToggleButton toggle, bool selected, FrameworkElement context)
     {
-        var theme = FortivaControlTheme.ResolveAppTheme();
+        var theme = FortivaControlTheme.ResolveEffectiveTheme(context.XamlRoot, context);
         toggle.CornerRadius = new CornerRadius(999);
         toggle.Padding = new Thickness(12, 7, 12, 7);
         toggle.BorderThickness = new Thickness(1);
@@ -48,7 +48,7 @@ public static class FortivaSurfaceEffects
     public static void ApplyIconButton(Button button, FrameworkElement? context = null)
     {
         FortivaControlTheme.TryApplyStyle(button, "FortivaIconButton");
-        var theme = FortivaControlTheme.ResolveAppTheme();
+        var theme = FortivaControlTheme.ResolveEffectiveTheme(context?.XamlRoot, context ?? button);
         button.Foreground = FortivaControlTheme.GetBrush("FortivaMutedBrush", theme, context ?? button);
     }
 

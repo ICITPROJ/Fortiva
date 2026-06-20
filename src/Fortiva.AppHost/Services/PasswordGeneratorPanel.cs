@@ -40,7 +40,7 @@ public sealed class PasswordGeneratorPanel
     private readonly TextBlock _strengthLabel;
     private readonly TextBlock _errorLabel;
     private readonly Border _previewBorder;
-    private readonly Border _optionsShell;
+    private readonly Border? _optionsShell;
     private readonly VaultTagPickerPanel _tagPicker;
     private readonly TextBlock _categoriesLabel;
     private readonly TextBlock? _introText;
@@ -51,6 +51,8 @@ public sealed class PasswordGeneratorPanel
     private readonly Button? _dialogRegenerateBtn;
     private readonly List<TextBlock> _sectionLabelBlocks = [];
     private readonly List<ToggleSwitch> _charToggles = [];
+
+    private FrameworkElement? _themeHost;
 
     private readonly PasswordGeneratorHostMode _hostMode;
 
@@ -373,13 +375,22 @@ public sealed class PasswordGeneratorPanel
             optionsContent = optionsGrid;
         }
 
-        _optionsShell = new Border
+        FrameworkElement optionsContainer;
+        if (_hostMode == PasswordGeneratorHostMode.Page)
         {
-            CornerRadius = new CornerRadius(14),
-            Padding = new Thickness(20, 18, 20, 18),
-            BorderThickness = new Thickness(1),
-            Child = optionsContent
-        };
+            optionsContainer = optionsContent;
+        }
+        else
+        {
+            _optionsShell = new Border
+            {
+                CornerRadius = new CornerRadius(14),
+                Padding = new Thickness(20, 18, 20, 18),
+                BorderThickness = new Thickness(1),
+                Child = optionsContent
+            };
+            optionsContainer = _optionsShell;
+        }
 
         Root = new StackPanel
         {
@@ -425,13 +436,13 @@ public sealed class PasswordGeneratorPanel
         }
 
         Root.Children.Add(_optionsHeader);
-        Root.Children.Add(_optionsShell);
+        Root.Children.Add(optionsContainer);
 
         Root.Children.Add(_categoriesDivider);
         Root.Children.Add(_categoriesLabel);
         Root.Children.Add(_tagPicker.Root);
 
-        _vm.ThemeChanged += ApplyThemeResources;
+        _vm.ThemeChanged += () => ApplyThemeResources(_themeHost);
 
         ApplyPresetUi();
         ApplyThemeResources();
@@ -473,54 +484,64 @@ public sealed class PasswordGeneratorPanel
         catch { /* dialog closed */ }
     }
 
-    public void ApplyThemeResources()
+    public void ApplyThemeResources(FrameworkElement? host = null)
     {
-        var theme = FortivaControlTheme.ResolveAppTheme();
-        FortivaControlTheme.ApplyResolvedTheme(Root);
+        if (host is not null)
+            _themeHost = host;
 
-        _optionsShell.RequestedTheme = theme;
-        _optionsShell.Background = FortivaControlTheme.GetBrush("FortivaGlassFillBrush", theme, Root);
-        _optionsShell.BorderBrush = FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", theme, Root);
-        FortivaSurfaceEffects.ApplyCardElevation(_optionsShell, 4f);
+        var themeHost = _themeHost ?? Root;
+        var theme = _themeHost is not null
+            ? FortivaControlTheme.ResolveHostTheme(_themeHost)
+            : FortivaControlTheme.ResolveEffectiveTheme(Root.XamlRoot, Root);
 
-        FortivaControlTheme.ApplyPreviewSurface(_previewBorder, _preview, Root);
-        FortivaSurfaceEffects.ApplyIconButton(_copyPreviewBtn, Root);
-        FortivaControlTheme.ApplyComboBox(_presetBox, Root);
+        Root.RequestedTheme = theme;
+        FortivaThemeResources.MergeOnto(Root, theme);
+
+        if (_optionsShell is not null)
+        {
+            _optionsShell.Background = FortivaControlTheme.GetBrush("FortivaGlassFillBrush", theme, themeHost);
+            _optionsShell.BorderBrush = FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", theme, themeHost);
+            FortivaSurfaceEffects.ApplyCardElevation(_optionsShell, 4f);
+        }
+
+        FortivaControlTheme.ApplyPreviewSurface(_previewBorder, _preview, themeHost);
+        FortivaSurfaceEffects.ApplyIconButton(_copyPreviewBtn, themeHost);
+        FortivaControlTheme.ApplyComboBox(_presetBox, themeHost);
         FortivaControlTheme.TryApplyStyle(_presetBox, "FortivaComboBox");
-        FortivaControlTheme.ApplyTextBox(_separatorBox, Root);
-        FortivaControlTheme.ApplyTextBox(_symbolsBox, Root);
-        FortivaControlTheme.ApplyTextBox(_customCharsetBox, Root);
-        FortivaControlTheme.ApplySlider(_lengthSlider, Root);
-        FortivaControlTheme.ApplySlider(_wordCountSlider, Root);
+        FortivaControlTheme.ApplyTextBox(_separatorBox, themeHost);
+        FortivaControlTheme.ApplyTextBox(_symbolsBox, themeHost);
+        FortivaControlTheme.ApplyTextBox(_customCharsetBox, themeHost);
+        FortivaControlTheme.ApplySlider(_lengthSlider, themeHost);
+        FortivaControlTheme.ApplySlider(_wordCountSlider, themeHost);
         FortivaControlTheme.TryApplyStyle(_lengthSlider, "FortivaSlider");
         FortivaControlTheme.TryApplyStyle(_wordCountSlider, "FortivaSlider");
 
         foreach (var toggle in _charToggles.Concat([_ambiguousToggle, _requireEachToggle]))
         {
-            FortivaControlTheme.ApplyToggleSwitch(toggle, Root);
+            FortivaControlTheme.ApplyToggleSwitch(toggle, themeHost);
             FortivaControlTheme.TryApplyStyle(toggle, "FortivaToggleSwitch");
         }
 
         if (_introText is not null)
-            FortivaControlTheme.ApplyBodyText(_introText, Root);
+            FortivaControlTheme.ApplyBodyText(_introText, themeHost);
 
         if (_dialogRegenerateBtn is not null)
-            FortivaControlTheme.ApplySecondaryButton(_dialogRegenerateBtn, Root);
+            FortivaControlTheme.ApplySecondaryButton(_dialogRegenerateBtn, themeHost);
 
-        _tagPicker.ApplyTheme(Root);
+        _tagPicker.ApplyTheme(themeHost);
 
         foreach (var label in _sectionLabelBlocks)
-            FortivaControlTheme.ApplySectionLabel(label, context: Root);
+            FortivaControlTheme.ApplySectionLabel(label, context: themeHost);
 
-        FortivaControlTheme.ApplySectionLabel(_categoriesLabel, pageHeader: true, context: Root);
-        FortivaControlTheme.ApplySectionLabel(_optionsHeader, pageHeader: true, context: Root);
+        FortivaControlTheme.ApplySectionLabel(_categoriesLabel, pageHeader: true, context: themeHost);
+        FortivaControlTheme.ApplySectionLabel(_optionsHeader, pageHeader: true, context: themeHost);
 
-        _categoriesDivider.Background = FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", theme, Root);
+        _categoriesDivider.Background = FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", theme, themeHost);
 
-        _errorLabel.Foreground = FortivaControlTheme.GetBrush("SystemFillColorCriticalBrush", theme, Root);
-        FortivaControlTheme.ApplyMutedText(_strengthLabel, Root);
-        FortivaControlTheme.ApplyMutedText(_lengthValue, Root);
-        FortivaControlTheme.ApplyMutedText(_previewHint, Root);
+        _errorLabel.Foreground = FortivaControlTheme.GetBrush("SystemFillColorCriticalBrush", theme, themeHost);
+        FortivaControlTheme.ApplyMutedText(_strengthLabel, themeHost);
+        FortivaControlTheme.ApplyMutedText(_lengthValue, themeHost);
+        FortivaControlTheme.ApplyMutedText(_previewHint, themeHost);
 
         if (!string.IsNullOrEmpty(_preview.Text))
         {
@@ -539,7 +560,7 @@ public sealed class PasswordGeneratorPanel
                 new SolidColorBrush(Color.FromArgb(255, 200, 130, 0)),
             PasswordStrength.Strong =>
                 new SolidColorBrush(Color.FromArgb(255, 0, 160, 80)),
-            _ => FortivaControlTheme.GetBrush("FortivaAccentBrush", FortivaControlTheme.ResolveAppTheme(), Root)
+            _ => FortivaControlTheme.GetBrush("FortivaAccentBrush", FortivaControlTheme.ResolveHostTheme(_themeHost ?? Root), _themeHost ?? Root)
         };
     }
 
