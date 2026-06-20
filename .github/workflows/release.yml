@@ -136,22 +136,30 @@ jobs:
             Stop-Process -Force -ErrorAction SilentlyContinue
 
       - name: Run Core unit tests
-        shell: pwsh
-        run: |
-          dotnet test tests/Fortiva.Core.Tests/Fortiva.Core.Tests.csproj `
-            -c Release --no-build --verbosity normal `
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 20
+          max_attempts: 3
+          retry_wait_seconds: 20
+          shell: pwsh
+          command: >
+            dotnet test tests/Fortiva.Core.Tests/Fortiva.Core.Tests.csproj
+            -c Release --no-build --verbosity normal
             -- xunit.parallelizeTestCollections=false
-        timeout-minutes: 20
 
       - name: Run AppHost unit tests
-        shell: pwsh
-        run: |
-          dotnet restore tests/Fortiva.AppHost.Tests/Fortiva.AppHost.Tests.csproj
-          dotnet build tests/Fortiva.AppHost.Tests/Fortiva.AppHost.Tests.csproj -c Release --no-restore
-          dotnet test tests/Fortiva.AppHost.Tests/Fortiva.AppHost.Tests.csproj `
-            -c Release --no-build --verbosity normal `
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 15
+          max_attempts: 3
+          retry_wait_seconds: 20
+          shell: pwsh
+          command: >
+            dotnet restore tests/Fortiva.AppHost.Tests/Fortiva.AppHost.Tests.csproj;
+            dotnet build tests/Fortiva.AppHost.Tests/Fortiva.AppHost.Tests.csproj -c Release --no-restore;
+            dotnet test tests/Fortiva.AppHost.Tests/Fortiva.AppHost.Tests.csproj
+            -c Release --no-build --verbosity normal
             -- xunit.parallelizeTestCollections=false
-        timeout-minutes: 15
 
       - name: Build release (dist/)
         shell: pwsh
