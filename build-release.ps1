@@ -4,6 +4,9 @@
     Full release build for Fortiva (Personal, Enterprise, Admin).
     Uses VS MSBuild for XAML compilation, dotnet publish for self-contained output,
     then makepri.exe to generate resources.pri.
+
+.NOTES
+    Works in Windows PowerShell 5.1 and PowerShell 7+. Prefer: pwsh .\build-release.ps1
 #>
 param(
     [string]$Version = ""
@@ -35,7 +38,7 @@ function Stop-FortivaDistProcesses {
     param([string]$ExeName)
     $procs = @(Get-Process -Name $ExeName -ErrorAction SilentlyContinue)
     if ($procs.Count -eq 0) { return }
-    Write-Host "  Stopping $($procs.Count) running $ExeName process(es) — dist output is locked while the app runs." -ForegroundColor Yellow
+    Write-Host "  Stopping $($procs.Count) running $ExeName process(es) - dist output is locked while the app runs." -ForegroundColor Yellow
     $procs | Stop-Process -Force
     Start-Sleep -Milliseconds 750
 }
@@ -51,19 +54,19 @@ function Assert-SelfContainedPublish {
     }
     $json = Get-Content $runtimeConfig -Raw
     if ($json -match '"framework"\s*:') {
-        throw "$ExeBaseName publish is framework-dependent (runtimeconfig has 'framework' not 'includedFrameworks'). Users will be prompted to install .NET Desktop Runtime. Re-publish with --self-contained."
+        throw ('{0} publish is framework-dependent (runtimeconfig has ''framework'' not ''includedFrameworks''). Users will be prompted to install .NET Desktop Runtime. Re-publish with --self-contained.' -f $ExeBaseName)
     }
     if ($json -notmatch 'includedFrameworks') {
         throw "$ExeBaseName publish is not self-contained (no includedFrameworks in runtimeconfig)."
     }
     if (-not (Test-Path (Join-Path $DistDir "hostfxr.dll"))) {
-        throw "$ExeBaseName publish is missing hostfxr.dll — not a complete self-contained layout."
+        throw "$ExeBaseName publish is missing hostfxr.dll - not a complete self-contained layout."
     }
 }
 
 $makepri = Find-MakePri
 if (-not $makepri) {
-    Write-Host "makepri.exe not in NuGet cache — restoring WinUI project packages..."
+    Write-Host "makepri.exe not in NuGet cache - restoring WinUI project packages..."
     $bootstrapProj = Join-Path $root "src\Fortiva.Personal\Fortiva.Personal.csproj"
     & dotnet restore $bootstrapProj -p:Platform=x64 -p:RuntimeIdentifier=win-x64 --nologo -q
     if ($LASTEXITCODE -ne 0) { throw "dotnet restore failed (needed for makepri.exe)" }
