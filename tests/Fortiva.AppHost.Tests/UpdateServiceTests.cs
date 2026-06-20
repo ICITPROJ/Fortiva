@@ -47,26 +47,47 @@ public sealed class UpdateServiceTests
     [Fact]
     public void BuildUpdateBatchScript_WaitsForFortivaExitThenRunsInstaller()
     {
+        var logPath = Path.Combine(Path.GetTempPath(), "fortiva-update-test.log");
         var script = UpdateService.BuildUpdateBatchScript(
             @"C:\Temp\FortivaPersonal-1.0.0-Setup.exe",
             "/VERYSILENT /FORCECLOSEAPPLICATIONS",
             @"C:\Users\me\AppData\Local\Programs\icmclab studio\Fortiva Personal\Fortiva.Personal.exe",
-            @"C:\Temp\fortiva-update-abc.cmd");
+            @"C:\Temp\fortiva-update-abc.cmd",
+            logPath,
+            "1.0.45");
 
         Assert.Contains("waitfortiva", script);
         Assert.Contains("start \"\" /wait \"C:\\Temp\\FortivaPersonal-1.0.0-Setup.exe\"", script);
         Assert.Contains("/VERYSILENT /FORCECLOSEAPPLICATIONS", script);
+        Assert.Contains("relaunching Fortiva", script);
         Assert.Contains("Fortiva.Personal.exe", script);
     }
 
     [Fact]
-    public void LaunchInstallerWithRelaunch_ReturnsNull_WhenInstallerMissing()
+    public void LaunchInstallerWithRelaunch_ReturnsFalse_WhenInstallerMissing()
     {
         var result = UpdateService.LaunchInstallerWithRelaunch(
             Path.Combine(Path.GetTempPath(), "missing-fortiva-setup.exe"),
             UpdateUrlPolicy.DefaultInstallerArgs,
-            UpdateService.ResolveInstalledExePath());
-        Assert.Null(result);
+            UpdateService.ResolveInstalledExePath(),
+            "9.9.9");
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void WriteUpdateLog_AppendsWithoutThrowing()
+    {
+        var logPath = Path.Combine(Path.GetTempPath(), $"fortiva-update-log-{Guid.NewGuid():N}.log");
+        try
+        {
+            UpdateService.WriteUpdateLog(logPath, "test entry");
+            Assert.Contains("test entry", File.ReadAllText(logPath));
+        }
+        finally
+        {
+            if (File.Exists(logPath))
+                File.Delete(logPath);
+        }
     }
 
     [Fact]

@@ -139,20 +139,15 @@ public sealed class UpdateService
 
             var exePath = ResolveInstalledExePath();
             var installerArgs = UpdateUrlPolicy.ResolveInstallerArgs(manifest);
-            var helper = LaunchInstallerWithRelaunch(dest, installerArgs, exePath);
-            if (helper is null)
+            if (!LaunchInstallerWithRelaunch(dest, installerArgs, exePath, manifest.Version))
             {
                 throw new InvalidOperationException(
                     "The updater did not start correctly. Your current version is unchanged. "
                     + "Please download and run the latest installer manually.");
             }
 
-            if (!await ConfirmUpdateHelperStartedAsync(helper).ConfigureAwait(false))
-            {
-                throw new InvalidOperationException(
-                    "The updater did not start correctly. Your current version is unchanged. "
-                    + "Please download and run the latest installer manually.");
-            }
+            // Detached helper must survive App.Exit — brief pause so it begins waiting.
+            await Task.Delay(800).ConfigureAwait(false);
 
             _vm.ClearUpdateApplyFailure();
             App.ExitForUpdate();
@@ -246,40 +241,80 @@ public sealed class UpdateService
 
     /// <summary>
     /// Detached cmd helper: wait for Fortiva to exit, run installer to completion, relaunch if needed.
+    /// Must not be a child of Fortiva — the app process exits immediately after this returns.
     /// </summary>
-    internal static Process? LaunchInstallerWithRelaunch(string installerPath, string installerArgs, string exePath)
+    internal static bool LaunchInstallerWithRelaunch(
+        string installerPath,
+        string installerArgs,
+        string exePath,
+        string? targetVersion = null)
     {
         if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
-            return null;
+            return false;
 
         var batchId = Guid.NewGuid().ToString("N");
         var batchPath = Path.Combine(Path.GetTempPath(), $"fortiva-update-{batchId}.cmd");
-        File.WriteAllText(batchPath, BuildUpdateBatchScript(installerPath, installerArgs, exePath, batchPath));
+        var logPath = ResolveUpdateLogPath();
+        File.WriteAllText(
+            batchPath,
+            BuildUpdateBatchScript(installerPath, installerArgs, exePath, batchPath, logPath, targetVersion));
 
-        return Process.Start(new ProcessStartInfo
+        WriteUpdateLog(logPath, $"Launching detached update helper (target {targetVersion ?? "unknown"}).");
+        WriteUpdateLog(logPath, $"Installer: {installerPath}");
+        WriteUpdateLog(logPath, $"Relaunch: {exePath}");
+
+        // `start` via ShellExecute so the helper is not in Fortiva's job object and survives App.Exit.
+        var started = Process.Start(new ProcessStartInfo
         {
             FileName = "cmd.exe",
-            Arguments = $"/c \"\"{batchPath}\"\"",
-            UseShellExecute = false,
-            CreateNoWindow = true,
+            Arguments = $"/c start \"FortivaUpdate\" /min {QuoteCmdPath(batchPath)}",
+            UseShellExecute = true,
             WindowStyle = ProcessWindowStyle.Hidden,
             WorkingDirectory = Path.GetTempPath()
         });
+
+        return started is not null;
+    }
+
+    internal static string ResolveUpdateLogPath()
+        => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "FortivaPersonal", "logs", "update.log");
+
+    internal static void WriteUpdateLog(string logPath, string message)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+            File.AppendAllText(logPath, $"[{DateTimeOffset.Now:O}] {message}{Environment.NewLine}");
+        }
+        catch
+        {
+            // Best effort — never block updates on logging.
+        }
     }
 
     internal static string BuildUpdateBatchScript(
         string installerPath,
         string installerArgs,
         string exePath,
-        string batchPath)
+        string batchPath,
+        string logPath,
+        string? targetVersion = null)
     {
         var quotedInstaller = QuoteCmdPath(installerPath);
         var quotedExe = QuoteCmdPath(exePath);
         var quotedBatch = QuoteCmdPath(batchPath);
+        var quotedLog = QuoteCmdPath(logPath);
         var args = string.IsNullOrWhiteSpace(installerArgs) ? string.Empty : installerArgs.Trim();
+        var versionLabel = string.IsNullOrWhiteSpace(targetVersion) ? "unknown" : targetVersion.Trim();
 
         return
             "@echo off\r\n" +
+            "setlocal EnableExtensions\r\n" +
+            $"set \"FORTIVA_LOG={quotedLog}\"\r\n" +
+            "if not exist \"%LOCALAPPDATA%\\FortivaPersonal\\logs\" mkdir \"%LOCALAPPDATA%\\FortivaPersonal\\logs\" >nul 2>&1\r\n" +
+            $"echo [%date% %time%] helper started target {versionLabel}>>\"%FORTIVA_LOG%\"\r\n" +
             "set /a _tries=0\r\n" +
             ":waitfortiva\r\n" +
             "set /a _tries+=1\r\n" +
@@ -289,14 +324,21 @@ public sealed class UpdateService
             "  timeout /t 1 /nobreak >nul\r\n" +
             "  goto waitfortiva\r\n" +
             ")\r\n" +
+            "echo [%date% %time%] Fortiva exited, running installer>>\"%FORTIVA_LOG%\"\r\n" +
             ":runsetup\r\n" +
             $"start \"\" /wait {quotedInstaller} {args}\r\n" +
+            "set _setup_err=%errorlevel%\r\n" +
+            "echo [%date% %time%] installer finished exit %_setup_err%>>\"%FORTIVA_LOG%\"\r\n" +
             "timeout /t 3 /nobreak >nul\r\n" +
             "tasklist /FI \"IMAGENAME eq Fortiva.Personal.exe\" 2>nul | find /I \"Fortiva.Personal.exe\" >nul\r\n" +
             "if errorlevel 1 (\r\n" +
+            "  echo [%date% %time%] relaunching Fortiva>>\"%FORTIVA_LOG%\"\r\n" +
             $"  start \"\" {quotedExe}\r\n" +
+            ") else (\r\n" +
+            "  echo [%date% %time%] Fortiva already running>>\"%FORTIVA_LOG%\"\r\n" +
             ")\r\n" +
-            $"del /f /q {quotedBatch}\r\n";
+            $"del /f /q {quotedBatch}\r\n" +
+            "endlocal\r\n";
     }
 
     internal static string QuoteCmdPath(string path)

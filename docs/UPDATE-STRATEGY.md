@@ -44,10 +44,12 @@ Manual **Check for updates → Install now** and the 24-hour auto-update path sh
 2. Copy vault + Hello sidecars to `%LocalAppData%\FortivaPersonal\pre-update-backups\` (best effort).
 3. **Lock vault** (scrub secrets from memory).
 4. Stop `Fortiva.BrowserBridge.Host.exe` if running.
-5. Launch a detached update helper that waits for Fortiva to exit, runs Inno Setup to completion, then relaunches if needed; Fortiva exits immediately after the helper starts.
+5. Launch a **detached** update helper (`start` via ShellExecute, not a child of Fortiva) that waits for Fortiva to exit, runs Inno Setup to completion, then relaunches if needed; Fortiva exits after the helper starts.
 6. Installer upgrades files under `%LocalAppData%\Programs\icmclab studio\Fortiva Personal\`.
 7. Installer **relaunches** `Fortiva.Personal.exe` when setup was silent (`ShouldLaunchAfterSilentInstall`, `runascurrentuser`).
 8. The update helper and installer `DeinitializeSetup` both reopen Fortiva if no instance is running after setup finishes.
+
+Diagnostic log: `%LocalAppData%\FortivaPersonal\logs\update.log`
 
 **Preserved across updates:** `vault.fva`, snapshots, `local.state`, Hello blobs, `user.prefs.json`, `appearance.json`, extension staging under `%LocalAppData%\FortivaPersonal\`, browser native-messaging registration (refreshed on next launch).
 
