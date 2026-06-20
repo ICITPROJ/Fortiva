@@ -45,7 +45,7 @@
             <SolidColorBrush x:Key="FortivaGlassFillBrush" Color="#EBFFFFFF"/>
             <SolidColorBrush x:Key="FortivaSurfaceBrush" Color="#F5FAFE"/>
             <SolidColorBrush x:Key="FortivaSurfaceSubtleBrush" Color="#E8F4FA"/>
-            <SolidColorBrush x:Key="FortivaInputFillBrush" Color="#F8FCFF"/>
+            <SolidColorBrush x:Key="FortivaInputFillBrush" Color="#FFFFFF"/>
             <SolidColorBrush x:Key="FortivaInputBorderBrush" Color="#8EB4CC"/>
             <SolidColorBrush x:Key="FortivaGlassBorderBrush" Color="#8040BCF4"/>
             <SolidColorBrush x:Key="FortivaAccentGlowBrush" Color="#2840BCF4"/>
@@ -90,9 +90,9 @@
             <SolidColorBrush x:Key="TextFillColorDisabledBrush" Color="#5C6A78"/>
             <SolidColorBrush x:Key="DividerStrokeColorDefaultBrush" Color="#6640BCF4"/>
 
-            <SolidColorBrush x:Key="ComboBoxBackground" Color="#F8FCFF"/>
-            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#EAF6FC"/>
-            <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#DCEEF8"/>
+            <SolidColorBrush x:Key="ComboBoxBackground" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#F5FAFE"/>
+            <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#EAF6FC"/>
             <SolidColorBrush x:Key="ComboBoxBackgroundDisabled" Color="#6688959E"/>
             <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#8EB4CC"/>
             <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#6640BCF4"/>
@@ -101,12 +101,12 @@
             <SolidColorBrush x:Key="ComboBoxForeground" Color="#0A0C10"/>
             <SolidColorBrush x:Key="ComboBoxForegroundDisabled" Color="#5C6A78"/>
             <SolidColorBrush x:Key="ComboBoxDropDownGlyphForeground" Color="#0A0C10"/>
-            <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#F8FCFF"/>
+            <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="#FFFFFF"/>
             <SolidColorBrush x:Key="ComboBoxBorderBrushFocused" Color="#8840BCF4"/>
             <SolidColorBrush x:Key="ComboBoxForegroundFocused" Color="#0A0C10"/>
-            <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#F5FAFE"/>
+            <SolidColorBrush x:Key="ComboBoxDropDownBackground" Color="#FFFFFF"/>
             <SolidColorBrush x:Key="ComboBoxDropDownBorderBrush" Color="#8EB4CC"/>
-            <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#F8FCFF"/>
+            <SolidColorBrush x:Key="ComboBoxBackgroundUnfocused" Color="#FFFFFF"/>
             <SolidColorBrush x:Key="ComboBoxHeaderForeground" Color="#0A0C10"/>
             <SolidColorBrush x:Key="ComboBoxHeaderForegroundDisabled" Color="#5C6A78"/>
             <SolidColorBrush x:Key="ComboBoxItemForeground" Color="#0A0C10"/>
@@ -118,8 +118,8 @@
             <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected" Color="#D8ECF8"/>
             <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver" Color="#C8E2F0"/>
 
-            <SolidColorBrush x:Key="TextControlBackground" Color="#F8FCFF"/>
-            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#EAF6FC"/>
+            <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFF"/>
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#F5FAFE"/>
             <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FFFFFF"/>
             <SolidColorBrush x:Key="TextControlBackgroundDisabled" Color="#6688959E"/>
             <SolidColorBrush x:Key="TextControlForeground" Color="#0A0C10"/>

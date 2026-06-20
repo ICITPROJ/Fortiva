@@ -1,17 +1,38 @@
 using Fortiva.AppHost.ViewModels;
 using Fortiva.Core.Password;
 using Fortiva.Core.Security;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using System.Runtime.CompilerServices;
+using Windows.UI;
 
 namespace Fortiva.AppHost.Services;
 
 /// <summary>Applies Fortiva theme brushes to code-built controls (dialogs, panels).</summary>
 public static class FortivaControlTheme
 {
+    private sealed record InputBrushSet(
+        Brush Background,
+        Brush BackgroundHover,
+        Brush Foreground,
+        Brush Border,
+        Brush Placeholder,
+        Brush DropDownBackground,
+        Brush ItemBackground,
+        Brush ItemBackgroundHover);
+
+    private static readonly SolidColorBrush LightInputBackground = new(Color.FromArgb(255, 255, 255, 255));
+    private static readonly SolidColorBrush LightInputBackgroundHover = new(Color.FromArgb(255, 245, 250, 254));
+    private static readonly SolidColorBrush LightInputForeground = new(Color.FromArgb(255, 10, 12, 16));
+    private static readonly SolidColorBrush LightInputBorder = new(Color.FromArgb(255, 142, 180, 204));
+    private static readonly SolidColorBrush LightInputPlaceholder = new(Color.FromArgb(255, 92, 106, 120));
+    private static readonly SolidColorBrush LightItemBackgroundHover = new(Color.FromArgb(255, 234, 246, 252));
+
+    private static readonly ConditionalWeakTable<TextBox, object> TextBoxThemeHooks = new();
+    private static readonly ConditionalWeakTable<ComboBox, object> ComboBoxThemeHooks = new();
     /// <summary>
     /// Prefer the host element's resolved theme so code-built UI matches surrounding XAML.
     /// Dialog subtrees fall back to user preference (ActualTheme is unreliable there).
@@ -151,24 +172,9 @@ public static class FortivaControlTheme
     {
         void Apply()
         {
-            var resolved = theme ?? ResolveEffectiveTheme(context?.XamlRoot, context ?? box);
-            FortivaThemeResources.MergeOnto(box, resolved);
-            box.RequestedTheme = resolved;
-            TryApplyStyle(box, "FortivaTextBox");
-            box.Background = GetBrush("FortivaInputFillBrush", resolved, box);
-            box.BorderBrush = GetBrush("FortivaInputBorderBrush", resolved, box);
-            box.Foreground = GetBrush("FortivaHeadingBrush", resolved, box);
-            box.PlaceholderForeground = GetBrush("FortivaMutedBrush", resolved, box);
-            box.BorderThickness = new Thickness(1);
-            box.CornerRadius = new CornerRadius(8);
-            box.Padding = new Thickness(12, 10, 12, 10);
-            if (box.MinHeight < 44)
-                box.MinHeight = 44;
-            if (box.FontSize < 14)
-                box.FontSize = 14;
-
-            PinSharedInputResources(box, resolved, context ?? box);
-            ForceInputInnerChrome(box, resolved, context);
+            var resolved = theme ?? ResolveInputTheme(context, box);
+            ApplyInputThemeCore(box, resolved, context, "FortivaTextBox");
+            EnsureTextBoxThemeHook(box, context);
         }
 
         Apply();
@@ -179,26 +185,14 @@ public static class FortivaControlTheme
     {
         void Apply()
         {
-            var resolved = theme ?? ResolveEffectiveTheme(context?.XamlRoot, context ?? box);
-            FortivaThemeResources.MergeOnto(box, resolved);
-            box.RequestedTheme = resolved;
-            TryApplyStyle(box, "FortivaComboBox");
+            var resolved = theme ?? ResolveInputTheme(context, box);
+            ApplyInputThemeCore(box, resolved, context, "FortivaComboBox");
             if (Application.Current?.Resources.TryGetValue("FortivaComboBoxItem", out var itemStyle) == true
                 && itemStyle is Style comboItemStyle)
                 box.ItemContainerStyle = comboItemStyle;
 
-            box.Background = GetBrush("FortivaInputFillBrush", resolved, box);
-            box.BorderBrush = GetBrush("FortivaInputBorderBrush", resolved, box);
-            box.Foreground = GetBrush("FortivaHeadingBrush", resolved, box);
-            box.BorderThickness = new Thickness(1);
-            box.CornerRadius = new CornerRadius(8);
-            box.Padding = new Thickness(12, 8, 12, 8);
-            box.MinHeight = 44;
-            box.FontSize = 14;
-
-            PinComboBoxResources(box, resolved, context ?? box);
             EnsureComboBoxDropDownHook(box, context);
-            ForceInputInnerChrome(box, resolved, context);
+            EnsureComboBoxThemeHook(box, context);
 
             for (var i = 0; i < box.Items.Count; i++)
             {
@@ -209,6 +203,78 @@ public static class FortivaControlTheme
 
         Apply();
         ApplyWhenLoaded(box, Apply);
+    }
+
+    private static ElementTheme ResolveInputTheme(FrameworkElement? context, Control control)
+    {
+        if (context is not null)
+            return ResolveHostTheme(context);
+
+        return ResolveEffectiveTheme(control.XamlRoot, control);
+    }
+
+    private static InputBrushSet GetInputBrushes(ElementTheme theme, FrameworkElement context)
+    {
+        if (theme == ElementTheme.Light)
+        {
+            return new InputBrushSet(
+                LightInputBackground,
+                LightInputBackgroundHover,
+                LightInputForeground,
+                LightInputBorder,
+                LightInputPlaceholder,
+                LightInputBackground,
+                LightInputBackground,
+                LightItemBackgroundHover);
+        }
+
+        return new InputBrushSet(
+            GetBrush("FortivaInputFillBrush", theme, context),
+            GetBrush("TextControlBackgroundPointerOver", theme, context),
+            GetBrush("FortivaHeadingBrush", theme, context),
+            GetBrush("FortivaInputBorderBrush", theme, context),
+            GetBrush("FortivaMutedBrush", theme, context),
+            GetBrush("ComboBoxDropDownBackground", theme, context),
+            GetBrush("ComboBoxItemBackground", theme, context),
+            GetBrush("ComboBoxItemBackgroundPointerOver", theme, context));
+    }
+
+    private static void ApplyInputThemeCore(Control control, ElementTheme resolved, FrameworkElement? context, string styleKey)
+    {
+        var host = context ?? control;
+        control.RequestedTheme = resolved;
+        FortivaThemeResources.MergeOnto(control, resolved);
+
+        // WinUI caches the first template against Application theme — reset so Light sticks.
+        control.Style = null;
+        TryApplyStyle(control, styleKey);
+
+        var brushes = GetInputBrushes(resolved, host);
+        control.Background = brushes.Background;
+        control.Foreground = brushes.Foreground;
+        control.BorderBrush = brushes.Border;
+        control.BorderThickness = new Thickness(1);
+
+        if (control is TextBox textBox)
+        {
+            textBox.PlaceholderForeground = brushes.Placeholder;
+            textBox.CornerRadius = new CornerRadius(8);
+            textBox.Padding = new Thickness(12, 10, 12, 10);
+            if (textBox.MinHeight < 44)
+                textBox.MinHeight = 44;
+            if (textBox.FontSize < 14)
+                textBox.FontSize = 14;
+        }
+        else if (control is ComboBox comboBox)
+        {
+            comboBox.CornerRadius = new CornerRadius(8);
+            comboBox.Padding = new Thickness(12, 8, 12, 8);
+            comboBox.MinHeight = 44;
+            comboBox.FontSize = 14;
+        }
+
+        PinAllInputResources(control, resolved, host, brushes);
+        ForceInputInnerChrome(control, resolved, context, brushes);
     }
 
     /// <summary>Walk a code-built subtree and pin RequestedTheme + merged dictionary on every element.</summary>
@@ -450,35 +516,59 @@ public static class FortivaControlTheme
                 : ResolveEffectiveTheme(box.XamlRoot, box);
             ApplyComboBoxDropDown(box, theme, context);
         };
-        box.DropDownClosed += (_, _) =>
-        {
-            var theme = context is not null
-                ? ResolveHostTheme(context)
-                : ResolveEffectiveTheme(box.XamlRoot, box);
-            ForceInputInnerChrome(box, theme, context);
-            PinComboBoxResources(box, theme, context ?? box);
-        };
+        box.DropDownClosed += (_, _) => ApplyComboBox(box, context);
+    }
+
+    private static void EnsureTextBoxThemeHook(TextBox box, FrameworkElement? context)
+    {
+        if (TextBoxThemeHooks.TryGetValue(box, out _))
+            return;
+
+        TextBoxThemeHooks.Add(box, box);
+        void Refresh(object? _, object __) => ApplyTextBox(box, context);
+        box.ActualThemeChanged += Refresh;
+        box.GotFocus += Refresh;
+        box.LostFocus += Refresh;
+    }
+
+    private static void EnsureComboBoxThemeHook(ComboBox box, FrameworkElement? context)
+    {
+        if (ComboBoxThemeHooks.TryGetValue(box, out _))
+            return;
+
+        ComboBoxThemeHooks.Add(box, box);
+        void Refresh(object? _, object __) => ApplyComboBox(box, context);
+        box.ActualThemeChanged += Refresh;
+        box.GotFocus += Refresh;
+        box.LostFocus += Refresh;
     }
 
     private static void ApplyComboBoxDropDown(ComboBox box, ElementTheme theme, FrameworkElement? context)
     {
+        var host = context ?? box;
+        var brushes = GetInputBrushes(theme, host);
         box.RequestedTheme = theme;
         FortivaThemeResources.MergeOnto(box, theme);
-        PinComboBoxResources(box, theme, context ?? box);
-        ForceInputInnerChrome(box, theme, context);
+        PinAllInputResources(box, theme, host, brushes);
+        ForceInputInnerChrome(box, theme, context, brushes);
 
-        ThemeComboBoxOpenPopups(box, theme, context);
+        ThemeComboBoxOpenPopups(box, theme, context, brushes);
 
         for (var i = 0; i < box.Items.Count; i++)
         {
             if (box.ContainerFromIndex(i) is ComboBoxItem item)
-                ApplyComboBoxItem(item, theme, context);
+                ApplyComboBoxItem(item, theme, context, brushes);
         }
 
-        ScheduleComboBoxDropDownRetheme(box, theme, context, retriesRemaining: 4);
+        ScheduleComboBoxDropDownRetheme(box, theme, context, brushes, retriesRemaining: 4);
     }
 
-    private static void ScheduleComboBoxDropDownRetheme(ComboBox box, ElementTheme theme, FrameworkElement? context, int retriesRemaining)
+    private static void ScheduleComboBoxDropDownRetheme(
+        ComboBox box,
+        ElementTheme theme,
+        FrameworkElement? context,
+        InputBrushSet brushes,
+        int retriesRemaining)
     {
         if (retriesRemaining <= 0 || !box.IsDropDownOpen)
             return;
@@ -488,131 +578,140 @@ public static class FortivaControlTheme
             if (!box.IsDropDownOpen)
                 return;
 
-            ThemeComboBoxOpenPopups(box, theme, context);
-            ForceInputInnerChrome(box, theme, context);
+            ThemeComboBoxOpenPopups(box, theme, context, brushes);
+            ForceInputInnerChrome(box, theme, context, brushes);
 
             for (var i = 0; i < box.Items.Count; i++)
             {
                 if (box.ContainerFromIndex(i) is ComboBoxItem item)
-                    ApplyComboBoxItem(item, theme, context);
+                    ApplyComboBoxItem(item, theme, context, brushes);
             }
 
-            ScheduleComboBoxDropDownRetheme(box, theme, context, retriesRemaining - 1);
+            ScheduleComboBoxDropDownRetheme(box, theme, context, brushes, retriesRemaining - 1);
         });
     }
 
-    private static void ThemeComboBoxOpenPopups(ComboBox box, ElementTheme theme, FrameworkElement? context)
+    private static void ThemeComboBoxOpenPopups(
+        ComboBox box,
+        ElementTheme theme,
+        FrameworkElement? context,
+        InputBrushSet brushes)
     {
         if (box.XamlRoot is null)
             return;
 
         foreach (var popup in VisualTreeHelper.GetOpenPopupsForXamlRoot(box.XamlRoot))
         {
-            if (popup.Child is not FrameworkElement popupRoot)
-                continue;
-
-            if (!PopupBelongsToComboBox(popupRoot, box))
-                continue;
-
-            ThemePopupRoot(popupRoot, theme, context ?? box);
+            if (popup.Child is FrameworkElement popupRoot)
+                ThemePopupRoot(popupRoot, theme, context ?? box, brushes);
         }
 
         if (FindDescendant<Popup>(box) is { Child: FrameworkElement inlinePopupRoot })
-            ThemePopupRoot(inlinePopupRoot, theme, context ?? box);
+            ThemePopupRoot(inlinePopupRoot, theme, context ?? box, brushes);
     }
 
-    private static bool PopupBelongsToComboBox(FrameworkElement popupRoot, ComboBox box) =>
-        box.IsDropDownOpen && FindDescendant<ComboBoxItem>(popupRoot) is not null;
-
-    private static void ThemePopupRoot(FrameworkElement popupRoot, ElementTheme theme, FrameworkElement context)
+    private static void ThemePopupRoot(
+        FrameworkElement popupRoot,
+        ElementTheme theme,
+        FrameworkElement context,
+        InputBrushSet brushes)
     {
         popupRoot.RequestedTheme = theme;
         FortivaThemeResources.MergeOnto(popupRoot, theme);
-        PinComboBoxResources(popupRoot, theme, context);
-        PinComboBoxItemResources(popupRoot, theme, context);
-        ForceInputInnerChrome(popupRoot, theme, context);
+        PinAllInputResources(popupRoot, theme, context, brushes);
+        ForceInputInnerChrome(popupRoot, theme, context, brushes);
     }
 
-    private static void ApplyComboBoxItem(ComboBoxItem item, ElementTheme theme, FrameworkElement? context)
+    private static void ApplyComboBoxItem(
+        ComboBoxItem item,
+        ElementTheme theme,
+        FrameworkElement? context,
+        InputBrushSet? brushes = null)
     {
+        var host = context ?? item;
+        brushes ??= GetInputBrushes(theme, host);
         item.RequestedTheme = theme;
         FortivaThemeResources.MergeOnto(item, theme);
-        item.Foreground = GetBrush("ComboBoxItemForeground", theme, context ?? item);
-        item.Background = GetBrush("ComboBoxItemBackground", theme, context ?? item);
-        PinComboBoxItemResources(item, theme, context ?? item);
+        item.Foreground = brushes.Foreground;
+        item.Background = brushes.ItemBackground;
+        PinComboBoxItemResources(item, theme, host, brushes);
     }
 
-    private static void PinSharedInputResources(FrameworkElement element, ElementTheme theme, FrameworkElement context)
+    private static void PinAllInputResources(
+        FrameworkElement element,
+        ElementTheme theme,
+        FrameworkElement context,
+        InputBrushSet brushes)
     {
-        PinResource(element, "TextControlBackground", GetBrush("TextControlBackground", theme, context));
-        PinResource(element, "TextControlBackgroundFocused", GetBrush("TextControlBackgroundFocused", theme, context));
-        PinResource(element, "TextControlBackgroundPointerOver", GetBrush("TextControlBackgroundPointerOver", theme, context));
-        PinResource(element, "TextControlForeground", GetBrush("TextControlForeground", theme, context));
-        PinResource(element, "TextControlBorderBrush", GetBrush("TextControlBorderBrush", theme, context));
-        PinResource(element, "TextControlPlaceholderForeground", GetBrush("TextControlPlaceholderForeground", theme, context));
-        PinResource(element, "ControlFillColorDefaultBrush", GetBrush("ControlFillColorDefaultBrush", theme, context));
-        PinResource(element, "ControlFillColorInputActiveBrush", GetBrush("ControlFillColorInputActiveBrush", theme, context));
-        PinResource(element, "TextFillColorPrimaryBrush", GetBrush("TextFillColorPrimaryBrush", theme, context));
+        PinResource(element, "TextControlBackground", brushes.Background);
+        PinResource(element, "TextControlBackgroundFocused", brushes.Background);
+        PinResource(element, "TextControlBackgroundPointerOver", brushes.BackgroundHover);
+        PinResource(element, "TextControlForeground", brushes.Foreground);
+        PinResource(element, "TextControlBorderBrush", brushes.Border);
+        PinResource(element, "TextControlPlaceholderForeground", brushes.Placeholder);
+        PinResource(element, "ControlFillColorDefaultBrush", brushes.Background);
+        PinResource(element, "ControlFillColorInputActiveBrush", brushes.Background);
+        PinResource(element, "ControlFillColorSecondaryBrush", brushes.BackgroundHover);
+        PinResource(element, "TextFillColorPrimaryBrush", brushes.Foreground);
+
+        PinResource(element, "ComboBoxBackground", brushes.Background);
+        PinResource(element, "ComboBoxBackgroundUnfocused", brushes.Background);
+        PinResource(element, "ComboBoxBackgroundFocused", brushes.Background);
+        PinResource(element, "ComboBoxBackgroundPointerOver", brushes.BackgroundHover);
+        PinResource(element, "ComboBoxBackgroundPressed", brushes.BackgroundHover);
+        PinResource(element, "ComboBoxForeground", brushes.Foreground);
+        PinResource(element, "ComboBoxForegroundFocused", brushes.Foreground);
+        PinResource(element, "ComboBoxBorderBrush", brushes.Border);
+        PinResource(element, "ComboBoxBorderBrushFocused", brushes.Border);
+        PinResource(element, "ComboBoxDropDownBackground", brushes.DropDownBackground);
+        PinResource(element, "ComboBoxDropDownBorderBrush", brushes.Border);
+        PinResource(element, "ComboBoxDropDownGlyphForeground", brushes.Foreground);
+        PinResource(element, "ComboBoxHeaderForeground", brushes.Foreground);
+
+        PinComboBoxItemResources(element, theme, context, brushes);
     }
 
-    private static void PinComboBoxResources(FrameworkElement element, ElementTheme theme, FrameworkElement context)
+    private static void PinComboBoxItemResources(
+        FrameworkElement element,
+        ElementTheme theme,
+        FrameworkElement context,
+        InputBrushSet brushes)
     {
-        PinSharedInputResources(element, theme, context);
-        PinResource(element, "ComboBoxBackground", GetBrush("ComboBoxBackground", theme, context));
-        PinResource(element, "ComboBoxBackgroundUnfocused", GetBrush("ComboBoxBackgroundUnfocused", theme, context));
-        PinResource(element, "ComboBoxBackgroundFocused", GetBrush("ComboBoxBackgroundFocused", theme, context));
-        PinResource(element, "ComboBoxBackgroundPointerOver", GetBrush("ComboBoxBackgroundPointerOver", theme, context));
-        PinResource(element, "ComboBoxBackgroundPressed", GetBrush("ComboBoxBackgroundPressed", theme, context));
-        PinResource(element, "ComboBoxForeground", GetBrush("ComboBoxForeground", theme, context));
-        PinResource(element, "ComboBoxForegroundFocused", GetBrush("ComboBoxForegroundFocused", theme, context));
-        PinResource(element, "ComboBoxBorderBrush", GetBrush("ComboBoxBorderBrush", theme, context));
-        PinResource(element, "ComboBoxBorderBrushFocused", GetBrush("ComboBoxBorderBrushFocused", theme, context));
-        PinResource(element, "ComboBoxDropDownBackground", GetBrush("ComboBoxDropDownBackground", theme, context));
-        PinResource(element, "ComboBoxDropDownBorderBrush", GetBrush("ComboBoxDropDownBorderBrush", theme, context));
-        PinResource(element, "ComboBoxDropDownGlyphForeground", GetBrush("ComboBoxDropDownGlyphForeground", theme, context));
-        PinResource(element, "ComboBoxHeaderForeground", GetBrush("ComboBoxHeaderForeground", theme, context));
-        PinResource(element, "ControlFillColorSecondaryBrush", GetBrush("ControlFillColorSecondaryBrush", theme, context));
-        PinComboBoxItemResources(element, theme, context);
+        PinResource(element, "ComboBoxItemForeground", brushes.Foreground);
+        PinResource(element, "ComboBoxItemForegroundPointerOver", brushes.Foreground);
+        PinResource(element, "ComboBoxItemForegroundSelected", brushes.Foreground);
+        PinResource(element, "ComboBoxItemForegroundSelectedPointerOver", brushes.Foreground);
+        PinResource(element, "ComboBoxItemBackground", brushes.ItemBackground);
+        PinResource(element, "ComboBoxItemBackgroundPointerOver", brushes.ItemBackgroundHover);
+        PinResource(element, "ComboBoxItemBackgroundSelected", brushes.ItemBackgroundHover);
+        PinResource(element, "ComboBoxItemBackgroundSelectedPointerOver", brushes.ItemBackgroundHover);
+        PinResource(element, "SubtleFillColorTransparentBrush", brushes.ItemBackground);
+        PinResource(element, "SubtleFillColorSecondaryBrush", brushes.ItemBackgroundHover);
+        PinResource(element, "SubtleFillColorTertiaryBrush", brushes.ItemBackgroundHover);
     }
 
-    private static void PinComboBoxItemResources(FrameworkElement element, ElementTheme theme, FrameworkElement context)
-    {
-        PinResource(element, "ComboBoxItemForeground", GetBrush("ComboBoxItemForeground", theme, context));
-        PinResource(element, "ComboBoxItemForegroundPointerOver", GetBrush("ComboBoxItemForegroundPointerOver", theme, context));
-        PinResource(element, "ComboBoxItemForegroundSelected", GetBrush("ComboBoxItemForegroundSelected", theme, context));
-        PinResource(element, "ComboBoxItemForegroundSelectedPointerOver", GetBrush("ComboBoxItemForegroundSelectedPointerOver", theme, context));
-        PinResource(element, "ComboBoxItemBackground", GetBrush("ComboBoxItemBackground", theme, context));
-        PinResource(element, "ComboBoxItemBackgroundPointerOver", GetBrush("ComboBoxItemBackgroundPointerOver", theme, context));
-        PinResource(element, "ComboBoxItemBackgroundSelected", GetBrush("ComboBoxItemBackgroundSelected", theme, context));
-        PinResource(element, "ComboBoxItemBackgroundSelectedPointerOver", GetBrush("ComboBoxItemBackgroundSelectedPointerOver", theme, context));
-        PinResource(element, "SubtleFillColorTransparentBrush", GetBrush("SubtleFillColorTransparentBrush", theme, context));
-        PinResource(element, "SubtleFillColorSecondaryBrush", GetBrush("SubtleFillColorSecondaryBrush", theme, context));
-        PinResource(element, "SubtleFillColorTertiaryBrush", GetBrush("SubtleFillColorTertiaryBrush", theme, context));
-    }
-
-    private static void ForceInputInnerChrome(FrameworkElement control, ElementTheme theme, FrameworkElement? context)
+    private static void ForceInputInnerChrome(
+        FrameworkElement control,
+        ElementTheme theme,
+        FrameworkElement? context,
+        InputBrushSet? brushes = null)
     {
         var host = context ?? control;
-        var bg = GetBrush("FortivaInputFillBrush", theme, host);
-        var fg = GetBrush("FortivaHeadingBrush", theme, host);
-        var border = GetBrush("FortivaInputBorderBrush", theme, host);
-        var itemBg = GetBrush("ComboBoxItemBackground", theme, host);
-        var itemFg = GetBrush("ComboBoxItemForeground", theme, host);
-        var dropDownBg = GetBrush("ComboBoxDropDownBackground", theme, host);
+        brushes ??= GetInputBrushes(theme, host);
 
         control.RequestedTheme = theme;
 
         switch (control)
         {
             case TextBox textBox:
-                textBox.Background = bg;
-                textBox.Foreground = fg;
-                textBox.BorderBrush = border;
+                textBox.Background = brushes.Background;
+                textBox.Foreground = brushes.Foreground;
+                textBox.BorderBrush = brushes.Border;
                 break;
             case ComboBox comboBox:
-                comboBox.Background = bg;
-                comboBox.Foreground = fg;
-                comboBox.BorderBrush = border;
+                comboBox.Background = brushes.Background;
+                comboBox.Foreground = brushes.Foreground;
+                comboBox.BorderBrush = brushes.Border;
                 break;
         }
 
@@ -624,22 +723,27 @@ public static class FortivaControlTheme
             switch (child)
             {
                 case Border chrome:
-                    chrome.Background = bg;
-                    if (chrome.BorderThickness != default)
-                        chrome.BorderBrush = border;
+                    chrome.Background = brushes.Background;
+                    chrome.BorderBrush = brushes.Border;
                     break;
                 case ScrollViewer scroll:
-                    scroll.Background = bg;
+                    scroll.Background = brushes.Background;
                     break;
                 case ContentPresenter presenter:
-                    presenter.Foreground = fg;
+                    presenter.Foreground = brushes.Foreground;
+                    break;
+                case TextBlock text:
+                    text.Foreground = brushes.Foreground;
                     break;
                 case ComboBoxItem item:
-                    item.Background = itemBg;
-                    item.Foreground = itemFg;
+                    item.Background = brushes.ItemBackground;
+                    item.Foreground = brushes.Foreground;
                     break;
                 case ListViewBase list:
-                    list.Background = dropDownBg;
+                    list.Background = brushes.DropDownBackground;
+                    break;
+                case Panel panel when panel.Background is SolidColorBrush { Color.A: > 0 }:
+                    panel.Background = brushes.Background;
                     break;
             }
         }
