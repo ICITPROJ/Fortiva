@@ -287,12 +287,12 @@ public static class FortivaControlTheme
         }
     }
 
-    private static ElementTheme ResolveInputTheme(FrameworkElement? context, Control control)
+    private static ElementTheme ResolveInputTheme(FrameworkElement? context, FrameworkElement element)
     {
         if (context is not null)
             return ResolveHostTheme(context);
 
-        return ResolveEffectiveTheme(control.XamlRoot, control);
+        return ResolveEffectiveTheme(element.XamlRoot, element);
     }
 
     private static InputBrushSet GetInputBrushes(ElementTheme theme, FrameworkElement context)
@@ -429,18 +429,101 @@ public static class FortivaControlTheme
         PinButtonResources(button, resolved);
     }
 
+    /// <summary>Compact button aligned with text fields — used beside inputs in dialogs.</summary>
+    public static void ApplyInlineFieldButton(Button button, FrameworkElement? context = null, ElementTheme? theme = null)
+    {
+        var resolved = theme ?? ResolveInputTheme(context, button);
+        var host = context ?? button;
+        var brushes = GetInputBrushes(resolved, host);
+
+        button.RequestedTheme = resolved;
+        FortivaThemeResources.MergeOnto(button, resolved);
+        button.Style = null;
+        button.CornerRadius = new CornerRadius(8);
+        button.Padding = new Thickness(12, 8, 12, 8);
+        button.MinHeight = 44;
+        button.Background = brushes.Background;
+        button.Foreground = brushes.Foreground;
+        button.BorderBrush = brushes.Border;
+        button.BorderThickness = new Thickness(1);
+        button.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+    }
+
+    /// <summary>Input-style bordered container for chip rows and similar controls.</summary>
+    public static void ApplyInputContainer(Border border, FrameworkElement? context = null, ElementTheme? theme = null)
+    {
+        var resolved = theme ?? ResolveInputTheme(context, border);
+        var host = context ?? border;
+        var brushes = GetInputBrushes(resolved, host);
+
+        border.RequestedTheme = resolved;
+        FortivaThemeResources.MergeOnto(border, resolved);
+        border.Background = brushes.Background;
+        border.BorderBrush = brushes.Border;
+        border.BorderThickness = new Thickness(1);
+        border.CornerRadius = new CornerRadius(8);
+        border.Padding = new Thickness(8, 8, 8, 8);
+        border.MinHeight = 44;
+    }
+
     public static void ApplyPreviewSurface(Border border, TextBlock content, FrameworkElement? context = null, ElementTheme? theme = null)
     {
-        var resolved = theme ?? ResolveEffectiveTheme(context?.XamlRoot, context ?? border);
-        FortivaThemeResources.MergeOnto(border, resolved);
-        border.RequestedTheme = resolved;
-        content.RequestedTheme = resolved;
-        border.Background = GetBrush("FortivaPreviewGradientBrush", resolved, border);
-        border.BorderBrush = GetBrush("FortivaGlassBorderBrush", resolved, border);
-        border.BorderThickness = new Thickness(1);
-        border.CornerRadius = new CornerRadius(12);
-        content.Foreground = GetBrush("FortivaHeadingBrush", resolved, border);
-        FortivaSurfaceEffects.ApplyCardElevation(border, 4f);
+        void Apply()
+        {
+            var resolved = theme ?? ResolveInputTheme(context, border);
+            var host = context ?? border;
+            var brushes = GetInputBrushes(resolved, host);
+
+            border.RequestedTheme = resolved;
+            FortivaThemeResources.MergeOnto(border, resolved);
+            content.RequestedTheme = resolved;
+
+            if (resolved == ElementTheme.Light)
+            {
+                border.Background = brushes.Background;
+                border.BorderBrush = brushes.Border;
+            }
+            else
+            {
+                border.Background = GetBrush("FortivaPreviewGradientBrush", resolved, border);
+                border.BorderBrush = GetBrush("FortivaGlassBorderBrush", resolved, border);
+            }
+
+            border.BorderThickness = new Thickness(1);
+            border.CornerRadius = new CornerRadius(12);
+            content.Foreground = brushes.Foreground;
+
+            ApplyPreviewSurfaceContents(border, resolved, host, brushes);
+            FortivaSurfaceEffects.ApplyCardElevation(border, 4f);
+        }
+
+        Apply();
+        ApplyWhenLoaded(border, Apply);
+    }
+
+    private static void ApplyPreviewSurfaceContents(
+        Border border,
+        ElementTheme theme,
+        FrameworkElement host,
+        InputBrushSet brushes)
+    {
+        foreach (var child in GetVisualDescendants(border))
+        {
+            if (child is FrameworkElement fe)
+                fe.RequestedTheme = theme;
+
+            switch (child)
+            {
+                case TextBlock text:
+                    text.Foreground = text.FontSize <= 11
+                        ? GetBrush("FortivaMutedBrush", theme, host)
+                        : brushes.Foreground;
+                    break;
+                case FontIcon icon:
+                    icon.Foreground = GetBrush("FortivaMutedBrush", theme, host);
+                    break;
+            }
+        }
     }
 
     public static void ApplyAccentButton(Button button, FrameworkElement? context = null, ElementTheme? theme = null)

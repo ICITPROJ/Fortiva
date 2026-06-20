@@ -69,26 +69,16 @@ public static class QuickAddEntryDialog
         {
             Text = "Add a login quickly — pick a category or type a new one below.",
             TextWrapping = TextWrapping.WrapWholeWords,
-            FontSize = 13
+            FontSize = 13,
+            Margin = new Thickness(0, 0, 0, 2)
         };
 
-        var titleLabel = CreateLabel("Title");
-        var usernameLabel = CreateLabel("Username / email");
-        var urlLabel = CreateLabel("Website (for autofill)");
-        var categoryLabel = CreateLabel("Categories");
-        var passwordLabel = CreateLabel("Password (auto-generated)");
-
-        var form = new StackPanel { Spacing = 12, MinWidth = 420 };
+        var form = new StackPanel { Spacing = 14, MinWidth = 420, MaxWidth = 480 };
         form.Children.Add(intro);
-        form.Children.Add(titleLabel);
-        form.Children.Add(titleBox);
-        form.Children.Add(usernameLabel);
-        form.Children.Add(usernameBox);
-        form.Children.Add(urlLabel);
-        form.Children.Add(urlBox);
-        form.Children.Add(categoryLabel);
-        form.Children.Add(tagPicker.Root);
-        form.Children.Add(passwordLabel);
+        form.Children.Add(CreateFieldGroup("Title", titleBox));
+        form.Children.Add(CreateFieldGroup("Username / email", usernameBox));
+        form.Children.Add(CreateFieldGroup("Website (for autofill)", urlBox));
+        form.Children.Add(CreateFieldGroup("Categories", tagPicker.Root));
 
         var passwordRow = new Grid { ColumnSpacing = 8 };
         passwordRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -97,14 +87,16 @@ public static class QuickAddEntryDialog
         Grid.SetColumn(regenerateBtn, 1);
         passwordRow.Children.Add(passwordBox);
         passwordRow.Children.Add(regenerateBtn);
-        form.Children.Add(passwordRow);
 
-        var shell = FortivaDialogs.WrapDialogContent(form, xamlRoot, themeHost);
+        var passwordGroup = new StackPanel { Spacing = 6 };
+        passwordGroup.Children.Add(CreateLabel("Password (auto-generated)"));
+        passwordGroup.Children.Add(passwordRow);
+        form.Children.Add(passwordGroup);
 
         var dlg = new ContentDialog
         {
             Title = "Quick add entry",
-            Content = shell,
+            Content = form,
             PrimaryButtonText = "Save",
             SecondaryButtonText = "More options…",
             CloseButtonText = "Cancel",
@@ -123,12 +115,18 @@ public static class QuickAddEntryDialog
             FortivaControlTheme.ApplyTextBox(urlBox, form);
             FortivaControlTheme.ApplyReadOnlyPasswordTextBox(passwordBox, form);
             FortivaControlTheme.ApplySecondaryButton(regenerateBtn, form);
-            FortivaControlTheme.ApplySectionLabel(titleLabel, context: form);
-            FortivaControlTheme.ApplySectionLabel(usernameLabel, context: form);
-            FortivaControlTheme.ApplySectionLabel(urlLabel, context: form);
-            FortivaControlTheme.ApplySectionLabel(categoryLabel, context: form);
-            FortivaControlTheme.ApplySectionLabel(passwordLabel, context: form);
+            foreach (var label in EnumerateFieldLabels(form))
+                FortivaControlTheme.ApplySectionLabel(label, context: form);
             tagPicker.ApplyTheme(form);
+        }
+
+        static IEnumerable<TextBlock> EnumerateFieldLabels(StackPanel form)
+        {
+            foreach (var child in form.Children)
+            {
+                if (child is StackPanel group && group.Children.FirstOrDefault() is TextBlock label)
+                    yield return label;
+            }
         }
 
         FortivaDialogs.Configure(dlg, xamlRoot, onOpened: RefreshTheme, themeHost: themeHost);
@@ -206,6 +204,14 @@ public static class QuickAddEntryDialog
         {
             vm.ThemeChanged -= OnThemeChanged;
         }
+    }
+
+    private static StackPanel CreateFieldGroup(string labelText, UIElement field)
+    {
+        var group = new StackPanel { Spacing = 6 };
+        group.Children.Add(CreateLabel(labelText));
+        group.Children.Add(field);
+        return group;
     }
 
     private static TextBlock CreateLabel(string text)

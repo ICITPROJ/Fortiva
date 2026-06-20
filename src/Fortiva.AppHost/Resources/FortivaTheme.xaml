@@ -144,9 +144,9 @@
             <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#6640BCF4"/>
 
             <LinearGradientBrush x:Key="FortivaPreviewGradientBrush" StartPoint="0,0" EndPoint="1,1">
-                <GradientStop Color="#EEFFFFFF" Offset="0"/>
-                <GradientStop Color="#CCE8F6FC" Offset="0.5"/>
-                <GradientStop Color="#9940BCF4" Offset="1"/>
+                <GradientStop Color="#FFFFFF" Offset="0"/>
+                <GradientStop Color="#F8FCFF" Offset="0.55"/>
+                <GradientStop Color="#EAF6FC" Offset="1"/>
             </LinearGradientBrush>
             <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#40BCF4"/>
             <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#5CC8F6"/>
@@ -583,8 +583,8 @@
         <Setter Property="MinHeight" Value="72"/>
         <Setter Property="Padding" Value="16,14"/>
         <Setter Property="CornerRadius" Value="12"/>
-        <Setter Property="Background" Value="{ThemeResource FortivaPreviewGradientBrush}"/>
-        <Setter Property="BorderBrush" Value="{ThemeResource FortivaGlassBorderBrush}"/>
+        <Setter Property="Background" Value="{ThemeResource FortivaInputFillBrush}"/>
+        <Setter Property="BorderBrush" Value="{ThemeResource FortivaInputBorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Shadow" Value="{StaticResource FortivaCardShadow}"/>
     </Style>

@@ -107,6 +107,7 @@ public sealed partial class ImportExportPage : Page
         VaultDuplicateList.Visibility = Visibility.Visible;
         OpenVaultDuplicateEntryBtn.Visibility = Visibility.Collapsed;
         _selectedVaultDuplicateEntryId = null;
+        _selectedVaultDuplicateGroup = null;
     }
 
     private bool GuardImport()
@@ -475,13 +476,20 @@ public sealed partial class ImportExportPage : Page
             DefaultButton = ContentDialogButton.Secondary,
             XamlRoot = XamlRoot
         };
-        FortivaDialogs.Configure(dialog, XamlRoot);
+        FortivaDialogs.Configure(dialog, XamlRoot, themeHost: this);
 
         list.SelectionChanged += (_, _) =>
         {
-            dialog.IsPrimaryButtonEnabled = list.SelectedItem is ImportDuplicateRow;
+            dialog.IsPrimaryButtonEnabled = list.SelectedItem is ImportDuplicateRow row
+                && row.ExistingEntryId.HasValue;
         };
         dialog.IsPrimaryButtonEnabled = false;
+
+        if (rows.FirstOrDefault(r => r.ExistingEntryId.HasValue) is { } firstOpenable)
+        {
+            list.SelectedItem = firstOpenable;
+            dialog.IsPrimaryButtonEnabled = true;
+        }
 
         while (true)
         {
@@ -568,17 +576,36 @@ public sealed partial class ImportExportPage : Page
             SelectionMode = ListViewSelectionMode.Single,
             MaxHeight = 280
         };
+        list.SelectedIndex = 0;
 
         var dlg = new ContentDialog
         {
             Title = "Open duplicate entry",
-            Content = list,
+            Content = new StackPanel
+            {
+                Spacing = 12,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = "This group contains multiple vault entries. Choose which one to open.",
+                        TextWrapping = TextWrapping.WrapWholeWords
+                    },
+                    list
+                }
+            },
             PrimaryButtonText = "Open",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = XamlRoot
+            XamlRoot = XamlRoot,
+            IsPrimaryButtonEnabled = options.Count > 0
         };
-        FortivaDialogs.Configure(dlg, XamlRoot);
+        FortivaDialogs.Configure(dlg, XamlRoot, themeHost: this);
+        list.SelectionChanged += (_, _) =>
+        {
+            dlg.IsPrimaryButtonEnabled = list.SelectedItem is DuplicateEntryOption;
+        };
+
         var result = await dlg.ShowAsync();
         if (result != ContentDialogResult.Primary || list.SelectedItem is not DuplicateEntryOption picked)
             return;
@@ -589,12 +616,15 @@ public sealed partial class ImportExportPage : Page
 
     private bool TryOpenEntry(Guid entryId)
     {
-        var entry = _vm.Entries.FirstOrDefault(e => e.Id == entryId)?.Entry;
-        if (entry is null)
+        if (_vm.Entries.All(e => e.Id != entryId))
             return false;
 
         NavigationService.Current.ResetCurrent();
-        NavigationService.Current.Navigate<EntryPage>(entry, animate: true);
+        if (!NavigationService.Current.Navigate<VaultPage>(
+                VaultPageNavigationContext.ForEntry(entryId), animate: true))
+            return false;
+
+        _vm.RequestNavigationTab("Vault");
         return true;
     }
 

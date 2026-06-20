@@ -7,7 +7,7 @@
     VerticalAlignment="Stretch"
     SizeChanged="Page_SizeChanged">
 
-    <Grid Margin="24,20,24,16" RowSpacing="12"
+    <Grid x:Name="PageRoot" Margin="24,20,24,16" RowSpacing="12"
           HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -16,18 +16,21 @@
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <Grid HorizontalAlignment="Stretch">
+        <Grid HorizontalAlignment="Stretch" ColumnSpacing="0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*" MinWidth="0"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <Button x:Name="BackBtn" Style="{StaticResource FortivaIconButton}" Click="Back_Click">
                 <FontIcon Glyph="&#xE76B;" FontSize="16"/>
             </Button>
             <TextBlock x:Name="PageTitle" Grid.Column="1" Style="{StaticResource FortivaPageTitle}"
-                       FontSize="20" VerticalAlignment="Center" Margin="8,0"/>
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                       FontSize="20" VerticalAlignment="Center" Margin="8,0,0,0"
+                       HorizontalAlignment="Stretch"
+                       TextTrimming="CharacterEllipsis"/>
+            <StackPanel x:Name="HeaderActionsPanel" Grid.Column="2" Orientation="Horizontal" Spacing="6"
+                        HorizontalAlignment="Right" VerticalAlignment="Center" Margin="12,0,0,0">
                 <Button x:Name="DeleteBtn" Visibility="Collapsed" Click="Delete_Click"
                         Style="{StaticResource FortivaIconButton}">
                     <FontIcon Glyph="&#xE74D;" FontSize="16"
@@ -36,6 +39,15 @@
                 <ToggleButton x:Name="FavoriteBtn" Style="{StaticResource FortivaIconToggleButton}">
                     <FontIcon x:Name="FavoriteIcon" Glyph="&#xE734;" FontSize="16"/>
                 </ToggleButton>
+                <Border x:Name="ClosePaneSeparator" Visibility="Collapsed" Width="1" Height="22"
+                        Margin="4,0,2,0" VerticalAlignment="Center"
+                        Background="{ThemeResource FortivaInputBorderBrush}"/>
+                <Button x:Name="ClosePaneBtn" Visibility="Collapsed" Click="Back_Click"
+                        Style="{StaticResource FortivaIconButton}"
+                        ToolTipService.ToolTip="Close editor"
+                        AutomationProperties.Name="Close entry editor">
+                    <FontIcon Glyph="&#xE711;" FontSize="14"/>
+                </Button>
             </StackPanel>
         </Grid>
 

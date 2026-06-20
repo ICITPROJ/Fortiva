@@ -15,13 +15,15 @@ public sealed class VaultTagPickerPanel
     private readonly StackPanel _chipPanel = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
     private readonly ScrollViewer _chipScroll = new()
     {
-        HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
         VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-        HorizontalScrollMode = ScrollMode.Auto,
+        HorizontalScrollMode = ScrollMode.Enabled,
         VerticalScrollMode = ScrollMode.Disabled,
-        MinHeight = 38,
-        Padding = new Thickness(0, 2, 0, 2)
+        Padding = new Thickness(0),
+        MinHeight = 36
     };
+    private readonly Border _outerShell = new();
+    private readonly StackPanel _inner = new() { Spacing = 10 };
     private readonly TextBox _newTagBox = new() { PlaceholderText = "New category name…" };
     private readonly Button _addBtn = new();
     private readonly TextBlock _emptyHint = new()
@@ -64,13 +66,14 @@ public sealed class VaultTagPickerPanel
         addRow.Children.Add(_newTagBox);
         addRow.Children.Add(_addBtn);
 
-        Root = new StackPanel { Spacing = 10, HorizontalAlignment = HorizontalAlignment.Stretch };
+        Root = _outerShell;
         _chipScroll.Content = _chipPanel;
-        Root.Children.Add(_chipScroll);
-        Root.Children.Add(addRow);
+        _inner.Children.Add(_chipScroll);
+        _inner.Children.Add(addRow);
+        _outerShell.Child = _inner;
     }
 
-    public StackPanel Root { get; }
+    public FrameworkElement Root { get; }
 
     public event Action? TagsChanged;
 
@@ -86,8 +89,17 @@ public sealed class VaultTagPickerPanel
         FortivaThemeResources.MergeOnto(Root, theme);
         Root.RequestedTheme = theme;
         FortivaControlTheme.ApplyThemeRecursively(Root, theme);
+        _outerShell.RequestedTheme = theme;
+        _outerShell.HorizontalAlignment = HorizontalAlignment.Stretch;
+        _outerShell.Background = FortivaControlTheme.GetBrush("FortivaInputFillBrush", theme, host);
+        _outerShell.BorderBrush = FortivaControlTheme.GetBrush("FortivaInputBorderBrush", theme, host);
+        _outerShell.BorderThickness = new Thickness(1);
+        _outerShell.CornerRadius = new CornerRadius(8);
+        _outerShell.Padding = new Thickness(10);
+        _inner.Spacing = 10;
+
         FortivaControlTheme.ApplyTextBox(_newTagBox, host, theme);
-        FortivaControlTheme.ApplySecondaryButton(_addBtn, host, theme);
+        FortivaControlTheme.ApplyInlineFieldButton(_addBtn, host, theme);
         FortivaControlTheme.ApplyMutedText(_emptyHint, host);
         if (_addBtn.Content is StackPanel addContent)
         {
@@ -154,7 +166,8 @@ public sealed class VaultTagPickerPanel
                 Content = tag,
                 IsChecked = isSelected,
                 Tag = tag,
-                FontSize = 12
+                FontSize = 12,
+                MaxWidth = 260
             };
             FortivaSurfaceEffects.ApplyChipToggle(toggle, isSelected, host, theme);
             toggle.Checked += ChipToggleChanged;

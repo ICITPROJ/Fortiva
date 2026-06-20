@@ -356,15 +356,7 @@
             <Border x:Name="DetailPane" Grid.Column="1" Visibility="Collapsed"
                     Style="{StaticResource FortivaGlassPanel}" Padding="0"
                     VerticalAlignment="Stretch" MinWidth="340" MaxWidth="480">
-                <Grid>
-                    <Frame x:Name="DetailEditorFrame" Background="Transparent"/>
-                    <Button HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8"
-                            Style="{StaticResource FortivaIconButton}"
-                            ToolTipService.ToolTip="Close editor" Click="CloseDetail_Click"
-                            AutomationProperties.Name="Close entry editor">
-                        <FontIcon Glyph="&#xE711;" FontSize="12"/>
-                    </Button>
-                </Grid>
+                <Frame x:Name="DetailEditorFrame" Background="Transparent"/>
             </Border>
 
             <Border Grid.Column="2" Style="{StaticResource FortivaGlassPanel}" Padding="14,16"

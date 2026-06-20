@@ -212,17 +212,14 @@ public static class FortivaDialogs
         var theme = xamlRoot is not null
             ? FortivaControlTheme.ResolveDialogTheme(xamlRoot, themeHost)
             : FortivaControlTheme.ResolveEffectiveTheme(themeHost?.XamlRoot, themeHost);
+        // ContentDialog already provides the outer chrome — avoid a nested bordered panel.
         var shell = new Border
         {
-            Padding = new Thickness(20, 16, 20, 20),
-            Background = FortivaControlTheme.GetBrush("FortivaSurfaceBrush", theme),
-            BorderBrush = FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", theme),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(16),
+            Padding = new Thickness(0, 2, 0, 4),
+            BorderThickness = new Thickness(0),
             Child = inner
         };
         FortivaThemeResources.MergeOnto(shell, theme);
-        FortivaSurfaceEffects.ApplyDialogElevation(shell);
         return shell;
     }
 

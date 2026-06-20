@@ -346,12 +346,28 @@ public sealed partial class MainWindow : Window
             };
             if (item is null) return;
 
-            NavigateToMainTab(tag);
+            if (!IsTabPageActive(tag))
+                NavigateToMainTab(tag);
 
             _suppressNav = true;
             try { NavView.SelectedItem = item; }
             finally { _suppressNav = false; }
         });
+    }
+
+    private bool IsTabPageActive(string tag)
+    {
+        var current = NavigationService.Current.CurrentPageType;
+        return tag switch
+        {
+            "Vault" => current == typeof(VaultPage) || current == typeof(EntryPage),
+            "Generator" => current == typeof(PasswordGeneratorPage),
+            "Health" => current == typeof(HealthPage),
+            "ImportExport" => current == typeof(ImportExportPage),
+            "Settings" => current == typeof(SettingsPage),
+            "Audit" => current == typeof(AuditPage),
+            _ => false
+        };
     }
 
     private void OnEnterpriseConfigChanged()

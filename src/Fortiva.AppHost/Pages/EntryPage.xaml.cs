@@ -237,6 +237,11 @@ public sealed partial class EntryPage : Page
         }
 
         BackBtn.Visibility = _paneHost is null ? Visibility.Visible : Visibility.Collapsed;
+        ClosePaneBtn.Visibility = _paneHost is null ? Visibility.Collapsed : Visibility.Visible;
+        ClosePaneSeparator.Visibility = ClosePaneBtn.Visibility;
+        PageRoot.Margin = _paneHost is null
+            ? new Thickness(24, 20, 24, 16)
+            : new Thickness(16, 16, 14, 12);
         if (_paneHost is not null)
             _paneHost.ConfirmCloseAsync = ConfirmDiscardIfDirtyAsync;
 
