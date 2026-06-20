@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Text.Json;
 using Fortiva.Core.BrowserBridge;
 
 namespace Fortiva.Core.Tests.BrowserBridge;
@@ -35,9 +36,8 @@ public class BridgeLocalhostServerTests
 
         try
         {
-            await Task.Delay(75);
-
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+            await WaitForPublicStatusAsync(http, prefix);
 
             var publicJson = await http.GetStringAsync(
                 $"{prefix}status-and-matches?domain=login.example.com&url=https://login.example.com/");
@@ -51,16 +51,10 @@ public class BridgeLocalhostServerTests
             var authJson = await authResponse.Content.ReadAsStringAsync();
             Assert.Contains("bridgeToken", authJson, StringComparison.OrdinalIgnoreCase);
 
-            var token = ExtractJsonString(authJson, "bridgeToken");
+            var token = ExtractBridgeToken(authJson);
             Assert.False(string.IsNullOrWhiteSpace(token));
 
-            using var authed = new HttpRequestMessage(
-                HttpMethod.Get,
-                $"{prefix}status-and-matches?domain=login.example.com&url=https://login.example.com/");
-            authed.Headers.TryAddWithoutValidation("X-Fortiva-Bridge-Token", token);
-            var authedResponse = await http.SendAsync(authed);
-            authedResponse.EnsureSuccessStatusCode();
-            var json = await authedResponse.Content.ReadAsStringAsync();
+            var json = await WaitForAuthedMatchesAsync(http, prefix, token!, "user@test.com");
             Assert.Contains("vaultUnlocked", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("user@test.com", json, StringComparison.OrdinalIgnoreCase);
         }
@@ -73,6 +67,67 @@ public class BridgeLocalhostServerTests
             server.Dispose();
             await Task.Delay(50);
         }
+    }
+
+    private static async Task WaitForPublicStatusAsync(HttpClient http, string prefix)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(3);
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                var json = await http.GetStringAsync(
+                    $"{prefix}status-and-matches?domain=login.example.com&url=https://login.example.com/");
+                if (json.Contains("authRequired", StringComparison.OrdinalIgnoreCase))
+                    return;
+            }
+            catch (HttpRequestException ex) when (ex.Message.Contains("refused", StringComparison.OrdinalIgnoreCase))
+            {
+                throw;
+            }
+            catch
+            {
+                // Listener still starting — retry.
+            }
+
+            await Task.Delay(25);
+        }
+
+        throw new TimeoutException("Bridge localhost server did not become ready.");
+    }
+
+    private static async Task<string> WaitForAuthedMatchesAsync(
+        HttpClient http,
+        string prefix,
+        string token,
+        string expectedUsername)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(3);
+        while (DateTime.UtcNow < deadline)
+        {
+            using var authed = new HttpRequestMessage(
+                HttpMethod.Get,
+                $"{prefix}status-and-matches?domain=login.example.com&url=https://login.example.com/");
+            authed.Headers.TryAddWithoutValidation("X-Fortiva-Bridge-Token", token);
+            var authedResponse = await http.SendAsync(authed);
+            authedResponse.EnsureSuccessStatusCode();
+            var json = await authedResponse.Content.ReadAsStringAsync();
+            if (json.Contains(expectedUsername, StringComparison.OrdinalIgnoreCase))
+                return json;
+
+            await Task.Delay(25);
+        }
+
+        throw new TimeoutException($"Authed status-and-matches did not return {expectedUsername}.");
+    }
+
+    private static string? ExtractBridgeToken(string authJson)
+    {
+        using var doc = JsonDocument.Parse(authJson);
+        if (!doc.RootElement.TryGetProperty("bridgeToken", out var tokenProp))
+            return null;
+
+        return tokenProp.GetString();
     }
 
     private static int GetFreeTcpPort()
@@ -105,16 +160,5 @@ public class BridgeLocalhostServerTests
         {
             return false;
         }
-    }
-
-    private static string? ExtractJsonString(string json, string property)
-    {
-        var marker = $"\"{property}\":\"";
-        var start = json.IndexOf(marker, StringComparison.Ordinal);
-        if (start < 0)
-            return null;
-        start += marker.Length;
-        var end = json.IndexOf('"', start);
-        return end < 0 ? null : json[start..end];
     }
 }
