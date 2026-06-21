@@ -152,6 +152,7 @@ def generate_installer_publisher_assets(publisher_source: Path) -> None:
     print(f"Publisher source: {publisher_source}")
     logo_rgba = prepare_rgba(publisher_source)
 
+    write_png(logo_rgba, ASSETS / "icmclab-logo.png")
     write_png(logo_rgba, PACKAGING / "icmclab-logo.png")
     write_bmp(compose_wizard_sidebar(logo_rgba), PACKAGING / "wizard-sidebar.bmp")
     globe = crop_globe_mark(logo_rgba)
@@ -175,8 +176,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--publisher-source",
-        default=str(ASSETS / "icmclab-logo.png"),
-        help="ICMCLAB publisher lockup for installer wizard + setup icon",
+        default=str(ASSETS / "source" / "icmclab-logo-source.png"),
+        help="ICMCLAB publisher lockup master (black matte OK); outputs transparent in-app PNG",
     )
     args = parser.parse_args()
 

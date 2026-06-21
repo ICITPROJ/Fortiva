@@ -24,17 +24,15 @@ python scripts/update-brand-assets.py --logo-source src/Fortiva.AppHost/Assets/s
 
 ## Publisher lockup (icmclab studio)
 
-Place **`icmclab-logo.png`** in `src/Fortiva.AppHost/Assets/` (horizontal ICMCLAB mark).
-The script regenerates installer wizard images and the setup EXE icon from this file.
-
-Outputs:
+Place **`icmclab-logo-source.png`** here (horizontal ICMCLAB mark; black background is OK).
+The script removes the black matte and writes a **transparent** PNG for in-app use plus installer assets.
 
 | File | Use |
 |------|-----|
-| `fortiva-logo.png` | UI logo (transparent PNG) — title bar, Unlock, Onboarding |
-| `fortiva-logo-paranoia.png` | Paranoia Mode variant |
-| `fortiva.ico` / `fortiva-paranoia.ico` | **Taskbar + window icon** (from Logo Icon 3) |
-| `Assets/icmclab-logo.png` | Settings → About publisher mark (in-app copy) |
+| `fortiva-logo.png` | Fortiva UI logo — title bar, Unlock, Onboarding |
+| `fortiva-logo-paranoia.png` | Paranoia Mode Fortiva variant |
+| `fortiva.ico` / `fortiva-paranoia.ico` | Taskbar + window icon |
+| `Assets/icmclab-logo.png` | Settings → About (transparent PNG) |
 | `packaging/assets/icmclab-logo.png` | Installer source copy |
 | `packaging/assets/icmclab-setup.ico` | Inno Setup **setup EXE** icon |
 | `packaging/assets/wizard-sidebar.bmp` | Installer wizard left banner |
