@@ -63,4 +63,85 @@ public sealed class VaultDuplicateAnalyzerTests
 
         Assert.Empty(VaultDuplicateAnalyzer.FindGroups(entries));
     }
+
+    [Fact]
+    public void FindGroups_DetectsManualEntriesWithSameTitleAndUsername()
+    {
+        var entries = new List<VaultEntry>
+        {
+            Entry("Work portal", "alice", "secret1", ""),
+            Entry("Work portal", "alice", "secret2", ""),
+            Entry("Personal mail", "bob", "x", "https://mail.example")
+        };
+
+        var groups = VaultDuplicateAnalyzer.FindGroups(entries);
+
+        Assert.Single(groups);
+        Assert.Equal(2, groups[0].EntryIds.Count);
+        Assert.Equal(VaultDuplicateKind.SameSiteUser, groups[0].Kind);
+    }
+
+    [Fact]
+    public void FindGroups_LinksManualTitleHostToUrlEntry()
+    {
+        var sharedId = Guid.NewGuid();
+        var entries = new List<VaultEntry>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                Title = "Amazon",
+                Username = "alice",
+                Password = "pw",
+                Url = "https://www.amazon.com/signin"
+            },
+            new()
+            {
+                Id = sharedId,
+                Title = "amazon.com",
+                Username = "alice",
+                Password = "pw",
+                Url = ""
+            }
+        };
+
+        var groups = VaultDuplicateAnalyzer.FindGroups(entries);
+
+        Assert.Single(groups);
+        Assert.Equal(2, groups[0].EntryIds.Count);
+        Assert.Contains(sharedId, groups[0].EntryIds);
+    }
+
+    [Fact]
+    public void FindGroups_IncludesManualEntryAlongsideImportedEntry()
+    {
+        var manualId = Guid.NewGuid();
+        var entries = new List<VaultEntry>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                Title = "GitHub",
+                Username = "dev",
+                Password = "same",
+                Url = "https://github.com/login",
+                ImportSource = "Microsoft Edge (PC)",
+                ImportBatchId = Guid.NewGuid()
+            },
+            new()
+            {
+                Id = manualId,
+                Title = "GitHub login",
+                Username = "dev",
+                Password = "same",
+                Url = "https://github.com"
+            }
+        };
+
+        var groups = VaultDuplicateAnalyzer.FindGroups(entries);
+
+        Assert.Single(groups);
+        Assert.Equal(VaultDuplicateKind.Exact, groups[0].Kind);
+        Assert.Contains(manualId, groups[0].EntryIds);
+    }
 }

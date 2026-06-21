@@ -266,8 +266,9 @@ public static class CommandPalette
 
                 {
 
+                    vm.PendingOpenVaultEntryId = entryId;
                     vm.RequestNavigationTab("Vault");
-
+                    NavigationService.Current.ResetCurrent();
                     NavigationService.Current.Navigate<VaultPage>(VaultPageNavigationContext.ForEntry(entryId));
 
                     await Task.CompletedTask;

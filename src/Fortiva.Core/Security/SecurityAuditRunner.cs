@@ -88,10 +88,10 @@ public static class SecurityAuditRunner
             InfoCount = findings.Count(f => f.Severity == AuditSeverity.Info),
             WarningCount = findings.Count(f => f.Severity == AuditSeverity.Warning),
             CriticalCount = findings.Count(f => f.Severity == AuditSeverity.Critical),
-            PasswordFindings = findings.Count(f => f.Category == "Passwords" && f.Severity >= AuditSeverity.Warning),
-            SettingsFindings = findings.Count(f => f.Category == "Settings" && f.Severity >= AuditSeverity.Warning),
-            VaultFindings = findings.Count(f => f.Category == "Vault" && f.Severity >= AuditSeverity.Warning),
-            ActivityFindings = findings.Count(f => f.Category == "Activity" && f.Severity >= AuditSeverity.Warning),
+            PasswordFindings = findings.Count(f => f.Category == "Passwords" && f.Severity != AuditSeverity.Pass),
+            SettingsFindings = findings.Count(f => f.Category == "Settings" && f.Severity != AuditSeverity.Pass),
+            VaultFindings = findings.Count(f => f.Category == "Vault" && f.Severity != AuditSeverity.Pass),
+            ActivityFindings = findings.Count(f => f.Category == "Activity" && f.Severity != AuditSeverity.Pass),
             Findings = findings
         };
     }
@@ -262,8 +262,11 @@ public static class SecurityAuditRunner
         SecurityAuditContext context)
     {
         var httpCount = entries.Count(e =>
-            !string.IsNullOrWhiteSpace(e.Url) &&
-            e.Url.StartsWith("http://", StringComparison.OrdinalIgnoreCase));
+        {
+            var url = VaultEntryWebsite.GetEffectiveUrl(e) ?? e.Url;
+            return !string.IsNullOrWhiteSpace(url) &&
+                   url.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
+        });
 
         if (httpCount > 0)
         {
@@ -322,33 +325,33 @@ public static class SecurityAuditRunner
 
         if (exact.Count > 0)
         {
-            var entryCount = exact.Sum(g => g.EntryIds.Count);
+            var redundant = exact.Sum(g => g.EntryIds.Count - 1);
             findings.Add(new SecurityAuditFinding
             {
                 Category = "Vault",
                 Id = "vault-exact-duplicates",
-                Title = $"{entryCount} entries in {exact.Count} exact duplicate group{(exact.Count == 1 ? "" : "s")}",
-                Detail = "Multiple vault entries share the same site, username, and password. Review and merge manually if needed — Fortiva never deletes entries automatically.",
+                Title = $"{redundant} redundant entr{(redundant == 1 ? "y" : "ies")} in {exact.Count} exact duplicate group{(exact.Count == 1 ? "" : "s")}",
+                Detail = "Multiple vault entries share the same site, username, and password — from imports, manual entry, or both. Review and merge manually if needed; Fortiva never deletes entries automatically.",
                 Severity = AuditSeverity.Warning,
                 Priority = 24,
-                AffectedCount = entryCount,
-                ActionHint = "import-duplicates"
+                AffectedCount = redundant,
+                ActionHint = "vault-duplicates"
             });
         }
 
         if (similar.Count > 0)
         {
-            var entryCount = similar.Sum(g => g.EntryIds.Count);
+            var overlapping = similar.Sum(g => g.EntryIds.Count);
             findings.Add(new SecurityAuditFinding
             {
                 Category = "Vault",
                 Id = "vault-similar-duplicates",
-                Title = $"{entryCount} entries in {similar.Count} similar login group{(similar.Count == 1 ? "" : "s")}",
-                Detail = "Same site and username appear more than once with different passwords or URL variations (often from Keep both on import). Review in Import / Export → Duplicate management.",
+                Title = $"{overlapping} entries in {similar.Count} similar login group{(similar.Count == 1 ? "" : "s")}",
+                Detail = "Same site and username appear more than once with different passwords or URL variations. Review in Import / Export → Duplicate management (includes manual entries and imports).",
                 Severity = AuditSeverity.Info,
                 Priority = 25,
-                AffectedCount = entryCount,
-                ActionHint = "import-duplicates"
+                AffectedCount = overlapping,
+                ActionHint = "vault-duplicates"
             });
         }
     }
@@ -373,7 +376,7 @@ public static class SecurityAuditRunner
             Severity = AuditSeverity.Info,
             Priority = 23,
             AffectedCount = duplicateCount,
-            ActionHint = "import-duplicates"
+            ActionHint = "import-skipped"
         });
     }
 
@@ -416,12 +419,15 @@ public static class SecurityAuditRunner
 
         if (recent.Count == 0)
         {
+            var hasOlderEvents = events.Count > 0;
             findings.Add(new SecurityAuditFinding
             {
                 Category = "Activity",
                 Id = "no-events",
-                Title = "No audit events recorded yet",
-                Detail = "Unlock and configuration events will appear here as users interact with Fortiva.",
+                Title = hasOlderEvents ? "No audit events in the last 30 days" : "No audit events recorded yet",
+                Detail = hasOlderEvents
+                    ? "Older events exist in the audit log. Open the log to review full history."
+                    : "Unlock and configuration events will appear here as users interact with Fortiva.",
                 Severity = AuditSeverity.Info,
                 Priority = 30,
                 AffectedCount = 0,

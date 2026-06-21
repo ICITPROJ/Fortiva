@@ -44,6 +44,12 @@ public static class FortivaControlTheme
     /// </summary>
     public static ElementTheme ResolveEffectiveTheme(XamlRoot? xamlRoot = null, FrameworkElement? context = null)
     {
+        var preference = ShellViewModel.Current.ThemePreference;
+        if (preference == AppThemePreference.Light)
+            return ElementTheme.Light;
+        if (preference == AppThemePreference.Dark)
+            return ElementTheme.Dark;
+
         // Code-built roots often pin the wrong RequestedTheme — prefer ancestors.
         if (TryGetVisualTreeTheme(context, out var fromHost, includeStart: false))
             return fromHost;
@@ -73,12 +79,14 @@ public static class FortivaControlTheme
     /// <summary>Theme from a known host page (most reliable for embedded panels).</summary>
     public static ElementTheme ResolveHostTheme(FrameworkElement host)
     {
+        var preference = ShellViewModel.Current.ThemePreference;
+        if (preference == AppThemePreference.Light)
+            return ElementTheme.Light;
+        if (preference == AppThemePreference.Dark)
+            return ElementTheme.Dark;
+
         if (host.RequestedTheme is ElementTheme.Light or ElementTheme.Dark)
             return host.RequestedTheme;
-
-        var preference = ShellViewModel.Current.ThemePreference;
-        if (preference != AppThemePreference.System)
-            return ThemeService.ToElementTheme(preference);
 
         if (host.ActualTheme is ElementTheme.Light or ElementTheme.Dark)
             return host.ActualTheme;
@@ -358,6 +366,13 @@ public static class FortivaControlTheme
             comboBox.MinHeight = 44;
             comboBox.FontSize = 14;
         }
+        else if (control is AutoSuggestBox suggestBox)
+        {
+            suggestBox.CornerRadius = new CornerRadius(10);
+            suggestBox.Padding = new Thickness(4, 0, 4, 0);
+            suggestBox.MinHeight = 44;
+            suggestBox.FontSize = 14;
+        }
 
         PinAllInputResources(control, resolved, host, brushes);
         ForceInputInnerChrome(control, resolved, context, brushes);
@@ -379,38 +394,103 @@ public static class FortivaControlTheme
 
     public static void ApplyPasswordBox(PasswordBox box, FrameworkElement? context = null, ElementTheme? theme = null)
     {
-        var resolved = theme ?? ResolveEffectiveTheme(context?.XamlRoot, context ?? box);
-        FortivaThemeResources.MergeOnto(box, resolved);
-        box.RequestedTheme = resolved;
-        box.Background = GetBrush("FortivaInputFillBrush", resolved, box);
-        box.BorderBrush = GetBrush("FortivaInputBorderBrush", resolved, box);
-        box.Foreground = GetBrush("FortivaHeadingBrush", resolved, box);
-        box.BorderThickness = new Thickness(1);
-        box.CornerRadius = new CornerRadius(8);
-        box.Padding = new Thickness(14, 12, 14, 12);
-        if (box.MinHeight < 44)
-            box.MinHeight = 44;
+        void Apply()
+        {
+            var resolved = theme ?? ResolveInputTheme(context, box);
+            var host = context ?? box;
+            var brushes = GetInputBrushes(resolved, host);
 
-        PinResource(box, "TextControlBackground", GetBrush("TextControlBackground", resolved, box));
-        PinResource(box, "TextControlBackgroundFocused", GetBrush("TextControlBackgroundFocused", resolved, box));
-        PinResource(box, "TextControlBackgroundPointerOver", GetBrush("TextControlBackgroundPointerOver", resolved, box));
-        PinResource(box, "TextControlForeground", GetBrush("TextControlForeground", resolved, box));
-        PinResource(box, "TextControlBorderBrush", GetBrush("TextControlBorderBrush", resolved, box));
+            FortivaThemeResources.MergeOnto(box, resolved);
+            box.RequestedTheme = resolved;
+            box.Style = null;
+            TryApplyStyle(box, "FortivaPasswordBox");
+            box.Background = brushes.Background;
+            box.BorderBrush = brushes.Border;
+            box.Foreground = brushes.Foreground;
+            box.BorderThickness = new Thickness(1);
+            box.CornerRadius = new CornerRadius(8);
+            box.Padding = new Thickness(14, 12, 14, 12);
+            if (box.MinHeight < 44)
+                box.MinHeight = 44;
+
+            PinAllInputResources(box, resolved, host, brushes);
+            ForceInputInnerChrome(box, resolved, context, brushes);
+        }
+
+        Apply();
+        ApplyWhenLoaded(box, Apply);
     }
 
     public static void ApplyAutoSuggestBox(AutoSuggestBox box, FrameworkElement? context = null, ElementTheme? theme = null)
     {
-        var resolved = theme ?? ResolveEffectiveTheme(context?.XamlRoot, context ?? box);
-        FortivaThemeResources.MergeOnto(box, resolved);
-        box.RequestedTheme = resolved;
-        box.Background = GetBrush("FortivaInputFillBrush", resolved, box);
-        box.BorderBrush = GetBrush("FortivaInputBorderBrush", resolved, box);
-        box.Foreground = GetBrush("FortivaHeadingBrush", resolved, box);
-        PinResource(box, "TextControlBackground", GetBrush("TextControlBackground", resolved, box));
-        PinResource(box, "TextControlBackgroundFocused", GetBrush("TextControlBackgroundFocused", resolved, box));
-        PinResource(box, "TextControlForeground", GetBrush("TextControlForeground", resolved, box));
-        PinResource(box, "TextControlBorderBrush", GetBrush("TextControlBorderBrush", resolved, box));
-        PinResource(box, "TextControlPlaceholderForeground", GetBrush("TextControlPlaceholderForeground", resolved, box));
+        void Apply()
+        {
+            var resolved = theme ?? ResolveInputTheme(context, box);
+            ApplyInputThemeCore(box, resolved, context, "FortivaSearchBox");
+        }
+
+        Apply();
+        ApplyWhenLoaded(box, Apply);
+    }
+
+    public static void ApplyCategoryChip(ToggleButton toggle, bool selected, FrameworkElement context, ElementTheme? theme = null)
+    {
+        var resolved = theme ?? ResolveInputTheme(context, toggle);
+        var brushes = GetInputBrushes(resolved, context);
+        var chipRadius = new CornerRadius(8);
+
+        void Apply()
+        {
+            TryApplyStyle(toggle, "FortivaCategoryChip");
+            toggle.RequestedTheme = resolved;
+            FortivaThemeResources.MergeOnto(toggle, resolved);
+            toggle.CornerRadius = chipRadius;
+            toggle.Padding = new Thickness(10, 6, 10, 6);
+            toggle.BorderThickness = new Thickness(1);
+            toggle.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
+
+            var background = selected
+                ? GetBrush("FortivaAccentGlowBrush", resolved, context)
+                : brushes.Background;
+            var border = selected
+                ? GetBrush("FortivaAccentBrush", resolved, context)
+                : brushes.Border;
+
+            toggle.Background = background;
+            toggle.BorderBrush = border;
+            toggle.Foreground = brushes.Foreground;
+            toggle.Resources["ControlCornerRadius"] = chipRadius;
+            ForceCategoryChipInnerChrome(toggle, background, border, brushes.Foreground, resolved);
+        }
+
+        Apply();
+        toggle.Loaded += (_, _) => Apply();
+    }
+
+    private static void ForceCategoryChipInnerChrome(
+        ToggleButton toggle,
+        Brush background,
+        Brush border,
+        Brush foreground,
+        ElementTheme theme)
+    {
+        foreach (var child in GetVisualDescendants(toggle))
+        {
+            if (child is FrameworkElement fe)
+                fe.RequestedTheme = theme;
+
+            switch (child)
+            {
+                case Border chrome:
+                    chrome.CornerRadius = new CornerRadius(8);
+                    chrome.Background = background;
+                    chrome.BorderBrush = chrome.BorderThickness != new Thickness(0) ? border : null;
+                    break;
+                case ContentPresenter presenter:
+                    presenter.Foreground = foreground;
+                    break;
+            }
+        }
     }
 
     public static void ApplyReadOnlyPasswordTextBox(TextBox box, FrameworkElement? context = null)
@@ -622,9 +702,9 @@ public static class FortivaControlTheme
         return GetBrush(key, theme, context);
     }
 
-    public static Brush GetAuditSeverityBrush(string severityKey, FrameworkElement? context = null)
+    public static Brush GetAuditSeverityBrush(string severityKey, FrameworkElement? context = null, ElementTheme? theme = null)
     {
-        var theme = ResolveEffectiveTheme(context?.XamlRoot, context);
+        theme ??= ResolveEffectiveTheme(context?.XamlRoot, context);
         var key = severityKey switch
         {
             "critical" => "FortivaSemanticErrorBrush",
@@ -635,9 +715,9 @@ public static class FortivaControlTheme
         return GetBrush(key, theme, context);
     }
 
-    public static Brush GetAuditSeverityBgBrush(string severityKey, FrameworkElement? context = null)
+    public static Brush GetAuditSeverityBgBrush(string severityKey, FrameworkElement? context = null, ElementTheme? theme = null)
     {
-        var theme = ResolveEffectiveTheme(context?.XamlRoot, context);
+        theme ??= ResolveEffectiveTheme(context?.XamlRoot, context);
         var key = severityKey switch
         {
             "critical" => "FortivaSemanticErrorBgBrush",
@@ -885,6 +965,16 @@ public static class FortivaControlTheme
                 comboBox.Background = brushes.Background;
                 comboBox.Foreground = brushes.Foreground;
                 comboBox.BorderBrush = brushes.Border;
+                break;
+            case AutoSuggestBox suggestBox:
+                suggestBox.Background = brushes.Background;
+                suggestBox.Foreground = brushes.Foreground;
+                suggestBox.BorderBrush = brushes.Border;
+                break;
+            case PasswordBox passwordBox:
+                passwordBox.Background = brushes.Background;
+                passwordBox.Foreground = brushes.Foreground;
+                passwordBox.BorderBrush = brushes.Border;
                 break;
         }
 

@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Animation;
+using Fortiva.Core.Vault;
 
 namespace Fortiva.AppHost.Services;
 
@@ -39,7 +40,7 @@ public sealed class NavigationService
             ? (NavigationTransitionInfo)new EntranceNavigationTransitionInfo()
             : new SuppressNavigationTransitionInfo();
 
-        if (_frame.Navigate(pageType, parameter, transition) != true)
+        if (!TryFrameNavigate(pageType, parameter, transition))
             return false;
 
         if (_frame.Content is FrameworkElement page)
@@ -71,10 +72,32 @@ public sealed class NavigationService
         _currentParameter = null;
     }
 
+    private bool TryFrameNavigate(Type pageType, object? parameter, NavigationTransitionInfo transition)
+    {
+        if (_frame is null) return false;
+        if (_frame.Navigate(pageType, parameter, transition) == true)
+            return true;
+
+        // Retry without animation — some transitions fail when re-opening a cached page.
+        if (transition is not SuppressNavigationTransitionInfo)
+            return _frame.Navigate(pageType, parameter, new SuppressNavigationTransitionInfo()) == true;
+
+        return false;
+    }
+
     private static bool ParametersEqual(object? a, object? b)
     {
         if (a is null && b is null) return true;
         if (a is null || b is null) return false;
+        if (a is VaultEntry entryA && b is VaultEntry entryB)
+            return entryA.Id == entryB.Id;
+        if (a is VaultPageNavigationContext ctxA && b is VaultPageNavigationContext ctxB)
+            return ctxA.QuickAdd == ctxB.QuickAdd
+                   && ctxA.OpenEntryId == ctxB.OpenEntryId
+                   && ctxA.ImportBatchId == ctxB.ImportBatchId
+                   && string.Equals(ctxA.SearchQuery, ctxB.SearchQuery, StringComparison.Ordinal);
+        if (a is ImportExportNavigationContext importA && b is ImportExportNavigationContext importB)
+            return importA.Equals(importB);
         return a.Equals(b);
     }
 }

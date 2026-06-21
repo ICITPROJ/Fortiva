@@ -193,6 +193,9 @@ public sealed partial class EntryPage : Page
             entry = vaultEntry;
         }
 
+        if (entry is null && _vm.ConsumePendingOpenVaultEntryId() is { } pendingId)
+            entry = _vm.FindEntry(pendingId);
+
         if (entry is not null)
         {
             _existing = entry;

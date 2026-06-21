@@ -1,5 +1,6 @@
 <Page
     x:Class="Fortiva.AppHost.Pages.EntryPage"
+    NavigationCacheMode="Disabled"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Background="Transparent"
@@ -212,7 +213,7 @@
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
                                         <TextBlock x:Name="OtpTimerLabel" Grid.Column="0" Style="{StaticResource FortivaMutedText}"/>
-                                        <Button Grid.Column="1" Click="CopyOtp_Click"
+                                        <Button Grid.Column="1" Style="{StaticResource FortivaSecondaryButton}" Click="CopyOtp_Click"
                                                 ToolTipService.ToolTip="Copy one-time code">
                                             <StackPanel Orientation="Horizontal" Spacing="4">
                                                 <FontIcon Glyph="&#xE8C8;" FontSize="14"/>

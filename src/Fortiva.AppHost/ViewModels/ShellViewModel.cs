@@ -855,12 +855,25 @@ public sealed class ShellViewModel : ViewModelBase
     /// <summary>Set from title-bar search; consumed by <see cref="Pages.VaultPage"/> on navigate.</summary>
     public string? PendingVaultSearch { get; set; }
 
+    /// <summary>Set when another page requests opening a vault entry; consumed by <see cref="Pages.VaultPage"/>.</summary>
+    public Guid? PendingOpenVaultEntryId { get; set; }
+
     public string? ConsumePendingVaultSearch()
     {
         var q = PendingVaultSearch;
         PendingVaultSearch = null;
         return q;
     }
+
+    public Guid? ConsumePendingOpenVaultEntryId()
+    {
+        var id = PendingOpenVaultEntryId;
+        PendingOpenVaultEntryId = null;
+        return id;
+    }
+
+    public VaultEntry? FindEntry(Guid entryId)
+        => _session?.AllEntries().FirstOrDefault(e => e.Id == entryId);
 
     public void ChangeMasterPassword(string newPassword)
         => RequireSession().ChangeMasterPassword(newPassword);

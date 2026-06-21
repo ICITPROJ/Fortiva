@@ -180,19 +180,19 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <Border Style="{StaticResource FortivaGlassPanel}" Padding="14" PointerPressed="PassStat_Pressed">
+                        <Border x:Name="PassStatCard" Style="{StaticResource FortivaGlassPanel}" Padding="14" PointerPressed="PassStat_Pressed">
                             <StackPanel Spacing="2">
                                 <TextBlock x:Name="PassStat" FontSize="22" FontWeight="Bold" Foreground="{ThemeResource SystemFillColorSuccessBrush}"/>
                                 <TextBlock Text="Passed checks" Style="{StaticResource FortivaMutedText}"/>
                             </StackPanel>
                         </Border>
-                        <Border Grid.Column="1" Style="{StaticResource FortivaGlassPanel}" Padding="14" PointerPressed="WarnStat_Pressed">
+                        <Border x:Name="WarnStatCard" Grid.Column="1" Style="{StaticResource FortivaGlassPanel}" Padding="14" PointerPressed="WarnStat_Pressed">
                             <StackPanel Spacing="2">
                                 <TextBlock x:Name="WarnStat" FontSize="22" FontWeight="Bold" Foreground="{ThemeResource SystemFillColorCautionBrush}"/>
                                 <TextBlock Text="Warnings" Style="{StaticResource FortivaMutedText}"/>
                             </StackPanel>
                         </Border>
-                        <Border Grid.Column="2" Style="{StaticResource FortivaGlassPanel}" Padding="14" PointerPressed="CritStat_Pressed">
+                        <Border x:Name="CritStatCard" Grid.Column="2" Style="{StaticResource FortivaGlassPanel}" Padding="14" PointerPressed="CritStat_Pressed">
                             <StackPanel Spacing="2">
                                 <TextBlock x:Name="CritStat" FontSize="22" FontWeight="Bold" Foreground="{ThemeResource SystemFillColorCriticalBrush}"/>
                                 <TextBlock Text="Critical" Style="{StaticResource FortivaMutedText}"/>

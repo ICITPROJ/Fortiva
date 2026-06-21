@@ -321,7 +321,12 @@ public sealed partial class MainWindow : Window
 
         switch (tag)
         {
-            case "Vault":        NavigationService.Current.Navigate<VaultPage>(); break;
+            case "Vault":
+                if (_vm.PendingOpenVaultEntryId is { } openEntryId)
+                    NavigationService.Current.Navigate<VaultPage>(VaultPageNavigationContext.ForEntry(openEntryId));
+                else
+                    NavigationService.Current.Navigate<VaultPage>();
+                break;
             case "Generator":    NavigationService.Current.Navigate<PasswordGeneratorPage>(); break;
             case "Health":       NavigationService.Current.Navigate<HealthPage>(); break;
             case "ImportExport": NavigationService.Current.Navigate<ImportExportPage>(); break;
@@ -592,7 +597,7 @@ public sealed partial class MainWindow : Window
         if (GlobalSearch.Visibility != Visibility.Visible)
             return;
 
-        var theme = FortivaControlTheme.ResolveEffectiveTheme(GlobalSearch.XamlRoot, GlobalSearch);
+        var theme = FortivaControlTheme.ResolveHostTheme(GlobalSearch);
         FortivaControlTheme.ApplyAutoSuggestBox(GlobalSearch, GlobalSearch, theme);
         FortivaControlTheme.TryApplyStyle(GlobalSearch, "FortivaSearchBox");
     }
@@ -657,6 +662,8 @@ public sealed partial class MainWindow : Window
             StatusIcon.Foreground = FortivaControlTheme.GetBrush("FortivaMutedBrush", theme, StatusIcon);
             PanicIcon.Foreground = FortivaControlTheme.GetBrush("SystemFillColorCriticalBrush", theme, PanicIcon);
         }
+
+        RefreshSearchChrome();
     }
 
     private void UpdateTitleBarInsets()

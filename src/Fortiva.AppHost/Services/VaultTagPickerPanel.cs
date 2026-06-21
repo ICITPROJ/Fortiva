@@ -67,6 +67,7 @@ public sealed class VaultTagPickerPanel
         addRow.Children.Add(_addBtn);
 
         Root = _outerShell;
+        _outerShell.HorizontalAlignment = HorizontalAlignment.Stretch;
         _chipScroll.Content = _chipPanel;
         _inner.Children.Add(_chipScroll);
         _inner.Children.Add(addRow);
@@ -89,13 +90,7 @@ public sealed class VaultTagPickerPanel
         FortivaThemeResources.MergeOnto(Root, theme);
         Root.RequestedTheme = theme;
         FortivaControlTheme.ApplyThemeRecursively(Root, theme);
-        _outerShell.RequestedTheme = theme;
-        _outerShell.HorizontalAlignment = HorizontalAlignment.Stretch;
-        _outerShell.Background = FortivaControlTheme.GetBrush("FortivaInputFillBrush", theme, host);
-        _outerShell.BorderBrush = FortivaControlTheme.GetBrush("FortivaInputBorderBrush", theme, host);
-        _outerShell.BorderThickness = new Thickness(1);
-        _outerShell.CornerRadius = new CornerRadius(8);
-        _outerShell.Padding = new Thickness(10);
+        FortivaControlTheme.ApplyInputContainer(_outerShell, host, theme);
         _inner.Spacing = 10;
 
         FortivaControlTheme.ApplyTextBox(_newTagBox, host, theme);

@@ -93,8 +93,14 @@ public sealed partial class VaultPage : Page
         RefreshCategories();
         RefreshList();
 
-        if (openEntryId is { } entryId)
-            TryOpenEntry(entryId);
+        var entryToOpen = openEntryId;
+        if (entryToOpen is null)
+            entryToOpen = _vm.ConsumePendingOpenVaultEntryId();
+        else
+            _vm.PendingOpenVaultEntryId = null;
+
+        if (entryToOpen is { } entryId)
+            DispatcherQueue.TryEnqueue(() => TryOpenEntry(entryId));
         else if (pendingQuickAdd)
             _ = QuickAddAsync();
     }
@@ -128,7 +134,9 @@ public sealed partial class VaultPage : Page
     {
         DispatcherQueue.TryEnqueue(() =>
         {
+            var theme = FortivaControlTheme.ResolveHostTheme(this);
             ThemeService.ApplyToElement(this);
+            FortivaControlTheme.ApplyAutoSuggestBox(SearchBox, this, theme);
             ApplyViewToggleChrome();
             if (DetailEditorFrame.Content is FrameworkElement detailContent)
                 ThemeService.ApplyToElement(detailContent);
@@ -501,9 +509,6 @@ public sealed partial class VaultPage : Page
 
     private void ShowDetail(VaultEntryViewModel vm)
     {
-        if (_selectedEntry?.Id == vm.Id && DetailPane.Visibility == Visibility.Visible)
-            return;
-
         _selectedEntry = vm;
         DetailColumn.Width = new GridLength(420);
         DetailPane.Visibility = Visibility.Visible;
@@ -661,8 +666,12 @@ public sealed partial class VaultPage : Page
     private void TryOpenEntry(Guid entryId)
     {
         var vm = _vm.Entries.FirstOrDefault(e => e.Id == entryId);
+        if (vm is null && _vm.FindEntry(entryId) is { } entry)
+            vm = new VaultEntryViewModel(entry);
         if (vm is null)
             return;
+
+        SelectSingleEntry(vm);
 
         if (UseMasterDetail())
             ShowDetail(vm);

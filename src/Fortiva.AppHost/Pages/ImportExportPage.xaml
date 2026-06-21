@@ -59,7 +59,8 @@
                     <ListView.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Spacing="2" Padding="4,8">
-                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
+                                           Foreground="{ThemeResource FortivaHeadingBrush}"/>
                                 <TextBlock Text="{Binding Subtitle}" Style="{StaticResource FortivaMutedText}" FontSize="12"/>
                             </StackPanel>
                         </DataTemplate>
@@ -78,10 +79,10 @@
             <Border Style="{StaticResource FortivaSectionDivider}"/>
 
             <!-- Duplicate management -->
-            <StackPanel Spacing="12">
+            <StackPanel x:Name="DuplicateManagementSection" Spacing="12">
                 <TextBlock Text="Duplicate management" Style="{StaticResource FortivaSectionTitle}"/>
                 <TextBlock TextWrapping="WrapWholeWords" Style="{StaticResource FortivaMutedText}" FontSize="13"
-                           Text="After imports, review skipped duplicates and scan the vault for overlapping logins. Fortiva never removes entries without your explicit action."/>
+                           Text="Scan your entire vault for overlapping logins — including manual entries, imports, and edits over time. Fortiva never removes entries without your explicit action."/>
                 <Button x:Name="ScanVaultDuplicatesBtn" Style="{StaticResource FortivaSecondaryButton}" Click="ScanVaultDuplicates_Click">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE8C8;" FontSize="14"/>
@@ -94,7 +95,8 @@
                     <ListView.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Spacing="2" Padding="4,8">
-                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
+                                           Foreground="{ThemeResource FortivaHeadingBrush}"/>
                                 <TextBlock Text="{Binding Subtitle}" Style="{StaticResource FortivaMutedText}" FontSize="12"/>
                             </StackPanel>
                         </DataTemplate>

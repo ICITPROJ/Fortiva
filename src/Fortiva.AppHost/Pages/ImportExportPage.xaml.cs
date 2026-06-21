@@ -13,6 +13,7 @@ public sealed partial class ImportExportPage : Page
 {
     private readonly ShellViewModel _vm = ShellViewModel.Current;
     private Action? _stateChangedHandler;
+    private Action? _themeChangedHandler;
     private ImportBatch? _selectedBatch;
     private IReadOnlyList<VaultDuplicateGroup> _vaultDuplicateGroups = [];
     private Guid? _selectedVaultDuplicateEntryId;
@@ -30,18 +31,15 @@ public sealed partial class ImportExportPage : Page
             RefreshVaultDuplicateScan();
         });
         _vm.StateChanged += _stateChangedHandler;
+        _themeChangedHandler = () => DispatcherQueue.TryEnqueue(() => ThemeService.ApplyToElement(this));
+        _vm.ThemeChanged += _themeChangedHandler;
         RefreshExportState();
         RefreshImportHistory();
         RefreshVaultDuplicateScan();
 
         if (e.Parameter is ImportExportNavigationContext { FocusDuplicates: true })
         {
-            RefreshVaultDuplicateScan();
-            if (_vaultDuplicateGroups.Count == 0 && _vm.IsUnlocked)
-                _vaultDuplicateGroups = _vm.GetVaultDuplicateGroups();
-            RefreshVaultDuplicateScan();
-            PageScroll.UpdateLayout();
-            PageScroll.ChangeView(null, PageScroll.ScrollableHeight, null);
+            DispatcherQueue.TryEnqueue(() => DuplicateManagementSection.StartBringIntoView());
         }
     }
 
@@ -52,6 +50,11 @@ public sealed partial class ImportExportPage : Page
         {
             _vm.StateChanged -= _stateChangedHandler;
             _stateChangedHandler = null;
+        }
+        if (_themeChangedHandler is not null)
+        {
+            _vm.ThemeChanged -= _themeChangedHandler;
+            _themeChangedHandler = null;
         }
     }
 
@@ -576,7 +579,12 @@ public sealed partial class ImportExportPage : Page
             SelectionMode = ListViewSelectionMode.Single,
             MaxHeight = 280
         };
-        list.SelectedIndex = 0;
+        list.SelectedItem = options[0];
+        list.Loaded += (_, _) =>
+        {
+            if (list.SelectedItem is null && options.Count > 0)
+                list.SelectedItem = options[0];
+        };
 
         var dlg = new ContentDialog
         {
@@ -607,8 +615,13 @@ public sealed partial class ImportExportPage : Page
         };
 
         var result = await dlg.ShowAsync();
-        if (result != ContentDialogResult.Primary || list.SelectedItem is not DuplicateEntryOption picked)
+        if (result != ContentDialogResult.Primary)
             return;
+        if (list.SelectedItem is not DuplicateEntryOption picked)
+        {
+            Show("Select an entry to open.", InfoBarSeverity.Warning);
+            return;
+        }
 
         if (!TryOpenEntry(picked.Id))
             Show("Entry could not be found.", InfoBarSeverity.Warning);
@@ -616,15 +629,23 @@ public sealed partial class ImportExportPage : Page
 
     private bool TryOpenEntry(Guid entryId)
     {
-        if (_vm.Entries.All(e => e.Id != entryId))
+        if (_vm.FindEntry(entryId) is not { } entry)
             return false;
 
-        NavigationService.Current.ResetCurrent();
-        if (!NavigationService.Current.Navigate<VaultPage>(
-                VaultPageNavigationContext.ForEntry(entryId), animate: true))
-            return false;
-
+        _vm.PendingOpenVaultEntryId = entryId;
         _vm.RequestNavigationTab("Vault");
+
+        // Defer until after SelectNavigationTab runs — otherwise NavigateToMainTab can
+        // replace a targeted Vault navigation with a plain Vault page load.
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            NavigationService.Current.ResetCurrent();
+            if (!NavigationService.Current.Navigate<VaultPage>(
+                    VaultPageNavigationContext.ForEntry(entryId), animate: false))
+            {
+                NavigationService.Current.Navigate<EntryPage>(entry, animate: false);
+            }
+        });
         return true;
     }
 

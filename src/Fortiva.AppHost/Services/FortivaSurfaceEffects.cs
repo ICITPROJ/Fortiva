@@ -30,22 +30,7 @@ public static class FortivaSurfaceEffects
     }
 
     public static void ApplyChipToggle(ToggleButton toggle, bool selected, FrameworkElement context, ElementTheme? theme = null)
-    {
-        var resolved = theme ?? FortivaControlTheme.ResolveHostTheme(context);
-        toggle.RequestedTheme = resolved;
-        FortivaThemeResources.MergeOnto(toggle, resolved);
-        toggle.CornerRadius = new CornerRadius(999);
-        toggle.Padding = new Thickness(12, 7, 12, 7);
-        toggle.BorderThickness = new Thickness(1);
-        toggle.FontWeight = Microsoft.UI.Text.FontWeights.SemiBold;
-        toggle.Background = selected
-            ? FortivaControlTheme.GetBrush("FortivaAccentGlowBrush", resolved, context)
-            : FortivaControlTheme.GetBrush("FortivaInputFillBrush", resolved, context);
-        toggle.BorderBrush = selected
-            ? FortivaControlTheme.GetBrush("FortivaAccentBrush", resolved, context)
-            : FortivaControlTheme.GetBrush("FortivaInputBorderBrush", resolved, context);
-        toggle.Foreground = FortivaControlTheme.GetBrush("FortivaHeadingBrush", resolved, context);
-    }
+        => FortivaControlTheme.ApplyCategoryChip(toggle, selected, context, theme);
 
     public static void ApplyIconButton(Button button, FrameworkElement? context = null)
     {
