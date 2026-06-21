@@ -5,6 +5,7 @@ using Fortiva.Core.Vault;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Navigation;
 
 namespace Fortiva.AppHost.Pages;
 
@@ -23,6 +24,7 @@ public sealed partial class VaultPage : Page
     private VaultEntryPaneHost? _paneHost;
     private CancellationTokenSource? _faviconCts;
     private bool _syncingSelection;
+    private bool _suppressSelectionChangedOpen;
     private Guid? _pendingRestoreEntryId;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _searchDebounceTimer;
     private const double MasterDetailMinWidth = 1080;
@@ -99,9 +101,9 @@ public sealed partial class VaultPage : Page
         else
             _vm.PendingOpenVaultEntryId = null;
 
-        if (entryToOpen is { } entryId)
+        if (entryToOpen is { } entryId && e.NavigationMode != NavigationMode.Back)
             DispatcherQueue.TryEnqueue(() => TryOpenEntry(entryId));
-        else if (pendingQuickAdd)
+        else if (pendingQuickAdd && e.NavigationMode != NavigationMode.Back)
             _ = QuickAddAsync();
     }
 
@@ -358,7 +360,7 @@ public sealed partial class VaultPage : Page
 
     private async Task OnEntrySelectionChangedAsync(IReadOnlyList<VaultEntryViewModel> selected)
     {
-        if (_syncingSelection)
+        if (_syncingSelection || _suppressSelectionChangedOpen)
             return;
 
         if (selected.Count > 1)
@@ -546,9 +548,19 @@ public sealed partial class VaultPage : Page
     {
         _selectedEntry = null;
         _paneHost = null;
+        DetailEditorFrame.Content = null;
         DetailColumn.Width = new GridLength(0);
         DetailPane.Visibility = Visibility.Collapsed;
-        ClearEntrySelection();
+
+        _suppressSelectionChangedOpen = true;
+        try
+        {
+            ClearEntrySelection();
+        }
+        finally
+        {
+            DispatcherQueue.TryEnqueue(() => _suppressSelectionChangedOpen = false);
+        }
     }
 
     private async void CloseDetail_Click(object sender, RoutedEventArgs e)
@@ -663,7 +675,7 @@ public sealed partial class VaultPage : Page
         StatusBar.Visibility = Visibility.Visible;
     }
 
-    private void TryOpenEntry(Guid entryId)
+    internal void TryOpenEntry(Guid entryId)
     {
         var vm = _vm.Entries.FirstOrDefault(e => e.Id == entryId);
         if (vm is null && _vm.FindEntry(entryId) is { } entry)
@@ -671,12 +683,20 @@ public sealed partial class VaultPage : Page
         if (vm is null)
             return;
 
-        SelectSingleEntry(vm);
+        _suppressSelectionChangedOpen = true;
+        try
+        {
+            SelectSingleEntry(vm);
 
-        if (UseMasterDetail())
-            ShowDetail(vm);
-        else
-            NavigateToEntry(vm);
+            if (UseMasterDetail())
+                ShowDetail(vm);
+            else
+                NavigateToEntry(vm);
+        }
+        finally
+        {
+            DispatcherQueue.TryEnqueue(() => _suppressSelectionChangedOpen = false);
+        }
     }
 
     private void ClearImportFilter_Click(object sender, RoutedEventArgs e)

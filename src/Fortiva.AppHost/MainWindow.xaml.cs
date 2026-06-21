@@ -322,6 +322,12 @@ public sealed partial class MainWindow : Window
         switch (tag)
         {
             case "Vault":
+                if (NavigationService.Current.CurrentPageType == typeof(EntryPage))
+                {
+                    NavigationService.Current.CloseEntryOrReturnToVault();
+                    break;
+                }
+
                 if (_vm.PendingOpenVaultEntryId is { } openEntryId)
                     NavigationService.Current.Navigate<VaultPage>(VaultPageNavigationContext.ForEntry(openEntryId));
                 else
@@ -351,7 +357,7 @@ public sealed partial class MainWindow : Window
             };
             if (item is null) return;
 
-            if (!IsTabPageActive(tag))
+            if (!IsTabPageActive(tag) || ShouldRetargetTab(tag))
                 NavigateToMainTab(tag);
 
             _suppressNav = true;
@@ -359,6 +365,9 @@ public sealed partial class MainWindow : Window
             finally { _suppressNav = false; }
         });
     }
+
+    private static bool ShouldRetargetTab(string tag) =>
+        tag == "Vault" && NavigationService.Current.CurrentPageType == typeof(EntryPage);
 
     private bool IsTabPageActive(string tag)
     {

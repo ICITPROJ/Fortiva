@@ -619,6 +619,9 @@ public sealed partial class EntryPage : Page
             return;
         }
 
+        if (!await ConfirmDiscardIfDirtyAsync())
+            return;
+
         FinishEditor(saved: false);
     }
 
@@ -633,7 +636,7 @@ public sealed partial class EntryPage : Page
             return;
         }
 
-        NavigationService.Current.GoBack();
+        NavigationService.Current.CloseEntryOrReturnToVault();
     }
 
     private async Task ShowErrorAsync(string msg)

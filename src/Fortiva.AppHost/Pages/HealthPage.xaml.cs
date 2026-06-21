@@ -234,7 +234,10 @@ public sealed partial class HealthPage : Page
             if (!NavigationService.Current.Navigate<VaultPage>(
                     VaultPageNavigationContext.ForEntry(entryId), animate: false))
             {
-                NavigationService.Current.Navigate<EntryPage>(entry, animate: false);
+                if (NavigationService.Current.GetCurrentPage<VaultPage>() is { } vaultPage)
+                    vaultPage.TryOpenEntry(entryId);
+                else
+                    NavigationService.Current.Navigate<EntryPage>(entry, animate: false);
             }
         });
     }

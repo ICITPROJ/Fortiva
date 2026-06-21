@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Animation;
+using Microsoft.UI.Xaml.Navigation;
 using Fortiva.Core.Vault;
 
 namespace Fortiva.AppHost.Services;
@@ -62,7 +63,43 @@ public sealed class NavigationService
         return true;
     }
 
+    /// <summary>Leave the full-screen entry editor, returning to the vault list.</summary>
+    public bool CloseEntryOrReturnToVault()
+    {
+        if (_currentPageType != typeof(Pages.EntryPage))
+            return GoBack();
+
+        if (_frame is null)
+            return false;
+
+        ResetCurrent();
+
+        // Land on a plain vault list — not VaultPage(ForEntry), which would auto-reopen the editor.
+        if (!Navigate<Pages.VaultPage>(animate: false))
+        {
+            if (GoBack())
+                return true;
+            return false;
+        }
+
+        PruneTopBackStackEntry(typeof(Pages.EntryPage));
+        return true;
+    }
+
+    private void PruneTopBackStackEntry(Type pageType)
+    {
+        if (_frame?.BackStack is not { Count: > 0 } stack)
+            return;
+
+        var top = stack[stack.Count - 1];
+        if (top.SourcePageType == pageType)
+            stack.RemoveAt(stack.Count - 1);
+    }
+
     public bool CanGoBack => _frame?.CanGoBack ?? false;
+
+    public TPage? GetCurrentPage<TPage>() where TPage : Page =>
+        _frame?.Content as TPage;
 
     public void ClearHistory() => _frame?.BackStack.Clear();
 
