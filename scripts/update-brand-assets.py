@@ -157,7 +157,6 @@ def generate_installer_publisher_assets(publisher_source: Path) -> None:
     write_bmp(compose_wizard_sidebar(logo_rgba), PACKAGING / "wizard-sidebar.bmp")
     globe = crop_globe_mark(logo_rgba)
     write_bmp(compose_wizard_small(globe), PACKAGING / "wizard-small.bmp")
-    write_ico(fit_square(globe, 256), PACKAGING / "icmclab-setup.ico")
 
 
 def main() -> int:

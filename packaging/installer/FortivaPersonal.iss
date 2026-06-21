@@ -44,7 +44,7 @@ UninstallDisplayName={#AppName} {#AppVersion} (icmclab studio)
 
 UninstallDisplayIcon={app}\Assets\fortiva.ico
 
-SetupIconFile=..\assets\icmclab-setup.ico
+SetupIconFile=..\assets\fortiva-setup.ico
 
 DefaultDirName={localappdata}\Programs\icmclab studio\{#AppName}
 

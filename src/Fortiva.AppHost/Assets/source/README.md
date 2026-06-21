@@ -34,10 +34,9 @@ The script removes the black matte and writes a **transparent** PNG for in-app u
 | `fortiva.ico` / `fortiva-paranoia.ico` | Taskbar + window icon |
 | `Assets/icmclab-logo.png` | Settings → About (transparent PNG) |
 | `packaging/assets/icmclab-logo.png` | Installer source copy |
-| `packaging/assets/icmclab-setup.ico` | Inno Setup **setup EXE** icon |
-| `packaging/assets/wizard-sidebar.bmp` | Installer wizard left banner |
-| `packaging/assets/wizard-small.bmp` | Installer wizard top-right mark |
-| `packaging/assets/fortiva-setup.ico` | Legacy Fortiva-only icon (optional) |
+| `packaging/assets/fortiva-setup.ico` | Inno Setup **setup EXE** icon (title bar / `.exe` file icon) |
+| `packaging/assets/wizard-sidebar.bmp` | Installer wizard left banner (ICMCLAB lockup) |
+| `packaging/assets/wizard-small.bmp` | Installer wizard top-right mark (ICMCLAB globe) |
 | `extension/icon16.png` … `icon128.png` | Browser extension toolbar icons |
 
 Transparency is preserved when the source PNG already has an alpha channel.
