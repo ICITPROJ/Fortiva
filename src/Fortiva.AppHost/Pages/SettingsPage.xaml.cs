@@ -442,7 +442,7 @@ public sealed partial class SettingsPage : Page
     }
 
     private void RefreshAboutLogo()
-        => BrandAssets.ApplyLogo(AboutLogo, _vm.PreferParanoiaMode);
+        => BrandAssets.ApplyPublisherLogo(AboutLogo);
 
     private async void WebsiteLink_Click(object sender, RoutedEventArgs e)
     {

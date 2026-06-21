@@ -224,7 +224,7 @@
                         Background="{ThemeResource FortivaAccentGlowBrush}"
                         BorderBrush="{ThemeResource FortivaGlassBorderBrush}" BorderThickness="1">
                     <StackPanel Spacing="8">
-                        <Image x:Name="AboutLogo" Width="72" Height="72"
+                        <Image x:Name="AboutLogo" MaxWidth="240" MaxHeight="72"
                                HorizontalAlignment="Left" Stretch="Uniform"/>
                         <TextBlock x:Name="AboutAppName" Style="{StaticResource FortivaFieldLabel}" FontSize="14"/>
                         <TextBlock x:Name="AboutVersion" Style="{StaticResource FortivaMutedText}"/>

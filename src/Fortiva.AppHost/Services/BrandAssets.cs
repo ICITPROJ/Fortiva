@@ -12,6 +12,7 @@ public static class BrandAssets
     public const string StandardIconFile = "fortiva.ico";
     public const string ParanoiaIconFile = "fortiva-paranoia.ico";
     public const string WebsiteUrl = "https://fortiva.studio.icmclab.cloud/";
+    public const string PublisherLogoFile = "icmclab-logo.png";
 
     public static string LogoPath(bool paranoia)
         => Path.Combine(AppContext.BaseDirectory, "Assets", paranoia ? ParanoiaLogoFile : StandardLogoFile);
@@ -23,7 +24,19 @@ public static class BrandAssets
     {
         var path = LogoPath(paranoia);
         if (!File.Exists(path))
-            path = Path.Combine(AppContext.BaseDirectory, "Assets", "icmclab-logo.png");
+            path = PublisherLogoPath();
+        if (!File.Exists(path)) return;
+
+        image.Source = new BitmapImage(new Uri(path)) { DecodePixelType = Microsoft.UI.Xaml.Media.Imaging.DecodePixelType.Logical };
+    }
+
+    public static string PublisherLogoPath()
+        => Path.Combine(AppContext.BaseDirectory, "Assets", PublisherLogoFile);
+
+    /// <summary>icmclab studio publisher mark — Settings → About only (not the Fortiva app icon).</summary>
+    public static void ApplyPublisherLogo(Image image)
+    {
+        var path = PublisherLogoPath();
         if (!File.Exists(path)) return;
 
         image.Source = new BitmapImage(new Uri(path)) { DecodePixelType = Microsoft.UI.Xaml.Media.Imaging.DecodePixelType.Logical };
