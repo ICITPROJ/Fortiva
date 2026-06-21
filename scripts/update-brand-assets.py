@@ -17,6 +17,9 @@ EXTENSION = ROOT / "extension"
 OUTPUT_SIZE = 512
 BLACK_THRESHOLD = 22  # RGB all <= this → treated as background (only when no alpha channel)
 ICO_SIZES = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+WIZARD_SIDEBAR_SIZE = (164, 314)
+WIZARD_SMALL_SIZE = (55, 58)
+WIZARD_BG = (10, 14, 20)
 
 
 def has_transparency(img: Image.Image) -> bool:
@@ -109,6 +112,53 @@ def write_extension_icons(standard: Image.Image) -> None:
         write_png(icon, EXTENSION / f"icon{size}.png")
 
 
+def crop_globe_mark(img: Image.Image) -> Image.Image:
+    """Globe portion of the horizontal ICMCLAB publisher lockup."""
+    w, h = img.size
+    return img.crop((0, 0, int(w * 0.40), h))
+
+
+def paste_centered_rgba(canvas: Image.Image, overlay: Image.Image, box: tuple[int, int, int, int]) -> None:
+    """Paste RGBA overlay centered inside (left, top, right, bottom) on an RGB/RGBA canvas."""
+    max_w = box[2] - box[0]
+    max_h = box[3] - box[1]
+    scale = min(max_w / overlay.width, max_h / overlay.height)
+    nw, nh = max(1, int(overlay.width * scale)), max(1, int(overlay.height * scale))
+    resized = overlay.resize((nw, nh), Image.Resampling.LANCZOS)
+    ox = box[0] + (max_w - nw) // 2
+    oy = box[1] + (max_h - nh) // 2
+    canvas.paste(resized, (ox, oy), resized)
+
+
+def compose_wizard_sidebar(logo: Image.Image) -> Image.Image:
+    canvas = Image.new("RGB", WIZARD_SIDEBAR_SIZE, WIZARD_BG)
+    paste_centered_rgba(canvas, logo, (8, 36, WIZARD_SIDEBAR_SIZE[0] - 8, 150))
+    return canvas
+
+
+def compose_wizard_small(globe: Image.Image) -> Image.Image:
+    canvas = Image.new("RGB", WIZARD_SMALL_SIZE, WIZARD_BG)
+    paste_centered_rgba(canvas, globe, (3, 3, WIZARD_SMALL_SIZE[0] - 3, WIZARD_SMALL_SIZE[1] - 3))
+    return canvas
+
+
+def write_bmp(img: Image.Image, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    img.convert("RGB").save(path, format="BMP")
+    print(f"  wrote {path.relative_to(ROOT)} ({path.stat().st_size:,} bytes)")
+
+
+def generate_installer_publisher_assets(publisher_source: Path) -> None:
+    print(f"Publisher source: {publisher_source}")
+    logo_rgba = prepare_rgba(publisher_source)
+
+    write_png(logo_rgba, PACKAGING / "icmclab-logo.png")
+    write_bmp(compose_wizard_sidebar(logo_rgba), PACKAGING / "wizard-sidebar.bmp")
+    globe = crop_globe_mark(logo_rgba)
+    write_bmp(compose_wizard_small(globe), PACKAGING / "wizard-small.bmp")
+    write_ico(fit_square(globe, 256), PACKAGING / "icmclab-setup.ico")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Update Fortiva brand PNG/ICO assets")
     default_icon = ASSETS / "source" / "fortiva-icon-source.png"
@@ -122,6 +172,11 @@ def main() -> int:
         "--logo-source",
         default="",
         help="Optional separate UI logo; defaults to icon source when omitted",
+    )
+    parser.add_argument(
+        "--publisher-source",
+        default=str(ASSETS / "icmclab-logo.png"),
+        help="ICMCLAB publisher lockup for installer wizard + setup icon",
     )
     args = parser.parse_args()
 
@@ -165,6 +220,13 @@ def main() -> int:
 
     print("Generating browser extension icons...")
     write_extension_icons(icon_standard)
+
+    publisher_source = Path(args.publisher_source)
+    if publisher_source.is_file():
+        print("Generating installer publisher assets...")
+        generate_installer_publisher_assets(publisher_source)
+    else:
+        print(f"Skipping installer publisher assets (not found: {publisher_source})")
 
     print("Done.")
     return 0

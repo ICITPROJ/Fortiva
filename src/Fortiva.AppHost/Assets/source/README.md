@@ -22,14 +22,24 @@ With a separate UI logo:
 python scripts/update-brand-assets.py --logo-source src/Fortiva.AppHost/Assets/source/fortiva-logo-source.png
 ```
 
+## Publisher lockup (icmclab studio)
+
+Place **`icmclab-logo.png`** in `src/Fortiva.AppHost/Assets/` (horizontal ICMCLAB mark).
+The script regenerates installer wizard images and the setup EXE icon from this file.
+
 Outputs:
 
 | File | Use |
 |------|-----|
-| `fortiva-logo.png` | UI logo (transparent PNG) — title bar, Unlock, Onboarding, Settings |
+| `fortiva-logo.png` | UI logo (transparent PNG) — title bar, Unlock, Onboarding |
 | `fortiva-logo-paranoia.png` | Paranoia Mode variant |
 | `fortiva.ico` / `fortiva-paranoia.ico` | **Taskbar + window icon** (from Logo Icon 3) |
-| `packaging/assets/fortiva-setup.ico` | Inno Setup installer icon |
+| `Assets/icmclab-logo.png` | Settings → About publisher mark (in-app copy) |
+| `packaging/assets/icmclab-logo.png` | Installer source copy |
+| `packaging/assets/icmclab-setup.ico` | Inno Setup **setup EXE** icon |
+| `packaging/assets/wizard-sidebar.bmp` | Installer wizard left banner |
+| `packaging/assets/wizard-small.bmp` | Installer wizard top-right mark |
+| `packaging/assets/fortiva-setup.ico` | Legacy Fortiva-only icon (optional) |
 | `extension/icon16.png` … `icon128.png` | Browser extension toolbar icons |
 
 Transparency is preserved when the source PNG already has an alpha channel.
