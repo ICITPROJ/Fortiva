@@ -472,10 +472,7 @@ public sealed partial class HealthPage : Page
     private void RenderFindings(IReadOnlyList<SecurityAuditFinding> findings)
     {
         FindingsPanel.Children.Clear();
-        var theme = FortivaControlTheme.ResolveHostTheme(this);
-        var headingBrush = FortivaControlTheme.GetBrush("FortivaHeadingBrush", theme, this);
-        var bodyBrush = FortivaControlTheme.GetBrush("FortivaBodyBrush", theme, this);
-        var mutedBrush = FortivaControlTheme.GetBrush("FortivaMutedBrush", theme, this);
+        var theme = FortivaControlTheme.ResolveAppTheme();
 
         var ordered = findings
             .OrderBy(f => f.Severity == AuditSeverity.Pass ? 1 : 0)
@@ -488,6 +485,8 @@ public sealed partial class HealthPage : Page
             var severityKey = FortivaControlTheme.GetAuditSeverityKey(f.Severity);
             var accent = FortivaControlTheme.GetAuditSeverityBrush(severityKey, this, theme);
             var bg = FortivaControlTheme.GetAuditSeverityBgBrush(severityKey, this, theme);
+            var (titleBrush, detailBrush, badgeBg, badgeFg) =
+                FortivaControlTheme.GetAuditCardTextBrushes(severityKey, this, theme);
             var label = FortivaControlTheme.GetAuditSeverityLabel(f.Severity);
 
             var card = new Border
@@ -511,14 +510,14 @@ public sealed partial class HealthPage : Page
             {
                 CornerRadius = new CornerRadius(4),
                 Padding = new Thickness(6, 2, 6, 2),
-                Background = bg,
+                Background = badgeBg,
                 RequestedTheme = theme,
                 Child = new TextBlock
                 {
                     Text = label,
                     FontSize = 10,
                     FontWeight = Microsoft.UI.Text.FontWeights.Bold,
-                    Foreground = accent,
+                    Foreground = badgeFg,
                     RequestedTheme = theme
                 }
             });
@@ -526,7 +525,7 @@ public sealed partial class HealthPage : Page
             {
                 Text = f.Category,
                 FontSize = 10,
-                Foreground = mutedBrush,
+                Foreground = detailBrush,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 RequestedTheme = theme
             });
@@ -538,7 +537,7 @@ public sealed partial class HealthPage : Page
                 Text = f.Title,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 TextWrapping = TextWrapping.WrapWholeWords,
-                Foreground = headingBrush,
+                Foreground = titleBrush,
                 RequestedTheme = theme
             });
             text.Children.Add(new TextBlock
@@ -546,7 +545,7 @@ public sealed partial class HealthPage : Page
                 Text = f.Detail,
                 FontSize = 13,
                 TextWrapping = TextWrapping.WrapWholeWords,
-                Foreground = bodyBrush,
+                Foreground = detailBrush,
                 RequestedTheme = theme
             });
             Grid.SetColumn(text, 1);

@@ -134,6 +134,21 @@ public static class FortivaControlTheme
         _ => "success"
     };
 
+    /// <summary>High-contrast text on tinted audit finding cards (matches app theme, not host ActualTheme).</summary>
+    public static (Brush Title, Brush Detail, Brush BadgeBg, Brush BadgeFg) GetAuditCardTextBrushes(
+        string severityKey,
+        FrameworkElement? context = null,
+        ElementTheme? theme = null)
+    {
+        theme ??= ResolveAppTheme();
+        var accent = GetAuditSeverityBrush(severityKey, context, theme);
+        return (
+            accent,
+            GetBrush("FortivaBodyBrush", theme, context),
+            accent,
+            GetBrush("FortivaAccentButtonForegroundBrush", theme, context));
+    }
+
     public static (Brush BadgeBg, Brush BadgeFg) GetPasswordIssueBadgeBrushes(string issueLabel, FrameworkElement? context = null)
     {
         var key = issueLabel switch
