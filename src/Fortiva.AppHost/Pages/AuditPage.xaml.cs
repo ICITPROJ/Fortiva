@@ -49,7 +49,12 @@ public sealed partial class AuditPage : Page
 
     private Border BuildRow(AuditEvent ev)
     {
-        var row = new Grid();
+        var theme = FortivaControlTheme.ResolveAppTheme();
+        var (timestampBrush, messageBrush, rowBg, rowBorder) =
+            FortivaControlTheme.GetAuditLogRowBrushes(this, theme);
+        var (badgeBg, badgeFg) = FortivaControlTheme.GetAuditEventBadgeBrushes(ev.EventType, this, theme);
+
+        var row = new Grid { RequestedTheme = theme };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -59,31 +64,26 @@ public sealed partial class AuditPage : Page
             Text = ev.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss"),
             FontSize = 12,
             FontFamily = new FontFamily("Consolas"),
-            Foreground = FortivaControlTheme.GetBrush("FortivaBodyBrush", context: this),
-            VerticalAlignment = VerticalAlignment.Center
+            Foreground = timestampBrush,
+            VerticalAlignment = VerticalAlignment.Center,
+            RequestedTheme = theme
         };
         Grid.SetColumn(time, 0);
 
-        var typeText = ev.EventType.ToString();
         var badge = new Border
         {
             CornerRadius = new CornerRadius(4),
             Padding = new Thickness(6, 2, 6, 2),
             VerticalAlignment = VerticalAlignment.Center,
-            Background = ev.EventType switch
-            {
-                AuditEventType.UnlockFailure or AuditEventType.PolicyViolation =>
-                    FortivaControlTheme.GetBrush("FortivaSemanticErrorBgBrush", context: this),
-                AuditEventType.UnlockSuccess =>
-                    FortivaControlTheme.GetBrush("FortivaSemanticSuccessBgBrush", context: this),
-                _ => FortivaControlTheme.GetBrush("FortivaTrackSubtleBrush", context: this)
-            },
+            Background = badgeBg,
+            RequestedTheme = theme,
             Child = new TextBlock
             {
-                Text = typeText,
+                Text = ev.EventType.ToString(),
                 FontSize = 11,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                Foreground = FortivaControlTheme.GetBrush("FortivaHeadingBrush", context: this)
+                Foreground = badgeFg,
+                RequestedTheme = theme
             }
         };
         Grid.SetColumn(badge, 1);
@@ -91,10 +91,11 @@ public sealed partial class AuditPage : Page
         var msg = new TextBlock
         {
             Text = ev.Message,
-            FontSize = 12,
+            FontSize = 13,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            Foreground = FortivaControlTheme.GetBrush("FortivaBodyBrush", context: this)
+            Foreground = messageBrush,
+            RequestedTheme = theme
         };
         Grid.SetColumn(msg, 2);
 
@@ -102,16 +103,19 @@ public sealed partial class AuditPage : Page
         row.Children.Add(badge);
         row.Children.Add(msg);
 
-        return new Border
+        var card = new Border
         {
-            Background = FortivaControlTheme.GetBrush("FortivaGlassFillBrush", context: this),
-            BorderBrush = FortivaControlTheme.GetBrush("FortivaGlassBorderBrush", context: this),
+            Background = rowBg,
+            BorderBrush = rowBorder,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(10),
             Padding = new Thickness(14, 10, 14, 10),
             Margin = new Thickness(0, 0, 0, 8),
+            RequestedTheme = theme,
             Child = row
         };
+        FortivaThemeResources.MergeOnto(card, theme);
+        return card;
     }
 
     private async void Export_Click(object sender, RoutedEventArgs e)

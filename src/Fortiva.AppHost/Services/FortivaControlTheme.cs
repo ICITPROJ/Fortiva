@@ -1,4 +1,5 @@
 using Fortiva.AppHost.ViewModels;
+using Fortiva.Core.Audit;
 using Fortiva.Core.Password;
 using Fortiva.Core.Security;
 using Microsoft.UI;
@@ -146,6 +147,44 @@ public static class FortivaControlTheme
             accent,
             GetBrush("FortivaBodyBrush", theme, context),
             accent,
+            GetBrush("FortivaAccentButtonForegroundBrush", theme, context));
+    }
+
+    public static (Brush Timestamp, Brush Message, Brush RowBg, Brush RowBorder) GetAuditLogRowBrushes(
+        FrameworkElement? context = null,
+        ElementTheme? theme = null)
+    {
+        theme ??= ResolveAppTheme();
+        return (
+            GetBrush("FortivaMutedBrush", theme, context),
+            GetBrush("FortivaBodyBrush", theme, context),
+            GetBrush("FortivaGlassFillBrush", theme, context),
+            GetBrush("FortivaInputBorderBrush", theme, context));
+    }
+
+    public static (Brush BadgeBg, Brush BadgeFg) GetAuditEventBadgeBrushes(
+        AuditEventType eventType,
+        FrameworkElement? context = null,
+        ElementTheme? theme = null)
+    {
+        theme ??= ResolveAppTheme();
+        var severityKey = eventType switch
+        {
+            AuditEventType.UnlockFailure or AuditEventType.PolicyViolation => "critical",
+            AuditEventType.UnlockSuccess => "success",
+            AuditEventType.UnlockAttempt => "warning",
+            _ => null
+        };
+
+        if (severityKey is null)
+        {
+            return (
+                GetBrush("FortivaSurfaceSubtleBrush", theme, context),
+                GetBrush("FortivaHeadingBrush", theme, context));
+        }
+
+        return (
+            GetAuditSeverityBrush(severityKey, context, theme),
             GetBrush("FortivaAccentButtonForegroundBrush", theme, context));
     }
 
