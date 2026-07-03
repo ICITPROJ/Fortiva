@@ -140,18 +140,14 @@
                 <GridView.ItemTemplate>
                     <DataTemplate>
                         <Border Style="{StaticResource FortivaVaultCard}" HorizontalAlignment="Stretch" MinWidth="320">
-                            <Grid ColumnSpacing="12" RowSpacing="4">
+                            <Grid ColumnSpacing="12" VerticalAlignment="Top">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="Auto"/>
-                                </Grid.RowDefinitions>
 
-                                <Grid Grid.RowSpan="2" Width="44" Height="44" VerticalAlignment="Top">
+                                <Grid Width="44" Height="44" VerticalAlignment="Top">
                                     <Border CornerRadius="12"
                                             Background="{Binding AvatarBackground}"
                                             BorderBrush="{Binding AvatarBorder}"
@@ -166,7 +162,7 @@
                                            Visibility="{Binding HasFavicon, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                 </Grid>
 
-                                <StackPanel Grid.Column="1" MinWidth="0" VerticalAlignment="Center" Spacing="2">
+                                <StackPanel Grid.Column="1" MinWidth="0" VerticalAlignment="Top" Spacing="2">
                                     <Grid ColumnSpacing="6" MinWidth="0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -174,6 +170,7 @@
                                         </Grid.ColumnDefinitions>
                                         <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold"
                                                    FontSize="15" TextTrimming="CharacterEllipsis"
+                                                   Foreground="{ThemeResource FortivaHeadingBrush}"
                                                    ToolTipService.ToolTip="{Binding Title}"/>
                                         <FontIcon Grid.Column="1" Glyph="&#xE734;" FontSize="11"
                                                   Visibility="{Binding IsFavorite, Converter={StaticResource BoolToVisibilityConverter}}"
@@ -186,20 +183,34 @@
                                                ToolTipService.ToolTip="{Binding UsernameLine}"
                                                Visibility="{Binding HasUsernameLine, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                     <TextBlock Text="{Binding DetailLine}" Style="{StaticResource FortivaMutedText}"
-                                               FontSize="11" Opacity="0.85"
+                                               FontSize="11"
                                                TextTrimming="CharacterEllipsis"
                                                ToolTipService.ToolTip="{Binding DetailLine}"
                                                Visibility="{Binding HasDetailLine, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                     <TextBlock Text="{Binding ImportSourceLine}" Style="{StaticResource FortivaMutedText}"
-                                               FontSize="11" Opacity="0.75"
+                                               FontSize="11"
                                                TextTrimming="CharacterEllipsis"
                                                ToolTipService.ToolTip="{Binding ImportProvenanceLine}"
                                                Visibility="{Binding HasImportSourceLine, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                     <TextBlock Text="No username or URL" Style="{StaticResource FortivaMutedText}"
                                                Visibility="{Binding HasMissingDetails, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0"
+                                                Visibility="{Binding HasTagChip, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Border Style="{StaticResource FortivaTagChip}" MaxWidth="280">
+                                            <TextBlock Text="{Binding TagChip}" FontSize="11"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       ToolTipService.ToolTip="{Binding TagChip}"
+                                                       Foreground="{ThemeResource FortivaHeadingBrush}"/>
+                                        </Border>
+                                        <Border Style="{StaticResource FortivaTagChip}"
+                                                Visibility="{Binding HasExtraTags, Converter={StaticResource BoolToVisibilityConverter}}">
+                                            <TextBlock Text="{Binding ExtraTagsLabel}" FontSize="11"
+                                                       Foreground="{ThemeResource FortivaMutedBrush}"/>
+                                        </Border>
+                                    </StackPanel>
                                 </StackPanel>
 
-                                <StackPanel Grid.Column="2" Grid.RowSpan="2" Orientation="Horizontal" Spacing="0"
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="0"
                                             VerticalAlignment="Top">
                                     <Button Tag="{Binding}"
                                             Visibility="{Binding HasTotp, Converter={StaticResource BoolToVisibilityConverter}}"
@@ -220,22 +231,6 @@
                                             Click="CopyPassword_Click">
                                         <FontIcon Glyph="&#xE8C8;" FontSize="13"/>
                                     </Button>
-                                </StackPanel>
-
-                                <StackPanel Grid.Row="1" Grid.Column="1" MinWidth="0"
-                                            Orientation="Horizontal" Spacing="6" Margin="0,6,0,0"
-                                            Visibility="{Binding HasTagChip, Converter={StaticResource BoolToVisibilityConverter}}">
-                                    <Border Style="{StaticResource FortivaTagChip}" MaxWidth="280">
-                                        <TextBlock Text="{Binding TagChip}" FontSize="11"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   ToolTipService.ToolTip="{Binding TagChip}"
-                                                   Foreground="{ThemeResource FortivaBodyBrush}"/>
-                                    </Border>
-                                    <Border Style="{StaticResource FortivaTagChip}"
-                                            Visibility="{Binding HasExtraTags, Converter={StaticResource BoolToVisibilityConverter}}">
-                                        <TextBlock Text="{Binding ExtraTagsLabel}" FontSize="11"
-                                                   Foreground="{ThemeResource FortivaMutedBrush}"/>
-                                    </Border>
                                 </StackPanel>
                             </Grid>
                         </Border>

@@ -1557,7 +1557,10 @@ public sealed class VaultEntryViewModel : ViewModelBase
 
     public bool HasUsernameLine => !IsSecureNote && !string.IsNullOrWhiteSpace(Username);
     public string UsernameLine => Username;
-    public bool HasDetailLine => !IsSecureNote && !string.IsNullOrWhiteSpace(DomainDisplay);
+    public bool HasDetailLine => !IsSecureNote
+        && !string.IsNullOrWhiteSpace(DomainDisplay)
+        && !string.Equals(DomainDisplay, Username, StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(DomainDisplay, Title, StringComparison.OrdinalIgnoreCase);
     public string DetailLine => DomainDisplay;
     public bool IsSecureNoteEntry => IsSecureNote;
     public bool HasMissingDetails => !IsSecureNote && !HasUsernameLine && !HasDetailLine;

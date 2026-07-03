@@ -99,7 +99,8 @@
             </Grid>
         </Border>
 
-    <ScrollViewer x:Name="PageScroll" Grid.Row="1" Style="{StaticResource FortivaPageScrollViewer}">
+    <ScrollViewer x:Name="PageScroll" Grid.Row="1" Style="{StaticResource FortivaPageScrollViewer}"
+                  Padding="24,24,24,40">
         <StackPanel Spacing="24" HorizontalAlignment="Stretch">
             <Grid x:Name="CategoryGrid" ColumnSpacing="12">
                 <Grid.ColumnDefinitions>

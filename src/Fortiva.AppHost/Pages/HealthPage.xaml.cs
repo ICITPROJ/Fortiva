@@ -484,7 +484,7 @@ public sealed partial class HealthPage : Page
         {
             var severityKey = FortivaControlTheme.GetAuditSeverityKey(f.Severity);
             var accent = FortivaControlTheme.GetAuditSeverityBrush(severityKey, this, theme);
-            var bg = FortivaControlTheme.GetAuditSeverityBgBrush(severityKey, this, theme);
+            var bg = FortivaControlTheme.GetAuditSeverityCardBgBrush(severityKey, this, theme);
             var (titleBrush, detailBrush, badgeBg, badgeFg) =
                 FortivaControlTheme.GetAuditCardTextBrushes(severityKey, this, theme);
             var label = FortivaControlTheme.GetAuditSeverityLabel(f.Severity);
@@ -495,30 +495,26 @@ public sealed partial class HealthPage : Page
                 Padding = new Thickness(16),
                 Background = bg,
                 BorderBrush = accent,
-                BorderThickness = new Thickness(1),
-                RequestedTheme = theme
+                BorderThickness = new Thickness(1)
             };
-            FortivaThemeResources.MergeOnto(card, theme);
 
-            var grid = new Grid { ColumnSpacing = 12, RequestedTheme = theme };
+            var grid = new Grid { ColumnSpacing = 12 };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            var badges = new StackPanel { Spacing = 6, VerticalAlignment = VerticalAlignment.Center, RequestedTheme = theme };
+            var badges = new StackPanel { Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
             badges.Children.Add(new Border
             {
                 CornerRadius = new CornerRadius(4),
                 Padding = new Thickness(6, 2, 6, 2),
                 Background = badgeBg,
-                RequestedTheme = theme,
                 Child = new TextBlock
                 {
                     Text = label,
                     FontSize = 10,
                     FontWeight = Microsoft.UI.Text.FontWeights.Bold,
-                    Foreground = badgeFg,
-                    RequestedTheme = theme
+                    Foreground = badgeFg
                 }
             });
             badges.Children.Add(new TextBlock
@@ -526,27 +522,24 @@ public sealed partial class HealthPage : Page
                 Text = f.Category,
                 FontSize = 10,
                 Foreground = detailBrush,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                RequestedTheme = theme
+                HorizontalAlignment = HorizontalAlignment.Center
             });
             grid.Children.Add(badges);
 
-            var text = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center, RequestedTheme = theme };
+            var text = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
             text.Children.Add(new TextBlock
             {
                 Text = f.Title,
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 TextWrapping = TextWrapping.WrapWholeWords,
-                Foreground = titleBrush,
-                RequestedTheme = theme
+                Foreground = titleBrush
             });
             text.Children.Add(new TextBlock
             {
                 Text = f.Detail,
                 FontSize = 13,
                 TextWrapping = TextWrapping.WrapWholeWords,
-                Foreground = detailBrush,
-                RequestedTheme = theme
+                Foreground = detailBrush
             });
             Grid.SetColumn(text, 1);
             grid.Children.Add(text);
@@ -556,8 +549,7 @@ public sealed partial class HealthPage : Page
                 var btn = new Button
                 {
                     Content = ActionLabel(f.ActionHint),
-                    VerticalAlignment = VerticalAlignment.Center,
-                    RequestedTheme = theme
+                    VerticalAlignment = VerticalAlignment.Center
                 };
                 FortivaControlTheme.ApplySecondaryButton(btn, this, theme);
                 var finding = f;

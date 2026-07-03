@@ -141,13 +141,39 @@ public static class FortivaControlTheme
         FrameworkElement? context = null,
         ElementTheme? theme = null)
     {
-        theme ??= ResolveAppTheme();
-        var accent = GetAuditSeverityBrush(severityKey, context, theme);
+        var resolved = theme ?? ResolveAppTheme();
+        var accent = GetAuditSeverityBrush(severityKey, context, resolved);
         return (
+            ImmutableBrush("FortivaHeadingBrush", resolved, context),
+            ImmutableBrush("FortivaBodyBrush", resolved, context),
             accent,
-            GetBrush("FortivaBodyBrush", theme, context),
-            accent,
-            GetBrush("FortivaAccentButtonForegroundBrush", theme, context));
+            ImmutableBrush("FortivaAccentButtonForegroundBrush", resolved, context));
+    }
+
+    /// <summary>Card fill for audit findings — frosted panel in light mode, tinted wash in dark.</summary>
+    public static Brush GetAuditSeverityCardBgBrush(
+        string severityKey,
+        FrameworkElement? context = null,
+        ElementTheme? theme = null)
+    {
+        var resolved = theme ?? ResolveAppTheme();
+        if (resolved == ElementTheme.Light)
+            return ImmutableBrush("FortivaGlassFillBrush", resolved, context);
+        return ImmutableBrush(GetAuditSeverityBgBrushKey(severityKey), resolved, context);
+    }
+
+    private static string GetAuditSeverityBgBrushKey(string severityKey) => severityKey switch
+    {
+        "critical" => "FortivaSemanticErrorBgBrush",
+        "warning" => "FortivaSemanticWarningBgBrush",
+        "info" => "FortivaSemanticInfoBgBrush",
+        _ => "FortivaSemanticSuccessBgBrush"
+    };
+
+    private static Brush ImmutableBrush(string key, ElementTheme theme, FrameworkElement? context = null)
+    {
+        var brush = GetBrush(key, theme, context);
+        return brush is SolidColorBrush scb ? new SolidColorBrush(scb.Color) : brush;
     }
 
     public static (Brush Timestamp, Brush Message, Brush RowBg, Brush RowBorder) GetAuditLogRowBrushes(
