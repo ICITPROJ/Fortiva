@@ -622,8 +622,8 @@ public static class FortivaControlTheme
         border.BorderBrush = brushes.Border;
         border.BorderThickness = new Thickness(1);
         border.CornerRadius = new CornerRadius(8);
-        border.Padding = new Thickness(8, 8, 8, 8);
-        border.MinHeight = 44;
+        border.Padding = new Thickness(12);
+        border.MinHeight = 0;
     }
 
     public static void ApplyPreviewSurface(Border border, TextBlock content, FrameworkElement? context = null, ElementTheme? theme = null)

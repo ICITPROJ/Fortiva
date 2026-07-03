@@ -3,27 +3,25 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Markup;
 
 namespace Fortiva.AppHost.Services;
 
 /// <summary>Pick existing categories (tags) or type a new one — used in vault, quick add, and entry editor.</summary>
 public sealed class VaultTagPickerPanel
 {
+    private static readonly ItemsPanelTemplate ChipWrapPanelTemplate = CreateChipWrapPanelTemplate();
+
     private readonly ShellViewModel _vm;
     private FrameworkElement? _themeHost;
     private readonly HashSet<string> _selected = new(StringComparer.OrdinalIgnoreCase);
-    private readonly StackPanel _chipPanel = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
-    private readonly ScrollViewer _chipScroll = new()
+    private readonly ItemsControl _chipItems = new()
     {
-        HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
-        VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-        HorizontalScrollMode = ScrollMode.Enabled,
-        VerticalScrollMode = ScrollMode.Disabled,
-        Padding = new Thickness(0),
-        MinHeight = 36
+        HorizontalAlignment = HorizontalAlignment.Stretch,
+        VerticalAlignment = VerticalAlignment.Top
     };
     private readonly Border _outerShell = new();
-    private readonly StackPanel _inner = new() { Spacing = 10 };
+    private readonly StackPanel _inner = new() { Spacing = 12 };
     private readonly TextBox _newTagBox = new() { PlaceholderText = "New category name…" };
     private readonly Button _addBtn = new();
     private readonly TextBlock _emptyHint = new()
@@ -36,6 +34,7 @@ public sealed class VaultTagPickerPanel
     public VaultTagPickerPanel(ShellViewModel vm)
     {
         _vm = vm;
+        _chipItems.ItemsPanel = ChipWrapPanelTemplate;
 
         _addBtn.Content = new StackPanel
         {
@@ -47,6 +46,8 @@ public sealed class VaultTagPickerPanel
                 new TextBlock { Text = "Add" }
             }
         };
+        _addBtn.MinWidth = 88;
+        _addBtn.MinHeight = 44;
         _addBtn.Click += (_, _) => AddFromInput();
 
         _newTagBox.KeyDown += (_, e) =>
@@ -58,9 +59,9 @@ public sealed class VaultTagPickerPanel
             }
         };
 
-        var addRow = new Grid { ColumnSpacing = 8 };
-        addRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        addRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var addRow = new Grid { ColumnSpacing = 10 };
+        addRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = 120 });
+        addRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, MinWidth = 88 });
         Grid.SetColumn(_newTagBox, 0);
         Grid.SetColumn(_addBtn, 1);
         addRow.Children.Add(_newTagBox);
@@ -68,8 +69,7 @@ public sealed class VaultTagPickerPanel
 
         Root = _outerShell;
         _outerShell.HorizontalAlignment = HorizontalAlignment.Stretch;
-        _chipScroll.Content = _chipPanel;
-        _inner.Children.Add(_chipScroll);
+        _inner.Children.Add(_chipItems);
         _inner.Children.Add(addRow);
         _outerShell.Child = _inner;
     }
@@ -86,12 +86,12 @@ public sealed class VaultTagPickerPanel
             _themeHost = context;
 
         var host = _themeHost ?? Root;
-        var theme = FortivaControlTheme.ResolveHostTheme(host);
+        var theme = FortivaControlTheme.ResolveAppTheme();
         FortivaThemeResources.MergeOnto(Root, theme);
         Root.RequestedTheme = theme;
-        FortivaControlTheme.ApplyThemeRecursively(Root, theme);
         FortivaControlTheme.ApplyInputContainer(_outerShell, host, theme);
-        _inner.Spacing = 10;
+        _outerShell.Padding = new Thickness(12);
+        _inner.Spacing = 12;
 
         FortivaControlTheme.ApplyTextBox(_newTagBox, host, theme);
         FortivaControlTheme.ApplyInlineFieldButton(_addBtn, host, theme);
@@ -101,14 +101,15 @@ public sealed class VaultTagPickerPanel
             foreach (var child in addContent.Children.OfType<TextBlock>())
                 FortivaControlTheme.ApplyBodyText(child, host);
         }
-        RebuildChips();
+
+        RefreshChipThemes();
     }
 
     public void SetEnabled(bool enabled)
     {
         _newTagBox.IsEnabled = enabled;
         _addBtn.IsEnabled = enabled;
-        _chipScroll.IsEnabled = enabled;
+        _chipItems.IsEnabled = enabled;
     }
 
     public void ReloadKnownTags() => RebuildChips();
@@ -143,26 +144,35 @@ public sealed class VaultTagPickerPanel
 
     private void RebuildChips()
     {
-        _chipPanel.Children.Clear();
+        _chipItems.Items.Clear();
         var tags = _vm.GetKnownVaultTags();
-        var host = _themeHost ?? Root;
-        var theme = FortivaControlTheme.ResolveHostTheme(host);
         if (tags.Count == 0)
         {
-            _chipPanel.Children.Add(_emptyHint);
+            _chipItems.Items.Add(_emptyHint);
             return;
         }
 
+        var host = _themeHost ?? Root;
+        var theme = FortivaControlTheme.ResolveAppTheme();
         foreach (var tag in tags)
         {
             var isSelected = _selected.Contains(tag);
+            var label = new TextBlock
+            {
+                Text = tag,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxWidth = 360
+            };
+            ToolTipService.SetToolTip(label, tag);
             var toggle = new ToggleButton
             {
-                Content = tag,
+                Content = label,
                 IsChecked = isSelected,
                 Tag = tag,
                 FontSize = 12,
-                MaxWidth = 260
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 0, 8, 8)
             };
             FortivaSurfaceEffects.ApplyChipToggle(toggle, isSelected, host, theme);
             toggle.Checked += ChipToggleChanged;
@@ -174,7 +184,20 @@ public sealed class VaultTagPickerPanel
             };
             toggle.PointerExited += (_, _) =>
                 FortivaSurfaceEffects.ApplyChipToggle(toggle, toggle.IsChecked == true, host, theme);
-            _chipPanel.Children.Add(toggle);
+            _chipItems.Items.Add(toggle);
+        }
+    }
+
+    private void RefreshChipThemes()
+    {
+        var host = _themeHost ?? Root;
+        var theme = FortivaControlTheme.ResolveAppTheme();
+        foreach (var item in _chipItems.Items)
+        {
+            if (item is ToggleButton toggle)
+                FortivaSurfaceEffects.ApplyChipToggle(toggle, toggle.IsChecked == true, host, theme);
+            else if (item is TextBlock hint)
+                FortivaControlTheme.ApplyMutedText(hint, host);
         }
     }
 
@@ -192,5 +215,16 @@ public sealed class VaultTagPickerPanel
         else
             _selected.Remove(tag);
         NotifyTagsChanged();
+    }
+
+    private static ItemsPanelTemplate CreateChipWrapPanelTemplate()
+    {
+        const string xaml =
+            """
+            <ItemsPanelTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>
+                <ItemsWrapGrid Orientation='Horizontal' MaximumRowsOrColumns='0'/>
+            </ItemsPanelTemplate>
+            """;
+        return (ItemsPanelTemplate)XamlReader.Load(xaml);
     }
 }

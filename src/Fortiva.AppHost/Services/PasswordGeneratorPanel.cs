@@ -53,6 +53,7 @@ public sealed class PasswordGeneratorPanel
     private readonly List<ToggleSwitch> _charToggles = [];
 
     private FrameworkElement? _themeHost;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _regenerateTimer;
 
     private readonly PasswordGeneratorHostMode _hostMode;
 
@@ -323,15 +324,15 @@ public sealed class PasswordGeneratorPanel
         }
 
         _presetBox.SelectionChanged += (_, _) => { ApplyPresetUi(); Regenerate(); };
-        _lengthSlider.ValueChanged += (_, _) => { UpdateLengthValue(); Regenerate(); };
-        _wordCountSlider.ValueChanged += (_, _) => Regenerate();
-        _separatorBox.TextChanged += (_, _) => Regenerate();
+        _lengthSlider.ValueChanged += (_, _) => { UpdateLengthValue(); ScheduleRegenerate(); };
+        _wordCountSlider.ValueChanged += (_, _) => ScheduleRegenerate();
+        _separatorBox.TextChanged += (_, _) => ScheduleRegenerate();
         lowerToggle.Toggled += (_, _) => Regenerate();
         upperToggle.Toggled += (_, _) => Regenerate();
         digitToggle.Toggled += (_, _) => Regenerate();
         symbolToggle.Toggled += (_, _) => Regenerate();
-        _symbolsBox.TextChanged += (_, _) => Regenerate();
-        _customCharsetBox.TextChanged += (_, _) => Regenerate();
+        _symbolsBox.TextChanged += (_, _) => ScheduleRegenerate(200);
+        _customCharsetBox.TextChanged += (_, _) => ScheduleRegenerate(200);
         _ambiguousToggle.Toggled += (_, _) => Regenerate();
         _requireEachToggle.Toggled += (_, _) => Regenerate();
 
@@ -451,10 +452,25 @@ public sealed class PasswordGeneratorPanel
         Root.Children.Add(_categoriesLabel);
         Root.Children.Add(_tagPicker.Root);
 
-        _vm.ThemeChanged += () => ApplyThemeResources(_themeHost);
-
         ApplyPresetUi();
         Regenerate();
+    }
+
+    private void ScheduleRegenerate(int delayMs = 100)
+    {
+        _regenerateTimer ??= Root.DispatcherQueue.CreateTimer();
+        _regenerateTimer.Interval = TimeSpan.FromMilliseconds(delayMs);
+        _regenerateTimer.IsRepeating = false;
+        _regenerateTimer.Tick -= RegenerateTimer_Tick;
+        _regenerateTimer.Tick += RegenerateTimer_Tick;
+        _regenerateTimer.Stop();
+        _regenerateTimer.Start();
+    }
+
+    private void RegenerateTimer_Tick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        RegenerateInternal();
     }
 
     private Action RegenerateInternal { get; }
@@ -504,7 +520,6 @@ public sealed class PasswordGeneratorPanel
 
         Root.RequestedTheme = theme;
         FortivaThemeResources.MergeOnto(Root, theme);
-        FortivaControlTheme.ApplyThemeRecursively(Root, theme);
 
         if (_optionsShell is not null)
         {
