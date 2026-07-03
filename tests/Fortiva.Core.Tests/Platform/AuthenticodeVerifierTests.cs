@@ -29,22 +29,29 @@ public sealed class AuthenticodeVerifierTests
     }
 
     [Fact]
-    public void ConfigureForEdition_require_codesign_blocked_when_allow_unsigned_set()
+    public void ConfigureForEdition_require_codesign_not_blocked_by_allow_unsigned_outside_ci()
     {
         var previous = AuthenticodePolicy.RequireSignedExecutables;
         var priorRequire = Environment.GetEnvironmentVariable("FORTIVA_REQUIRE_CODESIGN");
         var priorAllow = Environment.GetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE");
+        var priorActions = Environment.GetEnvironmentVariable("GITHUB_ACTIONS");
         try
         {
             Environment.SetEnvironmentVariable("FORTIVA_REQUIRE_CODESIGN", "1");
             Environment.SetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE", "1");
+            Environment.SetEnvironmentVariable("GITHUB_ACTIONS", null);
             AuthenticodePolicy.ConfigureForEdition("Enterprise");
+#if DEBUG
             Assert.False(AuthenticodePolicy.RequireSignedExecutables);
+#else
+            Assert.True(AuthenticodePolicy.RequireSignedExecutables);
+#endif
         }
         finally
         {
             Environment.SetEnvironmentVariable("FORTIVA_REQUIRE_CODESIGN", priorRequire);
             Environment.SetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE", priorAllow);
+            Environment.SetEnvironmentVariable("GITHUB_ACTIONS", priorActions);
             AuthenticodePolicy.RequireSignedExecutables = previous;
         }
     }

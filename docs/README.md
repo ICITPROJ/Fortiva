@@ -1,6 +1,8 @@
 # Fortiva documentation
 
-This folder contains all product documentation for **Fortiva** (v1.0.37+). Pick the path that matches your role.
+This folder contains all product documentation for **Fortiva**. Pick the path that matches your role.
+
+**Product version:** see [`Directory.Build.props`](../Directory.Build.props) (`Version` property). Extension `manifest.json` must match for bridge QA.
 
 ---
 
@@ -37,6 +39,7 @@ Start here if you build, review, or integrate Fortiva.
 | **[Vault format](VAULT-FORMAT.md)** | `.fva` binary layout, key hierarchy, snapshots |
 | **[Bridge architecture](BRIDGE-ARCHITECTURE.md)** | Loopback HTTP `:7847`, native fallback, API, error codes |
 | **[Threat model](THREAT-MODEL.md)** | Trust boundaries, assets, mitigations, explicit non-goals |
+| **[Security policy](../SECURITY.md)** | Vulnerability reporting and supported versions |
 | **[Update strategy](UPDATE-STRATEGY.md)** | Personal auto-update behaviour and guarantees |
 | **[Release pipeline](RELEASE-PIPELINE.md)** | CI/CD, GitHub Releases, troubleshooting |
 | **[Policy & licensing](POLICY-LICENSING.md)** | Enterprise license JSON and policy engine |
@@ -72,7 +75,7 @@ Root **[README](../README.md)** covers installer build and distribution channels
 
 ## Document conventions
 
-- **Version:** Product version lives in `Directory.Build.props` (currently **1.0.37**). Extension manifest must match for bridge QA.
+- **Version:** Product version lives in [`Directory.Build.props`](../Directory.Build.props). Do not hardcode version numbers in docs — link to releases or the props file.
 - **Paths:** `%AppData%` = roaming profile (`FortivaPaths.PersonalDataRoot`). `%LocalAppData%` = local app data (`FortivaPersonal` staging, logs, pre-update backups).
 - **Vault file:** On-disk encrypted store is always `vault.fva`. Encrypted **export** backups use `.fva` (import also accepts `.fvab` / `.json`).
 

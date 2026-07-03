@@ -120,23 +120,25 @@ EntryPage → VaultSession.AddOrUpdateEntry
   → Integrity log append
 ```
 
-### 3. Browser Fill (HTTP path, v1.0.37+)
+### 3. Browser Fill (HTTP path, v1.0.57+)
 
 ```text
 extension/background.js
-  → POST http://127.0.0.1:7847/auth/session  (Origin: chrome-extension://…)
-  ← { bridgeToken }
+  → sendNativeMessage({ command: "get_session_token" })
+  ← { bridgeToken, status }   (via validated named pipe — HTTP never mints tokens)
   → GET /status-and-matches?domain=&url=  (X-Fortiva-Bridge-Token)
   ← { matches, fillNonce }
 User clicks Fill
   → POST /execute-fill { entryId, fillNonce, domain, url }
-  ← sealed credentials
+  ← credentials
   → content script injects fields
 ```
 
-Native fallback: `sendNativeMessage` → `Fortiva.BrowserBridge.Host.exe` (one shot) → named pipes → same `VaultSession`.
+If token fetch or authed HTTP fails, extension falls back to native `get_status_and_matches` / `execute_fill`.
 
-See [BRIDGE-ARCHITECTURE.md](BRIDGE-ARCHITECTURE.md) for error codes and timeouts.
+`POST /auth/session` is deprecated (status-only; no token). See [BRIDGE-ARCHITECTURE.md](BRIDGE-ARCHITECTURE.md).
+
+Native fallback: `sendNativeMessage` → `Fortiva.BrowserBridge.Host.exe` (one shot) → named pipes → same `VaultSession`.
 
 ### 4. Personal auto-update
 

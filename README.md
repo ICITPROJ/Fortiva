@@ -6,6 +6,19 @@ Fortiva is a Windows-native password manager built on the Windows stack.
 Symmetric encryption uses Windows CNG (AES-256-GCM). Master-password key derivation
 uses memory-hard Argon2id. There is no cloud sync, no telemetry, and no Electron runtime.
 
+## Download Fortiva Personal
+
+**[Download latest installer (GitHub Releases)](https://github.com/ICITPROJ/Fortiva/releases/latest)**
+
+| Step | Action |
+|------|--------|
+| 1 | Download `FortivaPersonal-{version}-Setup.exe` from the link above |
+| 2 | Run the installer (SmartScreen may prompt — Personal builds are unsigned; see [`docs/CODESIGNING.md`](docs/CODESIGNING.md)) |
+| 3 | Create your vault, then **Settings → Connect browser** for autofill |
+| 4 | After updates, **reload the browser extension** in `edge://extensions` |
+
+Check for updates in-app: **Settings → Check for updates** (Personal edition).
+
 ## Components
 
 | Component | Description |
@@ -53,7 +66,7 @@ Master Key (MK)  ──AES-256-GCM (Windows CNG)──►  Wrapped Vault Key (VK
 
 ```powershell
 dotnet build src/Fortiva.Core/Fortiva.Core.csproj -c Release
-dotnet test  tests/Fortiva.Core.Tests/                        # 200+ tests
+dotnet test  tests/Fortiva.Core.Tests/                        # 360+ tests
 dotnet test  tests/Fortiva.AppHost.Tests/ -p:Platform=x64     # ViewModel + Hello tests
 ```
 
@@ -106,6 +119,8 @@ Installers bundle .NET 8 + Windows App SDK and install **WebView2** + **VC++ x64
 | **Developers** | [`docs/BRIDGE-ARCHITECTURE.md`](docs/BRIDGE-ARCHITECTURE.md) | Browser bridge — loopback HTTP + native fallback |
 | **Developers** | [`docs/VAULT-FORMAT.md`](docs/VAULT-FORMAT.md) | `.fva` binary format specification |
 | **Security / IT** | [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) | Threat model, trust boundaries, mitigations |
+| **Security / IT** | [`SECURITY.md`](SECURITY.md) | Vulnerability reporting, supported versions |
+| **Security / IT** | [`docs/WORLD-RELEASE-AUDIT.md`](docs/WORLD-RELEASE-AUDIT.md) | Public launch readiness audit |
 | **Security / IT** | [`docs/POLICY-LICENSING.md`](docs/POLICY-LICENSING.md) | License structure, policy engine |
 | **Ops** | [`docs/RELEASE-PIPELINE.md`](docs/RELEASE-PIPELINE.md) | CI/CD — auto-release on push to `main` |
 | **Ops** | [`docs/UPDATE-STRATEGY.md`](docs/UPDATE-STRATEGY.md) | Personal auto-update via GitHub Releases |

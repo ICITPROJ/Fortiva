@@ -50,7 +50,10 @@ public sealed class AuditLogger
             Environment.ExpandEnvironmentVariables(@"%PROGRAMDATA%\Fortiva"),
             "audit");
         Directory.CreateDirectory(_auditDirectory);
-        _hmacKey = AuditIntegrity.LoadOrCreateHmacKey(_auditDirectory);
+        var hmacScope = _auditDirectory.Replace('\\', '/').Contains("FortivaPersonal/", StringComparison.OrdinalIgnoreCase)
+            ? DataProtectionScope.CurrentUser
+            : DataProtectionScope.LocalMachine;
+        _hmacKey = AuditIntegrity.LoadOrCreateHmacKey(_auditDirectory, hmacScope);
     }
 
     public void Log(AuditEventType type, string message, bool success = true)

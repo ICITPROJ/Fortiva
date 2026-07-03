@@ -9,6 +9,7 @@ namespace Fortiva.Core.BrowserBridge;
 public sealed class NativeMessagingHostPump : IAsyncDisposable
 {
     private const int RequestTimeoutSeconds = 5;
+    private const int SessionTokenTimeoutSeconds = 10;
     private const int ExecuteFillTimeoutSeconds = 30;
 
     private readonly bool _enterprise;
@@ -72,9 +73,7 @@ public sealed class NativeMessagingHostPump : IAsyncDisposable
                 }
                 else
                 {
-                    var timeoutSeconds = string.Equals(command, "execute_fill", StringComparison.OrdinalIgnoreCase)
-                        ? ExecuteFillTimeoutSeconds
-                        : RequestTimeoutSeconds;
+                    var timeoutSeconds = ResolveTimeoutSeconds(command);
 
                     var handleTask = BridgeNativeForwarder.HandleAsync(doc.RootElement, CancellationToken.None);
                     var completed = await Task.WhenAny(handleTask, Task.Delay(TimeSpan.FromSeconds(timeoutSeconds)))
@@ -95,8 +94,31 @@ public sealed class NativeMessagingHostPump : IAsyncDisposable
         NativeMessagingFraming.WriteLengthPrefixedMessage(_stdout, bytes);
     }
 
+    private static int ResolveTimeoutSeconds(string? command)
+    {
+        if (string.Equals(command, "execute_fill", StringComparison.OrdinalIgnoreCase))
+            return ExecuteFillTimeoutSeconds;
+        if (string.Equals(command, "get_session_token", StringComparison.OrdinalIgnoreCase))
+            return SessionTokenTimeoutSeconds;
+        return RequestTimeoutSeconds;
+    }
+
     private static string SerializeNoSessionResponse(string? command)
     {
+        if (string.Equals(command, "get_session_token", StringComparison.OrdinalIgnoreCase))
+        {
+            return BridgeJson.SerializeSessionToken(new BridgeSessionTokenResponse
+            {
+                BridgeToken = null,
+                Status = new BridgeStatusBlock
+                {
+                    AppRunning = BridgeProcessCheck.IsFortivaRunning(),
+                    VaultUnlocked = false,
+                    Error = "vault_locked"
+                }
+            });
+        }
+
         if (string.Equals(command, "execute_fill", StringComparison.OrdinalIgnoreCase))
         {
             return BridgeJson.Serialize(new CredentialResponse
@@ -119,6 +141,20 @@ public sealed class NativeMessagingHostPump : IAsyncDisposable
 
     private static string SerializeTimeoutResponse(string? command)
     {
+        if (string.Equals(command, "get_session_token", StringComparison.OrdinalIgnoreCase))
+        {
+            return BridgeJson.SerializeSessionToken(new BridgeSessionTokenResponse
+            {
+                BridgeToken = null,
+                Status = new BridgeStatusBlock
+                {
+                    AppRunning = BridgeProcessCheck.IsFortivaRunning(),
+                    VaultUnlocked = false,
+                    Error = "internal_error"
+                }
+            });
+        }
+
         if (string.Equals(command, "execute_fill", StringComparison.OrdinalIgnoreCase))
         {
             return BridgeJson.Serialize(new CredentialResponse

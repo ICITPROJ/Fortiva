@@ -839,6 +839,7 @@ public sealed class VaultSession : IDisposable
         {
             _localhostBridge?.Dispose();
             _localhostBridge = new BridgeLocalhostServer(
+                _bridgeSessionToken ?? throw new InvalidOperationException("Bridge session token is not initialized."),
                 () => _context is not null,
                 ListMatchesForDomain,
                 ResolveForDomain);

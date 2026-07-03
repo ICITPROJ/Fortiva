@@ -11,6 +11,14 @@ public sealed class BridgeStatusAndMatchesResponse
     public string? FillNonce { get; set; }
 }
 
+/// <summary>Native-messaging response for loopback HTTP bridge token handoff.</summary>
+public sealed class BridgeSessionTokenResponse
+{
+    public string? BridgeToken { get; set; }
+
+    public BridgeStatusBlock Status { get; set; } = new();
+}
+
 public sealed class BridgeStatusBlock
 {
     public bool AppRunning { get; set; }

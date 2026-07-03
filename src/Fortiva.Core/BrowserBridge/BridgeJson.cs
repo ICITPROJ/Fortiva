@@ -18,6 +18,17 @@ public static class BridgeJson
 
     public static string Serialize<T>(T value) => JsonSerializer.Serialize(value, Options);
 
+    public static string SerializeSessionToken(BridgeSessionTokenResponse value) =>
+        JsonSerializer.Serialize(value, SessionTokenOptions);
+
+    private static readonly JsonSerializerOptions SessionTokenOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNameCaseInsensitive = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+        MaxDepth = 16
+    };
+
     public static T? Deserialize<T>(string json) => JsonSerializer.Deserialize<T>(json, Options);
 
     /// <summary>

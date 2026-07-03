@@ -1,5 +1,4 @@
 using System.Net;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Fortiva.Core.Platform;
@@ -15,17 +14,19 @@ public sealed class BridgeLocalhostServer : IDisposable
     private readonly Func<CredentialRequest, CredentialResponse> _listMatches;
     private readonly Func<CredentialRequest, CredentialResponse> _resolveCredentials;
     private readonly string _listenPrefix;
-    private readonly string _bridgeToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
+    private readonly string _bridgeToken;
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _loopTask;
 
     public BridgeLocalhostServer(
+        string sessionToken,
         Func<bool> isUnlocked,
         Func<CredentialRequest, CredentialResponse> listMatches,
         Func<CredentialRequest, CredentialResponse> resolveCredentials,
         string? listenPrefix = null)
     {
+        _bridgeToken = sessionToken ?? throw new ArgumentNullException(nameof(sessionToken));
         _isUnlocked = isUnlocked ?? throw new ArgumentNullException(nameof(isUnlocked));
         _listMatches = listMatches ?? throw new ArgumentNullException(nameof(listMatches));
         _resolveCredentials = resolveCredentials ?? throw new ArgumentNullException(nameof(resolveCredentials));
@@ -162,45 +163,24 @@ public sealed class BridgeLocalhostServer : IDisposable
     private static bool IsExtensionOrigin(HttpListenerRequest request)
     {
         var origin = request.Headers["Origin"];
-        if (!string.IsNullOrEmpty(origin))
-        {
-            var expected = BridgeLocalhostConstants.ExtensionOrigin.TrimEnd('/');
-            if (string.Equals(origin.TrimEnd('/'), expected, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
+        if (string.IsNullOrEmpty(origin))
+            return false;
 
-        // Loopback callers (extension service worker may omit Origin on localhost fetch).
-        var remote = request.RemoteEndPoint?.Address;
-        return remote is null
-            || System.Net.IPAddress.IsLoopback(remote)
-            || remote.Equals(System.Net.IPAddress.IPv6Loopback);
+        var expected = BridgeLocalhostConstants.ExtensionOrigin.TrimEnd('/');
+        return string.Equals(origin.TrimEnd('/'), expected, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task HandlePublicStatusAsync(HttpListenerContext ctx)
     {
-        if (!_isUnlocked())
-        {
-            await WriteJsonAsync(ctx.Response, 200, new
-            {
-                status = new BridgeStatusBlock
-                {
-                    AppRunning = true,
-                    VaultUnlocked = false,
-                    Error = "vault_locked"
-                },
-                authRequired = true,
-                matches = Array.Empty<BridgeMatchSummary>()
-            }).ConfigureAwait(false);
-            return;
-        }
-
+        // Never reveal unlock state to unauthenticated callers (local malware probing).
+        var error = _isUnlocked() ? "auth_required" : "vault_locked";
         await WriteJsonAsync(ctx.Response, 200, new
         {
             status = new BridgeStatusBlock
             {
                 AppRunning = true,
-                VaultUnlocked = true,
-                Error = null
+                VaultUnlocked = false,
+                Error = error
             },
             authRequired = true,
             matches = Array.Empty<BridgeMatchSummary>()
@@ -215,29 +195,17 @@ public sealed class BridgeLocalhostServer : IDisposable
             return;
         }
 
-        if (!_isUnlocked())
-        {
-            await WriteJsonAsync(ctx.Response, 200, new
-            {
-                status = new BridgeStatusBlock
-                {
-                    AppRunning = true,
-                    VaultUnlocked = false,
-                    Error = "vault_locked"
-                }
-            }).ConfigureAwait(false);
-            return;
-        }
-
+        // Tokens are issued only via validated named pipe (native host). HTTP never mints credentials.
+        var error = _isUnlocked() ? "auth_required" : "vault_locked";
         await WriteJsonAsync(ctx.Response, 200, new
         {
-            bridgeToken = _bridgeToken,
             status = new BridgeStatusBlock
             {
                 AppRunning = true,
-                VaultUnlocked = true,
-                Error = null
-            }
+                VaultUnlocked = false,
+                Error = error
+            },
+            authRequired = true
         }).ConfigureAwait(false);
     }
 
@@ -283,7 +251,6 @@ public sealed class BridgeLocalhostServer : IDisposable
 
         await WriteJsonAsync(ctx.Response, 200, new
         {
-            bridgeToken = _bridgeToken,
             status = response.Status,
             matches = response.Matches,
             fillNonce = response.FillNonce

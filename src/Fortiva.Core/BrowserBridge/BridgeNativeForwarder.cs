@@ -33,6 +33,9 @@ public static class BridgeNativeForwarder
         if (string.Equals(command, "prepare_fill", StringComparison.OrdinalIgnoreCase))
             return await PrepareFillAsync(request, ct).ConfigureAwait(false);
 
+        if (string.Equals(command, "get_session_token", StringComparison.OrdinalIgnoreCase))
+            return await GetSessionTokenForExtensionAsync(ct).ConfigureAwait(false);
+
         return await ForwardCredentialAsync(request, ct, allowBrowserUnlock: false).ConfigureAwait(false);
     }
 
@@ -215,6 +218,77 @@ public static class BridgeNativeForwarder
             });
         }
     }
+
+    /// <summary>
+    /// Returns the per-unlock session token for loopback HTTP bridge auth.
+    /// Only reachable via validated native-messaging host (pipe client validation).
+    /// </summary>
+    public static async Task<string> GetSessionTokenForExtensionAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            using var overall = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            overall.CancelAfter(TimeSpan.FromSeconds(IsFastTest ? 5 : 8));
+
+            if (!BridgePipeNaming.HasActiveSession(IsEnterpriseEdition))
+            {
+                return SerializeSessionToken(null, new BridgeStatusBlock
+                {
+                    AppRunning = BridgeProcessCheck.IsFortivaRunning(),
+                    VaultUnlocked = false,
+                    Error = "vault_locked"
+                });
+            }
+
+            var token = await RequestSessionTokenAsync(
+                attempts: IsFastTest ? 2 : 3,
+                timeoutMs: IsFastTest ? 400 : 1200,
+                overall.Token).ConfigureAwait(false);
+
+            if (string.IsNullOrEmpty(token))
+            {
+                return SerializeSessionToken(null, new BridgeStatusBlock
+                {
+                    AppRunning = true,
+                    VaultUnlocked = false,
+                    Error = "token_stale"
+                });
+            }
+
+            return SerializeSessionToken(token, new BridgeStatusBlock
+            {
+                AppRunning = true,
+                VaultUnlocked = true,
+                Error = null
+            });
+        }
+        catch (OperationCanceledException)
+        {
+            return SerializeSessionToken(null, new BridgeStatusBlock
+            {
+                AppRunning = BridgeProcessCheck.IsFortivaRunning(),
+                VaultUnlocked = false,
+                Error = "internal_error"
+            });
+        }
+        catch (Exception ex)
+        {
+            FortivaDiagnosticLog.Write("BridgeNativeForwarder.GetSessionToken", ex);
+            return SerializeSessionToken(null, new BridgeStatusBlock
+            {
+                AppRunning = false,
+                VaultUnlocked = false,
+                Error = "host_unreachable"
+            });
+        }
+    }
+
+    private static string SerializeSessionToken(string? bridgeToken, BridgeStatusBlock status) =>
+        BridgeJson.SerializeSessionToken(new BridgeSessionTokenResponse
+        {
+            BridgeToken = bridgeToken,
+            Status = status
+        });
 
     private static string SerializeStatusAndMatches(BridgeStatusBlock status, IReadOnlyList<BridgeMatchSummary>? matches = null) =>
         BridgeJson.Serialize(new BridgeStatusAndMatchesResponse

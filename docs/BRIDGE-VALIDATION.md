@@ -1,7 +1,8 @@
 # Fortiva Browser Bridge — validation notes
 
-> **Current architecture (v1.0.37+):** See [`BRIDGE-ARCHITECTURE.md`](BRIDGE-ARCHITECTURE.md).  
-> The closure report below describes the **pre-1.0.37 push-cache model** and is kept for historical context only.
+> **Current architecture (v1.0.57+):** See [`BRIDGE-ARCHITECTURE.md`](BRIDGE-ARCHITECTURE.md).  
+> Session tokens are issued via native `get_session_token` only — not `POST /auth/session`.  
+> Historical notes below describe the pre-1.0.37 push-cache model.
 
 ---
 

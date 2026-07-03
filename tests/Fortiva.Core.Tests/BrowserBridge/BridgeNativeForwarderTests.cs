@@ -27,6 +27,47 @@ public class BridgeNativeForwarderTests
     }
 
     [Fact]
+    public async Task HandleAsync_RoutesGetSessionToken()
+    {
+        Environment.SetEnvironmentVariable("FORTIVA_BRIDGE_FAST_TEST", "1");
+        try
+        {
+            var json = """{"command":"get_session_token"}""";
+            using var doc = JsonDocument.Parse(json);
+            var result = await BridgeNativeForwarder.HandleAsync(doc.RootElement);
+            using var response = JsonDocument.Parse(result);
+            Assert.True(response.RootElement.TryGetProperty("bridgeToken", out _));
+            Assert.True(response.RootElement.TryGetProperty("status", out var status));
+            Assert.True(status.TryGetProperty("error", out var error));
+            Assert.False(string.IsNullOrEmpty(error.GetString()));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("FORTIVA_BRIDGE_FAST_TEST", null);
+        }
+    }
+
+    [Fact]
+    public async Task GetSessionTokenForExtension_WithNoSession_ReturnsStructuredResponse()
+    {
+        Environment.SetEnvironmentVariable("FORTIVA_BRIDGE_FAST_TEST", "1");
+        try
+        {
+            var result = await BridgeNativeForwarder.GetSessionTokenForExtensionAsync();
+            using var response = JsonDocument.Parse(result);
+            Assert.True(response.RootElement.TryGetProperty("bridgeToken", out var token));
+            Assert.Equal(JsonValueKind.Null, token.ValueKind);
+            Assert.True(response.RootElement.TryGetProperty("status", out var status));
+            Assert.True(status.TryGetProperty("error", out var error));
+            Assert.False(string.IsNullOrEmpty(error.GetString()));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("FORTIVA_BRIDGE_FAST_TEST", null);
+        }
+    }
+
+    [Fact]
     public async Task HandleAsync_RoutesGetStatusAndMatches()
     {
         Environment.SetEnvironmentVariable("FORTIVA_BRIDGE_FAST_TEST", "1");

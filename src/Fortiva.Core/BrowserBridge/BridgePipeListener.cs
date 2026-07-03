@@ -12,22 +12,14 @@ internal static class BridgePipeListener
     {
         get
         {
-            if (!string.Equals(
+#if DEBUG
+            if (string.Equals(
                     Environment.GetEnvironmentVariable("FORTIVA_BRIDGE_DISABLE_PIPE_VALIDATION"),
                     "1",
                     StringComparison.Ordinal))
-            {
-                return true;
-            }
-
-#if DEBUG
-            return false;
-#else
-            return string.Equals(
-                Environment.GetEnvironmentVariable("FORTIVA_BRIDGE_FAST_TEST"),
-                "1",
-                StringComparison.Ordinal);
+                return false;
 #endif
+            return true;
         }
     }
     public static Task[] Start(

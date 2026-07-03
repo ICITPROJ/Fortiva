@@ -74,7 +74,7 @@ Fortiva never transmits your passwords to any server. There is no cloud sync, no
 | **Fortiva Enterprise** | Business users with IT-managed policies | `FortivaEnterprise-{version}-Setup.exe` |
 | **Fortiva Admin Console** | IT administrators | `FortivaAdmin-{version}-Setup.exe` |
 
-**Key capabilities (v1.0.37):**
+**Key capabilities:**
 
 - **Security audit** — full-width dashboard with actionable deep links and JSON/HTML export
 - **Windows Hello** — software-backed unlock by default; optional TPM upgrade in Settings
@@ -458,7 +458,7 @@ The Fortiva browser extension lets you **Fill** saved logins into website forms.
 3. If your browser is **closed**, Fortiva opens it with the extension loaded.
 4. If your browser is **already open**, Fortiva offers to **close and reopen** — or set up manually.
 5. **Manual fallback:** Developer mode → **Load unpacked** → select the folder Fortiva opened (path copied to clipboard).
-6. **After Fortiva updates:** if Settings → Browser extension shows a **version mismatch**, run **Connect browser** and click **Reload** on the extension in `edge://extensions` or `chrome://extensions`.
+6. **After Fortiva updates:** run **Connect browser**, then click **Reload** on the extension in `edge://extensions` or `chrome://extensions` (required after bridge security updates).
 
 The extension folder is:
 `%LOCALAPPDATA%\FortivaPersonal\extension` (Personal) or `%LOCALAPPDATA%\FortivaEnterprise\extension` (Enterprise).
@@ -487,7 +487,7 @@ Extension ID (stable): **`llkpcnbhmhpenahlcdnbbfmkdfkgnpnj`**
 Fortiva Enterprise requires a valid signed license file.
 
 1. Your IT administrator will provide a `license.dat` file.
-2. Copy it to: `%AppData%\Fortiva\Enterprise\license.dat`
+2. Copy it to: `%ProgramData%\Fortiva\license.dat`
 3. Launch Fortiva Enterprise. The license is verified automatically on startup.
 
 If no valid license is found, the app displays a message and exits.
@@ -636,7 +636,7 @@ If Hello was set up but the button is missing, check that `%AppData%\Fortiva\hel
 Fortiva should prompt **once** during setup. If setup fails with a TPM/hardware error, software Hello is still saved when possible. Check `%LocalAppData%\FortivaPersonal\fortiva-crash.log` for `HelloSetup:` lines. Use **Remove Hello credential** and set up again if the binding is orphaned.
 
 ### Security audit layout looks different from other pages
-As of v1.0.37+, Security audit uses the same toolbar + full-width scroll layout as Settings. Update Fortiva if you still see a narrow centered column with large side margins.
+As of recent releases, Security audit uses the same toolbar + full-width scroll layout as Settings. Update Fortiva if you still see a narrow centered column with large side margins.
 
 ---
 

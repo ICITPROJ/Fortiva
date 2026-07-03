@@ -8,11 +8,14 @@ namespace Fortiva.Core.Tests.BrowserBridge;
 
 public class BridgeLocalhostServerTests
 {
+    private const string TestSessionToken = "test-bridge-session-token-base64==";
+
     [Fact]
     public async Task StatusAndMatches_WhenUnlocked_RequiresAuthThenReturnsMatches()
     {
         var prefix = $"http://127.0.0.1:{GetFreeTcpPort()}/";
         var server = new BridgeLocalhostServer(
+            TestSessionToken,
             () => true,
             _ => new CredentialResponse
             {
@@ -43,20 +46,83 @@ public class BridgeLocalhostServerTests
                 $"{prefix}status-and-matches?domain=login.example.com&url=https://login.example.com/");
             Assert.Contains("authRequired", publicJson, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("user@test.com", publicJson, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("vaultUnlocked\":true", publicJson.Replace(" ", ""), StringComparison.OrdinalIgnoreCase);
 
             using var auth = new HttpRequestMessage(HttpMethod.Post, $"{prefix}auth/session");
             auth.Headers.TryAddWithoutValidation("Origin", BridgeLocalhostConstants.ExtensionOrigin);
             var authResponse = await http.SendAsync(auth);
             authResponse.EnsureSuccessStatusCode();
             var authJson = await authResponse.Content.ReadAsStringAsync();
-            Assert.Contains("bridgeToken", authJson, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("bridgeToken", authJson, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("authRequired", authJson, StringComparison.OrdinalIgnoreCase);
 
-            var token = ExtractBridgeToken(authJson);
-            Assert.False(string.IsNullOrWhiteSpace(token));
-
-            var json = await WaitForAuthedMatchesAsync(http, prefix, token!, "user@test.com");
+            var json = await WaitForAuthedMatchesAsync(http, prefix, TestSessionToken, "user@test.com");
             Assert.Contains("vaultUnlocked", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("user@test.com", json, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("bridgeToken", json, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (HttpRequestException ex) when (ex.Message.Contains("refused", StringComparison.OrdinalIgnoreCase))
+        {
+            // HttpListener URL reservation unavailable in CI — skip.
+        }
+        finally
+        {
+            server.Dispose();
+            await Task.Delay(50);
+        }
+    }
+
+    [Fact]
+    public async Task AuthSession_WithoutOrigin_ReturnsForbidden()
+    {
+        var prefix = $"http://127.0.0.1:{GetFreeTcpPort()}/";
+        var server = new BridgeLocalhostServer(
+            TestSessionToken,
+            () => true,
+            _ => new CredentialResponse(),
+            _ => new CredentialResponse(),
+            listenPrefix: prefix);
+
+        if (!TryStartServer(server))
+            return;
+
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+            var response = await http.PostAsync($"{prefix}auth/session", null);
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        }
+        catch (HttpRequestException ex) when (ex.Message.Contains("refused", StringComparison.OrdinalIgnoreCase))
+        {
+            // HttpListener URL reservation unavailable in CI — skip.
+        }
+        finally
+        {
+            server.Dispose();
+            await Task.Delay(50);
+        }
+    }
+
+    [Fact]
+    public async Task AuthSession_LoopbackWithoutOrigin_DoesNotIssueToken()
+    {
+        var prefix = $"http://127.0.0.1:{GetFreeTcpPort()}/";
+        var server = new BridgeLocalhostServer(
+            TestSessionToken,
+            () => true,
+            _ => new CredentialResponse(),
+            _ => new CredentialResponse(),
+            listenPrefix: prefix);
+
+        if (!TryStartServer(server))
+            return;
+
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{prefix}auth/session");
+            var response = await http.SendAsync(request);
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         }
         catch (HttpRequestException ex) when (ex.Message.Contains("refused", StringComparison.OrdinalIgnoreCase))
         {
@@ -119,15 +185,6 @@ public class BridgeLocalhostServerTests
         }
 
         throw new TimeoutException($"Authed status-and-matches did not return {expectedUsername}.");
-    }
-
-    private static string? ExtractBridgeToken(string authJson)
-    {
-        using var doc = JsonDocument.Parse(authJson);
-        if (!doc.RootElement.TryGetProperty("bridgeToken", out var tokenProp))
-            return null;
-
-        return tokenProp.GetString();
     }
 
     private static int GetFreeTcpPort()

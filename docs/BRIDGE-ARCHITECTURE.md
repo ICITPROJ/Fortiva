@@ -1,6 +1,6 @@
-# Fortiva Browser Bridge Architecture (v1.0.37+)
+# Fortiva Browser Bridge Architecture (v1.0.57+)
 
-Fortiva’s browser integration connects a Chromium extension, a **one-shot** native messaging host (`Fortiva.BrowserBridge.Host`), and the WinUI desktop app. As of v1.0.37 the extension prefers **loopback HTTP** on `127.0.0.1:7847` (while Fortiva is running and unlocked) and falls back to native messaging when HTTP is unavailable.
+Fortiva’s browser integration connects a Chromium extension, a **one-shot** native messaging host (`Fortiva.BrowserBridge.Host`), and the WinUI desktop app. The extension prefers **loopback HTTP** on `127.0.0.1:7847` (while Fortiva is running and unlocked) and falls back to native messaging when HTTP is unavailable or token handoff fails.
 
 | Audience | What to read |
 |----------|--------------|
@@ -18,21 +18,26 @@ The extension asks **your local Fortiva app** for matching logins over `127.0.0.
 
 | Rule | Implementation |
 |------|----------------|
-| Prefer loopback HTTP when app is running | `BridgeLocalhostServer` on port **7847**; token via `POST /auth/session` |
+| Prefer loopback HTTP when app is running | `BridgeLocalhostServer` on port **7847**; **same session token** as validated named pipes |
+| Token handoff via native host only | `get_session_token` native command → pipe broker (`BridgeTokenBroker`); HTTP **never mints** tokens |
 | Native fallback | `chrome.runtime.sendNativeMessage` — one spawn per operation, host exits after response |
 | No long-lived native port | Extension does not hold `connectNative` open |
-| No push cache | No `STATE_CHANGED`, no snapshot merge, no `cachedSessionToken` |
+| No push cache | No `STATE_CHANGED`, no snapshot merge, no disk token cache |
 | No session churn on focus | Watchdog reconciles health only — no session rotate on window activate |
-| Strict timeouts | HTTP: **3 s** default; native status: **8 s**; execute fill: **30 s** |
+| Strict timeouts | HTTP: **3 s** default; native token: **10 s**; native status: **8 s**; execute fill: **30 s** |
 | Single status path | `get_status_and_matches` (HTTP or native) replaces legacy ping/prepare/list split |
 | No browser unlock | Locked vault returns `vault_locked` immediately; user unlocks in Fortiva |
+| No unlock-state leak | Unauthenticated HTTP never returns `vaultUnlocked: true` |
 
 ## End-state pipeline
 
 ```text
 [Extension popup / background]
-   ├── (preferred) fetch http://127.0.0.1:7847/auth/session → bridge token
-   │        └── GET /status-and-matches?domain=&url=  → { status, matches, fillNonce }
+   ├── sendNativeMessage({ command: "get_session_token" })
+   │        └── Native host → validated pipe → BridgeTokenBroker → { bridgeToken }
+   │
+   ├── (preferred) GET /status-and-matches?domain=&url=  (X-Fortiva-Bridge-Token)
+   │        ← { status, matches, fillNonce }
    │
    └── (fallback) sendNativeMessage({ command: "get_status_and_matches", ... })
         └── Fortiva.BrowserBridge.Host.exe  (spawn → one request → one response → exit)
@@ -44,25 +49,33 @@ The extension asks **your local Fortiva app** for matching logins over `127.0.0.
         └── Same paths → credential release → content script fills fields
 ```
 
+If HTTP returns `auth_required` (token missing/stale), the extension falls back to native `get_status_and_matches`.
+
 ## Component overview
 
 | Layer | Responsibility |
 |-------|----------------|
-| **Extension** (`background.js`, `popup.js`) | HTTP-first status/fill; native fallback; in-memory `bridgeToken` only (no disk cache) |
-| **Loopback server** (`BridgeLocalhostServer`) | In-process HTTP on `:7847`; token auth; public status when locked |
+| **Extension** (`background.js`, `popup.js`) | Native token fetch → HTTP status/fill; native fallback; in-memory `bridgeToken` only |
+| **Loopback server** (`BridgeLocalhostServer`) | In-process HTTP on `:7847`; validates session token header; no public unlock leak |
 | **Native host** (`NativeMessagingHostPump`) | Read one stdin frame, dispatch, write one stdout frame, exit |
-| **Forwarder** (`BridgeNativeForwarder.GetStatusAndMatchesAsync`) | Native path: token broker + list matches |
-| **WinUI** (`BridgeCoordinator`, `VaultSession`) | Pipes, session registry, hash sidecars; starts localhost server when unlocked |
+| **Forwarder** (`BridgeNativeForwarder`) | Native path: token broker + list matches + `get_session_token` |
+| **WinUI** (`BridgeCoordinator`, `VaultSession`) | Pipes, session registry; localhost server shares pipe session token |
 
-## Loopback HTTP API (v1.0.37+)
+## Loopback HTTP API
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| `POST` | `/auth/session` | Extension `Origin` header | Issue `bridgeToken` when vault unlocked |
-| `GET` | `/status-and-matches` | Optional token | Status + credential matches for domain/URL |
+| `POST` | `/auth/session` | Extension `Origin` header | **Deprecated** — returns status + `authRequired` only; does **not** issue tokens |
+| `GET` | `/status-and-matches` | Optional token | Public: locked summary only. Authed: status + matches + fillNonce |
 | `POST` | `/execute-fill` | `X-Fortiva-Bridge-Token` | Release credentials for fill (nonce required) |
 
-Unauthenticated `GET /status-and-matches` returns vault locked/unlocked summary with empty matches (`authRequired: true` when unlocked).
+## Native commands
+
+| Command | Purpose |
+|---------|---------|
+| `get_session_token` | Returns `{ bridgeToken, status }` — only path that exposes the HTTP bridge token |
+| `get_status_and_matches` | Full status + matches via pipes (fallback) |
+| `execute_fill` | Credential release via pipes (fallback) |
 
 ## `get_status_and_matches` response
 
@@ -86,9 +99,10 @@ Unauthenticated `GET /status-and-matches` returns vault locked/unlocked summary 
 |-------|---------|
 | `null` | Success (matches may still be empty → no vault entry for URL) |
 | `vault_locked` | Fortiva running, vault locked — unlock in app |
-| `token_stale` | Broker token unavailable after one retry |
+| `auth_required` | HTTP only — caller needs token via `get_session_token` |
+| `token_stale` | Broker token unavailable after retry |
 | `host_unreachable` | Fortiva not running or no active bridge session |
-| `internal_error` | Pipe/timeout failure within 5 s budget |
+| `internal_error` | Pipe/timeout failure |
 
 ## Host lifecycle
 
@@ -97,57 +111,47 @@ Unauthenticated `GET /status-and-matches` returns vault locked/unlocked summary 
 3. Host writes length-prefixed JSON to stdout and **exits**.
 4. No background threads survive the request; no event-pipe fan-out.
 
-## BridgeCoordinator
+## After Fortiva or extension updates
 
-`BridgeCoordinator.ReconcileLifecycleAsync()` remains the only writer for:
+1. **Reload the extension** in `edge://extensions` or `chrome://extensions` (required after bridge security updates).
+2. Run **Settings → Connect browser** if version mismatch is shown.
+3. Unlock Fortiva and retry Fill.
 
-- Session GUID rotation (cold start / explicit restart only — **not** watchdog/focus)
-- Native host cleanup after session rotate
-- Hash sidecar repair
+## Migration from pre-1.0.57 token-via-HTTP
 
-Push broadcaster (`BridgeEventBroadcaster`) is **not** used by the extension path in v1.0.37+.
-
-## Migration from v1.0.36
-
-1. Build and deploy Fortiva Personal + extension staging (`Connect browser` in Settings).
-2. Reload extension in `edge://extensions`.
-3. Kill any orphan `Fortiva.BrowserBridge.Host.exe` processes.
-4. Run `scripts/Test-BrowserBridgeE2E.ps1 -RequireReady`.
+Older builds issued `bridgeToken` from `POST /auth/session`. Current builds require `get_session_token` via native host. Users on old extension builds must reload the extension staged by Fortiva.
 
 ## Acceptance test
 
-With Fortiva running, vault unlocked, page URL `https://login.ionos.co.uk`:
+With Fortiva running, vault unlocked, page URL `https://login.example.com`:
 
 - `get_status_and_matches` returns in **< 2 s**
-- `matches.length >= 1`
-- Extension popup shows **“1 match found”**
-- No “Connecting…” longer than 1 s
+- `matches.length >= 1` when a matching entry exists
+- Extension popup shows match count
 - No orphan bridge host processes after popup closes
-- No push events required
+- `scripts/Test-BrowserBridgeE2E.ps1 -RequireReady` passes
 
 ## Validation checklist
 
-- [ ] `get_status_and_matches` responds < 2 s when unlocked
-- [ ] Locked vault returns `vault_locked` in < 5 s (no unlock prompt from browser)
-- [ ] App not running returns `host_unreachable`
-- [ ] Popup shows match count without persistent `connectNative` port
+- [ ] `get_session_token` returns token when unlocked (native host)
+- [ ] `POST /auth/session` does **not** return `bridgeToken`
+- [ ] Unauthenticated `GET /status-and-matches` never shows `vaultUnlocked: true`
+- [ ] Locked vault returns `vault_locked` in < 5 s
 - [ ] Fill click completes when vault unlocked and fields visible
-- [ ] `Test-BrowserBridgeE2E.ps1 -RequireReady` passes
-- [ ] No `Fortiva.BrowserBridge.Host.exe` left running after native calls
+- [ ] Extension reloaded after update
 
 ## Source files (developers)
 
 | Area | Path |
 |------|------|
-| Extension HTTP client | `extension/background.js` — `BRIDGE_HTTP`, timeouts, token cache |
+| Extension HTTP client | `extension/background.js` — `ensureBridgeToken()`, native fallback |
 | Extension UI | `extension/popup.js`, `extension/content.js` |
 | Loopback server | `src/Fortiva.Core/BrowserBridge/BridgeLocalhostServer.cs` |
-| Port constant | `src/Fortiva.Core/BrowserBridge/BridgeLocalhostConstants.cs` |
+| Session token response | `src/Fortiva.Core/BrowserBridge/BridgeSessionTokenResponse` |
 | Native one-shot host | `src/Fortiva.BrowserBridge.Host/` → `NativeMessagingHostPump` |
 | Pipe forwarder | `src/Fortiva.Core/BrowserBridge/BridgeNativeForwarder.cs` |
+| Token broker | `src/Fortiva.Core/BrowserBridge/BridgeTokenBroker.cs` |
 | App lifecycle | `src/Fortiva.AppHost/Services/BridgeCoordinator.cs` |
-| Install / registry | `src/Fortiva.Core/BrowserBridge/BrowserBridgeInstallService.cs` |
-| Settings UI | `src/Fortiva.AppHost/Pages/SettingsPage.xaml.cs` |
 
 ## Enterprise
 

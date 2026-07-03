@@ -109,12 +109,6 @@ public static class LicenseVerifier
     public static void EnsureProductionKeyForEnterpriseBuild()
     {
 #if !DEBUG
-        if (string.Equals(
-                Environment.GetEnvironmentVariable("FORTIVA_ALLOW_DEV_LICENSE_KEY"),
-                "1",
-                StringComparison.Ordinal))
-            return;
-
         if (UsesKnownDevelopmentPublicKey)
             throw new InvalidOperationException(
                 "This Enterprise/Admin build embeds the development license public key. " +

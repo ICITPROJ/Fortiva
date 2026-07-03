@@ -15,10 +15,6 @@ public static class AuthenticodePolicy
     public static void ConfigureForEdition(string edition)
     {
         _ = edition; // reserved for future per-edition defaults when Enterprise signing ships
-        var allowUnsigned = string.Equals(
-            Environment.GetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE"),
-            "1",
-            StringComparison.Ordinal);
         var requireCodesign = string.Equals(
             Environment.GetEnvironmentVariable("FORTIVA_REQUIRE_CODESIGN"),
             "1",
@@ -26,10 +22,31 @@ public static class AuthenticodePolicy
 #if DEBUG
         RequireSignedExecutables = false;
 #else
+        var allowUnsigned = AllowUnsignedBridgeForRelease();
         // Authenticode is opt-in only (FORTIVA_REQUIRE_CODESIGN=1) until an Enterprise customer
         // engages and signing is provisioned (Azure Trusted Signing or traditional .pfx).
-        // Personal and Enterprise dev/CI builds use FORTIVA_ALLOW_UNSIGNED_BRIDGE=1 (Deploy script).
         RequireSignedExecutables = requireCodesign && !allowUnsigned;
+#endif
+    }
+
+    /// <summary>
+    /// Release builds honor FORTIVA_ALLOW_UNSIGNED_BRIDGE only in CI (GITHUB_ACTIONS), never on end-user machines.
+    /// </summary>
+    internal static bool AllowUnsignedBridgeForRelease()
+    {
+        if (!string.Equals(
+                Environment.GetEnvironmentVariable("FORTIVA_ALLOW_UNSIGNED_BRIDGE"),
+                "1",
+                StringComparison.Ordinal))
+            return false;
+
+#if DEBUG
+        return true;
+#else
+        return string.Equals(
+            Environment.GetEnvironmentVariable("GITHUB_ACTIONS"),
+            "true",
+            StringComparison.OrdinalIgnoreCase);
 #endif
     }
 }

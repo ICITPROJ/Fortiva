@@ -1,5 +1,7 @@
+# WinGet manifest template — update version + SHA256 when cutting a release.
+# Submit to https://github.com/microsoft/winget-pkgs (community package).
 PackageIdentifier: Fortiva.Personal
-PackageVersion: 1.0.0
+PackageVersion: 1.0.57
 PackageLocale: en-US
 Publisher: icmclab studio
 PublisherUrl: https://fortiva.studio.icmclab.cloud/
@@ -23,8 +25,8 @@ Tags:
 InstallerType: exe
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/ICITPROJ/Fortiva/releases/download/v1.0.0/FortivaPersonal-1.0.0-Setup.exe
-    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+    InstallerUrl: https://github.com/ICITPROJ/Fortiva/releases/download/v1.0.57/FortivaPersonal-1.0.57-Setup.exe
+    InstallerSha256: b7f490e79f1767fdca6d9b29127c52389838e49ca6bee5f89f46eb1184712d6f
     InstallerSwitches:
       Silent: /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS
       SilentWithProgress: /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS

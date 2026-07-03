@@ -142,9 +142,8 @@ is closed, or prompt to close-and-relaunch; manual **Load unpacked** remains the
 **Enterprise:** installer sets `ExtensionInstallForcelist` + HKLM native messaging (IT-managed);
 Intune Win32 packaging and daily HKLM drift repair are documented in [`packaging/intune/README.md`](../packaging/intune/README.md).
 
-As of **v1.0.37+**, the extension uses **loopback HTTP first** (`http://127.0.0.1:7847`) with a
-session token, falling back to **one-shot** `sendNativeMessage` per operation when HTTP is unavailable.
-There is **no persistent native port**, **no push cache**, and **no `cachedSessionToken` bypass**.
+As of **v1.0.57+**, the extension obtains a session token via native **`get_session_token`** (validated pipe), then uses **loopback HTTP** (`http://127.0.0.1:7847`) for status and fill. It falls back to **one-shot** `sendNativeMessage` per operation when HTTP or token handoff fails.
+There is **no persistent native port**, **no push cache**, and **no HTTP token minting** from `/auth/session`.
 Full design: [`BRIDGE-ARCHITECTURE.md`](BRIDGE-ARCHITECTURE.md).
 
 ```text
@@ -163,14 +162,16 @@ Enterprise: policy force-install from GitHub CRX + updates.xml
         │
         ▼
 Fortiva.Personal.exe (vault unlocked)
-  • BridgeLocalhostServer :7847 — GET status/matches, POST execute-fill (token auth)
+  • BridgeLocalhostServer :7847 — GET status/matches, POST execute-fill (session token header)
+  • BridgeTokenBroker — session token via validated named pipe only
   • Named pipes — native host when extension falls back from HTTP
         │
         ▼
 extension/background.js
-  • HTTP /auth/session → bridge token → /status-and-matches
+  • get_session_token (native) → bridge token → /status-and-matches (HTTP)
   • Fallback: sendNativeMessage → one-shot Fortiva.BrowserBridge.Host.exe → pipes → VaultSession
   • User-initiated Fill only (content script)
+  • Reload extension after Fortiva updates (Settings → Connect browser)
 ```
 
 | Component | Location |

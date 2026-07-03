@@ -34,7 +34,10 @@ async function httpBridgeFetch(path, options = {}) {
       headers,
       signal: controller.signal,
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      if (response.status === 401) cachedBridgeToken = null;
+      return null;
+    }
     const data = await response.json();
     if (data?.bridgeToken) cachedBridgeToken = data.bridgeToken;
     return data;
@@ -60,9 +63,12 @@ async function ensureBridgeToken() {
   if (cachedBridgeToken) return true;
 
   for (let i = 0; i < 5; i++) {
-    const boot = await httpBridgeFetch("/auth/session", { method: "POST" });
-    if (cachedBridgeToken) return true;
-    if (boot?.status?.error === "vault_locked") return false;
+    const native = await nativeCommand({ command: "get_session_token" });
+    if (native?.bridgeToken) {
+      cachedBridgeToken = native.bridgeToken;
+      return true;
+    }
+    if (native?.status?.error === "vault_locked") return false;
     if (i < 4) {
       await new Promise((resolve) => setTimeout(resolve, 200 * (i + 1)));
     }
@@ -88,6 +94,14 @@ async function getStatusAndMatches(domain, url) {
   const http = await httpGetStatusAndMatches(domain, url);
   if (http?.status) {
     if (!http.authRequired) return http;
+
+    if (http.status.error === "auth_required") {
+      return nativeCommand({
+        command: "get_status_and_matches",
+        payload: { domain: domain || "", url: url || "" },
+      });
+    }
+
     if (http.status.vaultUnlocked && (await ensureBridgeToken())) {
       const params = new URLSearchParams({ domain: domain || "", url: url || "" });
       const authed = await httpBridgeFetch(`/status-and-matches?${params}`, { method: "GET" });
