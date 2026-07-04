@@ -31,11 +31,17 @@ public sealed class NativeMessagingHostPump : IAsyncDisposable
         var lengthBuf = new byte[4];
         var read = await _stdin.ReadAsync(lengthBuf.AsMemory(0, 4)).ConfigureAwait(false);
         if (read < 4)
+        {
+            WriteEmptyErrorResponse();
             return;
+        }
 
         var len = BitConverter.ToInt32(lengthBuf, 0);
         if (len <= 0 || len > 1024 * 1024)
+        {
+            WriteEmptyErrorResponse();
             return;
+        }
 
         var msgBuf = new byte[len];
         var offset = 0;
@@ -43,7 +49,10 @@ public sealed class NativeMessagingHostPump : IAsyncDisposable
         {
             var chunk = await _stdin.ReadAsync(msgBuf.AsMemory(offset, len - offset)).ConfigureAwait(false);
             if (chunk == 0)
+            {
+                WriteEmptyErrorResponse();
                 return;
+            }
             offset += chunk;
         }
 
@@ -94,6 +103,28 @@ public sealed class NativeMessagingHostPump : IAsyncDisposable
 
         var bytes = Encoding.UTF8.GetBytes(response);
         NativeMessagingFraming.WriteLengthPrefixedMessage(_stdout, bytes);
+    }
+
+    private void WriteEmptyErrorResponse()
+    {
+        try
+        {
+            var bytes = Encoding.UTF8.GetBytes(
+                BridgeJson.Serialize(new BridgeStatusAndMatchesResponse
+                {
+                    Status = new BridgeStatusBlock
+                    {
+                        AppRunning = false,
+                        VaultUnlocked = false,
+                        Error = "host_unreachable"
+                    }
+                }));
+            NativeMessagingFraming.WriteLengthPrefixedMessage(_stdout, bytes);
+        }
+        catch
+        {
+            /* chrome will time out if stdout is unusable */
+        }
     }
 
     private static int ResolveTimeoutSeconds(string? command)

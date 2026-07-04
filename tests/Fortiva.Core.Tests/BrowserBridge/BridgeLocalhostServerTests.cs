@@ -53,10 +53,12 @@ public class BridgeLocalhostServerTests
             var authResponse = await http.SendAsync(auth);
             authResponse.EnsureSuccessStatusCode();
             var authJson = await authResponse.Content.ReadAsStringAsync();
-            Assert.DoesNotContain("bridgeToken", authJson, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("authRequired", authJson, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("bridgeToken", authJson, StringComparison.OrdinalIgnoreCase);
 
-            var json = await WaitForAuthedMatchesAsync(http, prefix, TestSessionToken, "user@test.com");
+            var token = ExtractBridgeToken(authJson);
+            Assert.Equal(TestSessionToken, token);
+
+            var json = await WaitForAuthedMatchesAsync(http, prefix, token!, "user@test.com");
             Assert.Contains("vaultUnlocked", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("user@test.com", json, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("bridgeToken", json, StringComparison.OrdinalIgnoreCase);
@@ -185,6 +187,15 @@ public class BridgeLocalhostServerTests
         }
 
         throw new TimeoutException($"Authed status-and-matches did not return {expectedUsername}.");
+    }
+
+    private static string? ExtractBridgeToken(string authJson)
+    {
+        using var doc = JsonDocument.Parse(authJson);
+        if (!doc.RootElement.TryGetProperty("bridgeToken", out var tokenProp))
+            return null;
+
+        return tokenProp.GetString();
     }
 
     private static int GetFreeTcpPort()

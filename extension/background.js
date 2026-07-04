@@ -1,7 +1,7 @@
 const NATIVE_HOST = "com.fortiva.browserbridge.personal";
 const BRIDGE_HTTP = "http://127.0.0.1:7847";
 const HTTP_TIMEOUT_MS = 3000;
-const NATIVE_TIMEOUT_MS = 12000;
+const NATIVE_TIMEOUT_MS = 15000;
 const TOKEN_FETCH_TIMEOUT_MS = 5000;
 const EXECUTE_FILL_TIMEOUT_MS = 30000;
 
@@ -64,55 +64,58 @@ async function httpBridgeFetchWithRetry(path, options = {}, attempts = 3) {
   return null;
 }
 
-async function ensureBridgeToken(maxAttempts = 2) {
+async function fetchBridgeTokenViaHttp() {
+  const auth = await httpBridgeFetch("/auth/session", { method: "POST" });
+  if (hasBridgeToken(cachedBridgeToken)) return true;
+  if (auth?.status?.error === "vault_locked") return false;
+  return false;
+}
+
+async function ensureBridgeToken() {
   if (cachedBridgeToken) return true;
 
-  for (let i = 0; i < maxAttempts; i++) {
-    const native = await nativeCommand({ command: "get_session_token" }, TOKEN_FETCH_TIMEOUT_MS);
-    if (hasBridgeToken(native?.bridgeToken)) {
-      cachedBridgeToken = native.bridgeToken;
-      return true;
-    }
-    if (native?.status?.error === "vault_locked") return false;
-    if (i < maxAttempts - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 150 * (i + 1)));
-    }
+  if (await fetchBridgeTokenViaHttp()) return true;
+
+  const native = await nativeCommand({ command: "get_session_token" }, TOKEN_FETCH_TIMEOUT_MS);
+  if (hasBridgeToken(native?.bridgeToken)) {
+    cachedBridgeToken = native.bridgeToken;
+    return true;
   }
+  if (native?.status?.error === "vault_locked") return false;
 
   return false;
 }
 
 async function getStatusAndMatches(domain, url) {
   const payload = { domain: domain || "", url: url || "" };
+  const params = new URLSearchParams(payload);
 
-  // Native path is authoritative — does not require loopback HTTP token (avoids 8s+ token retry blocking status).
-  const native = await nativeCommand({
-    command: "get_status_and_matches",
-    payload,
-  });
-
-  if (native?.status && isVaultUnlocked(native.status)) {
-    void ensureBridgeToken(1);
-    return native;
-  }
-
-  if (native?.status?.error === "vault_locked") {
-    return native;
-  }
-
-  // Fast HTTP path when we already hold a token (e.g. repeat popup open).
-  if (cachedBridgeToken) {
-    const params = new URLSearchParams(payload);
+  // HTTP loopback is fastest and avoids native-host spawn when Fortiva is running.
+  if (await ensureBridgeToken()) {
     const http = await httpBridgeFetch(`/status-and-matches?${params}`, { method: "GET" });
     if (http?.status && isVaultUnlocked(http.status)) return http;
     cachedBridgeToken = null;
   }
 
+  const httpProbe = await httpBridgeFetchWithRetry(`/status-and-matches?${params}`, { method: "GET" }, 2);
+  if (httpProbe?.status?.error === "auth_required" && (await ensureBridgeToken())) {
+    const authed = await httpBridgeFetch(`/status-and-matches?${params}`, { method: "GET" });
+    if (authed?.status && isVaultUnlocked(authed.status)) return authed;
+    cachedBridgeToken = null;
+  }
+
+  if (httpProbe?.status && isVaultUnlocked(httpProbe.status)) return httpProbe;
+
+  const native = await nativeCommand({
+    command: "get_status_and_matches",
+    payload,
+  });
+
+  if (native?.status && isVaultUnlocked(native.status)) return native;
+  if (native?.status?.error === "vault_locked") return native;
   if (native?.status) return native;
 
-  const params = new URLSearchParams(payload);
-  const http = await httpBridgeFetchWithRetry(`/status-and-matches?${params}`, { method: "GET" }, 2);
-  if (http?.status) return http;
+  if (httpProbe?.status) return httpProbe;
 
   return emptyStatus();
 }
@@ -161,7 +164,7 @@ async function nativeCommand(payload, timeoutMs = NATIVE_TIMEOUT_MS) {
     if (msg.includes("native_timeout")) {
       return emptyStatus(
         "host_unreachable",
-        "Native host timed out. Open Fortiva, unlock, then run Connect browser in Settings."
+        "Native host timed out. Unlock Fortiva and run Connect browser in Settings, or use HTTP bridge (ensure Fortiva is open)."
       );
     }
     return emptyStatus(
@@ -203,7 +206,7 @@ function mapStatusToLegacy(statusBlock, nativeError) {
         (error === "token_stale"
           ? "Fortiva session expired. Unlock Fortiva and click Fill again."
           : error === "auth_required"
-            ? "Fortiva needs a browser reconnect. Settings → Connect browser, then reload this extension."
+            ? "Open Fortiva, unlock your vault, then click Retry."
             : "Fortiva is not running. Open Fortiva from the Start menu and unlock your vault."),
     };
   }

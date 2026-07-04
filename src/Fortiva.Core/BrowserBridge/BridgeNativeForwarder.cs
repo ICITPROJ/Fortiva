@@ -55,7 +55,7 @@ public static class BridgeNativeForwarder
         try
         {
             using var overall = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            overall.CancelAfter(TimeSpan.FromSeconds(IsFastTest ? 5 : 5));
+            overall.CancelAfter(TimeSpan.FromSeconds(IsFastTest ? 5 : 10));
 
             if (!BridgePipeNaming.HasActiveSession(IsEnterpriseEdition))
             {

@@ -195,17 +195,31 @@ public sealed class BridgeLocalhostServer : IDisposable
             return;
         }
 
-        // Tokens are issued only via validated named pipe (native host). HTTP never mints credentials.
-        var error = _isUnlocked() ? "auth_required" : "vault_locked";
+        if (!_isUnlocked())
+        {
+            await WriteJsonAsync(ctx.Response, 200, new
+            {
+                status = new BridgeStatusBlock
+                {
+                    AppRunning = true,
+                    VaultUnlocked = false,
+                    Error = "vault_locked"
+                },
+                authRequired = true
+            }).ConfigureAwait(false);
+            return;
+        }
+
+        // Extension-origin only (browser fetch). Native pipe remains fallback when HTTP unavailable.
         await WriteJsonAsync(ctx.Response, 200, new
         {
+            bridgeToken = _bridgeToken,
             status = new BridgeStatusBlock
             {
                 AppRunning = true,
-                VaultUnlocked = false,
-                Error = error
-            },
-            authRequired = true
+                VaultUnlocked = true,
+                Error = (string?)null
+            }
         }).ConfigureAwait(false);
     }
 

@@ -18,8 +18,8 @@ The extension asks **your local Fortiva app** for matching logins over `127.0.0.
 
 | Rule | Implementation |
 |------|----------------|
-| Prefer loopback HTTP when app is running | `BridgeLocalhostServer` on port **7847**; **same session token** as validated named pipes |
-| Token handoff via native host only | `get_session_token` native command → pipe broker (`BridgeTokenBroker`); HTTP **never mints** tokens |
+| Prefer loopback HTTP when app is running | `BridgeLocalhostServer` on port **7847**; token via `POST /auth/session` (extension `Origin` only) |
+| Token fallback | Native `get_session_token` when HTTP unavailable |
 | Native fallback | `chrome.runtime.sendNativeMessage` — one spawn per operation, host exits after response |
 | No long-lived native port | Extension does not hold `connectNative` open |
 | No push cache | No `STATE_CHANGED`, no snapshot merge, no disk token cache |
@@ -65,7 +65,7 @@ If HTTP returns `auth_required` (token missing/stale), the extension falls back 
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| `POST` | `/auth/session` | Extension `Origin` header | **Deprecated** — returns status + `authRequired` only; does **not** issue tokens |
+| `POST` | `/auth/session` | Extension `Origin` header (required) | Issue `bridgeToken` when vault unlocked |
 | `GET` | `/status-and-matches` | Optional token | Public: locked summary only. Authed: status + matches + fillNonce |
 | `POST` | `/execute-fill` | `X-Fortiva-Bridge-Token` | Release credentials for fill (nonce required) |
 
