@@ -21,7 +21,7 @@ let selectedEntryId = null;
 let activeFillNonce = null;
 let refreshInFlight = null;
 
-const STATUS_TIMEOUT_MS = 8000;
+const STATUS_TIMEOUT_MS = 15000;
 const PERFORM_FILL_TIMEOUT_MS = 35000;
 
 function connectionLabelForStatus(status) {
@@ -388,7 +388,7 @@ function handleListError(list, host) {
     setStatus(list.message || MESSAGES.locked, "warn");
     return true;
   }
-  if (err === "setup_required" || err === "host_unreachable" || err === "token_stale" || err === "unknown_command") {
+  if (err === "setup_required" || err === "host_unreachable" || err === "token_stale" || err === "auth_required" || err === "unknown_command") {
     setConnection("setup", "Not connected");
     setStatus(list.message || MESSAGES.setup, "error");
     return true;
@@ -426,6 +426,7 @@ function applyStatusResponse(response, host) {
     response.error === "setup_required" ||
     response.error === "host_unreachable" ||
     response.error === "token_stale" ||
+    response.error === "auth_required" ||
     response.error === "internal_error"
   ) {
     setConnection("setup", "Click Fill to connect");

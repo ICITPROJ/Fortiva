@@ -9,6 +9,7 @@ namespace Fortiva.Core.BrowserBridge;
 public sealed class NativeMessagingHostPump : IAsyncDisposable
 {
     private const int RequestTimeoutSeconds = 5;
+    private const int StatusTimeoutSeconds = 12;
     private const int SessionTokenTimeoutSeconds = 10;
     private const int ExecuteFillTimeoutSeconds = 30;
 
@@ -67,7 +68,8 @@ public sealed class NativeMessagingHostPump : IAsyncDisposable
                 using var doc = JsonDocument.Parse(Encoding.UTF8.GetString(msgBuf), new JsonDocumentOptions { MaxDepth = 16 });
                 command = doc.RootElement.TryGetProperty("command", out var cmd) ? cmd.GetString() : null;
 
-                if (!BridgePipeNaming.HasActiveSession(_enterprise))
+                if (!BridgePipeNaming.HasActiveSession(_enterprise)
+                    && RequiresActiveSession(command))
                 {
                     response = SerializeNoSessionResponse(command);
                 }
@@ -100,8 +102,14 @@ public sealed class NativeMessagingHostPump : IAsyncDisposable
             return ExecuteFillTimeoutSeconds;
         if (string.Equals(command, "get_session_token", StringComparison.OrdinalIgnoreCase))
             return SessionTokenTimeoutSeconds;
+        if (string.Equals(command, "get_status_and_matches", StringComparison.OrdinalIgnoreCase))
+            return StatusTimeoutSeconds;
         return RequestTimeoutSeconds;
     }
+
+    private static bool RequiresActiveSession(string? command) =>
+        string.Equals(command, "get_session_token", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(command, "execute_fill", StringComparison.OrdinalIgnoreCase);
 
     private static string SerializeNoSessionResponse(string? command)
     {
