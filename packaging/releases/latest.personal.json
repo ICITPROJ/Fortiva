@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "edition": "Personal",
-  "version": "1.0.59",
-  "releasedAt": "2026-07-03T15:22:42.5570532Z",
+  "version": "1.0.60",
+  "releasedAt": "2026-07-04T09:46:58.3674767Z",
   "minWindowsBuild": 19041,
   "maxWindowsBuildTested": 26100,
-  "installerUrl": "https://github.com/ICITPROJ/Fortiva/releases/download/v1.0.59/FortivaPersonal-1.0.59-Setup.exe",
-  "installerSha256": "853c80ea54c910f34ce647d7119f3a04cc36fd12a014dd8ba44f1c8fdba1646a",
+  "installerUrl": "https://github.com/ICITPROJ/Fortiva/releases/download/v1.0.60/FortivaPersonal-1.0.60-Setup.exe",
+  "installerSha256": "0ffe3b70db96e5e52a4d405b2f4453463991bada9bcef63fd794852dc424aa7d",
   "installerArgs": "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /FORCECLOSEAPPLICATIONS",
-  "releaseNotes": "Fortiva Personal 1.0.59"
+  "releaseNotes": "Fortiva Personal 1.0.60"
 }
